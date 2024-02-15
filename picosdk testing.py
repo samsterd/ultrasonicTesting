@@ -1,6 +1,6 @@
 import ctypes
 import numpy as np
-import picosdk as ps
+from picosdk.ps2000a import ps2000a as ps
 
 # Create chandle and status ready for use
 #chandle is a unique integer signed int that will identify the picoscope throughout the script
@@ -23,11 +23,5 @@ def pingPico(picoHandle):
 
     return ps.ps2000aPingUnit(chandle)
 
-from picosdk.discover import find_all_units
-
-scopes = find_all_units()
-
-for scope in scopes:
-    print(scope.info)
-    scope.close()
+print(connectPico())
 
