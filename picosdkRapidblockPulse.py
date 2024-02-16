@@ -43,6 +43,9 @@ def openPicoscope():
     #Raise errors and stop code
     assert_pico_ok(initPicoData["openUnit"])
 
+    # Add cHandle to picoData
+    initPicoData["cHandle"] = cHandle
+
     #Return picoData
     return initPicoData
 
@@ -57,8 +60,6 @@ def openPicoscope():
 #   numberOfSamples - the number of data points per waveform
 #   duration - the duration of the measurement, in microseconds. Defaults to 10 us. The time interval between data points is duration / numberOfSamples
 #       Note that minimum time interval for measurements with 2 channels is 2 ns
-#   numberToAverage - the number of waveforms that are collected and averaged in each measurement. The default is 64
-#       Higher values will increase signal to noise but at the cost of speed and memory
 
 def setupPicoMeasurement(picoData, delay = 3, voltageRange = 1, numberOfSamples = 512, duration = 10):
 
@@ -96,7 +97,7 @@ def setupPicoMeasurement(picoData, delay = 3, voltageRange = 1, numberOfSamples 
     if setChA == "PICO_OK":
         picoData["setChA"] = setChA
     else:
-        print("Error: Problem connecting to picoscope channel A: " + setChA)
+        # print("Error: Problem connecting to picoscope channel A: " + setChA)
         #Raise error and break
         assert_pico_ok(setChA)
 
@@ -113,7 +114,7 @@ def setupPicoMeasurement(picoData, delay = 3, voltageRange = 1, numberOfSamples 
     if setChB == "PICO_OK":
         picoData["setChB"] = setChB
     else:
-        print("Error: Problem connecting to picoscope channel B: " + setChB)
+        # print("Error: Problem connecting to picoscope channel B: " + setChB)
         #Raise error and break
         assert_pico_ok(setChB)
 
@@ -126,7 +127,7 @@ def setupPicoMeasurement(picoData, delay = 3, voltageRange = 1, numberOfSamples 
     picoData["numberOfSamples"] = numberOfSamples
 
     # Convert delay time (in us) to delay samples
-    delayIntervals = math.floor((delayTime * 1000) / timeInterval)
+    delayIntervals = math.floor((delay * 1000) / timeInterval)
     picoData["delayIntervals"] = delayIntervals
 
     # Setup trigger on channel A
@@ -137,13 +138,13 @@ def setupPicoMeasurement(picoData, delay = 3, voltageRange = 1, numberOfSamples 
     # Direction = ps2000a_Rising = 2
     # Delay = delayIntervals
     # autoTrigger_ms = 1
-    trigger = ps.ps2000aSetSimpleTrigger(chandle, 1, 0, 1024, 2, delayIntervals, 1)
+    trigger = ps.ps2000aSetSimpleTrigger(cHandle, 1, 0, 1024, 2, delayIntervals, 1)
 
     # Error check trigger
     if trigger == "PICO_OK":
         picoData["trigger"] = trigger
     else:
-        print("Error: Problem setting trigger on channel A: " + trigger)
+        # print("Error: Problem setting trigger on channel A: " + trigger)
         #Raise error and break
         assert_pico_ok(trigger)
 
@@ -175,13 +176,13 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
     overflow = ctypes.c_int16()
 
     #Divide picoscope memory into segments for rapidblock capture
-    memorySegments = ps.2000aMemorySegments(cHandle, numberOfWaves, ctypes.byref(cNumberOfSamples))
+    memorySegments = ps.ps2000aMemorySegments(cHandle, numberOfWaves, ctypes.byref(cNumberOfSamples))
 
     #Error check memory segmentation
     if memorySegments == "PICO_OK":
         picoData["memorySegments"] = memorySegments
     else:
-        print("Error: Problem setting up memory segments on picoscope: " + memorySegments)
+        # print("Error: Problem setting up memory segments on picoscope: " + memorySegments)
         #Raise error and break
         assert_pico_ok(memorySegments)
 
@@ -192,21 +193,42 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
     if setCaptures == "PICO_OK":
         picoData["setCaptures"] = setCaptures
     else:
-        print("Error: Problem setting number of captures on picoscope: " + setCaptures)
+        # print("Error: Problem setting number of captures on picoscope: " + setCaptures)
         assert_pico_ok(setCaptures)
 
-    #Set up memory buffers to receive data from channel B
-    bufferArray = np.empty((numberOfWaves, numberOfSamples), dtype = np.int16)
+    # #Set up memory buffers to receive data from channel B
+    # This version does not work yet, but will be much faster than the dict based version
+    # bufferArray = np.empty((numberOfWaves, numberOfSamples), dtype = ctypes.c_int16)
+    # #Convert bufferArray to a ctype
+    # bufferArrayC = np.ctypeslib.as_ctypes(bufferArray)
+    # # bufferArrayPointer = bufferArray.ctypes.data_as(c_int16_pointer)
+    # for wave in range(numberOfWaves):
+    #     # bufferArray[wave] = (ctypes.c_int16 * numberOfSamples)()
+    #     # dataPointer = bufferArray[wave].ctypes.data_as(c_int16_pointer)
+    #     # Setting the data buffer location for data collection from channel B
+    #     # handle = chandle
+    #     # source = ps2000a_channel_B = 1
+    #     # Buffer location = ctypes.byref(bufferArray[wave])
+    #     # Buffer length = numberOfSampless
+    #     # Segment index = wave
+    #     # Ratio mode = ps2000a_Ratio_Mode_None = 0 (we are not downsampling)
+    #     dataBuffer = ps.ps2000aSetDataBuffer(cHandle, 1, bufferArrayC, numberOfSamples, wave, 0)
+    #     assert_pico_ok(dataBuffer)
+
+    # #TODO: this can be implemented faster as a numpy array, but need to play with the ctypes interface a bit more
+    buffers = {}
     for wave in range(numberOfWaves):
-        # Setting the data buffer location for data collection from channel B
+        buffers[wave] = (ctypes.c_int16 * numberOfSamples)()
+        # Setting the data buffer location for data collection from channel A
         # handle = chandle
-        # source = ps2000a_channel_B = 1
-        # Buffer location = ctypes.byref(bufferArray[wave])
-        # Buffer length = numberOfSampless
-        # Segment index = wave
-        # Ratio mode = ps2000a_Ratio_Mode_None = 0 (we are not downsampling)
-        #TODO: add error checking for each buffer allocation
-        ps.ps2000aSetDataBuffers(cHandle, 1, ctypes.byref(bufferArray[wave]), numberOfSamples, wave, 0)
+        # source = ps2000a_channel_A = 0
+        # Buffer max = ctypes.byref(bufferAMax)
+        # Buffer min = ctypes.byref(bufferAMin)
+        # Buffer length = maxsamples
+        # Segment index = sample
+        # Ratio mode = ps2000a_Ratio_Mode_None = 0
+        ps.ps2000aSetDataBuffer(cHandle, 0, ctypes.byref(buffers[wave]),
+                                                            numberOfSamples, wave, 0)
 
     # Start block capture
     # handle = cHandle
@@ -216,7 +238,7 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
     # Oversample is not used (0)
     # time indisposed ms = None (This is not needed)
     # Segment index = 0 (start at beginning of memory)
-    # LpRead = None (not used)
+    # LpReady = None (not used)
     # pParameter = None (not used)
     picoData["runblock"] = ps.ps2000aRunBlock(cHandle, 0, numberOfSamples, timebase, 0, None, 0, None, None)
     #TODO: add better error handling
@@ -226,7 +248,7 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
     ready = ctypes.c_int16(0)
     check = ctypes.c_int16(0)
     while ready.value == check.value:
-        isReady = ps.ps2000aIsReady(cHandle, ctypes.byref(ready))
+        ps.ps2000aIsReady(cHandle, ctypes.byref(ready))
 
     # Retrieve values from picoscope
     # handle = cHandle
@@ -239,8 +261,16 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
     picoData["GetValuesBulk"] = ps.ps2000aGetValuesBulk(cHandle, ctypes.byref(cNumberOfSamples), 0, numberOfWaves - 1, 0, 0, ctypes.byref(overflow))
     assert_pico_ok(picoData["GetValuesBulk"])
 
-    #Calculate the average of the waveform values stored in the buffer
-    bufferMean = np.mean(bufferArray, axis = 0)
+    # #Calculate the average of the waveform values stored in the buffer
+    # bufferMean = np.mean(bufferArray, axis = 0)
+    #Extract data from buffers dict and turn it into a numpy array
+    voltageData = np.empty((numberOfWaves, numberOfSamples))
+    maxADC = ctypes.c_int16()
+    picoData["maximumValue"] = ps.ps2000aMaximumValue(cHandle, ctypes.byref(maxADC))
+    for wave in range(numberOfWaves):
+        voltageData[wave, :] = np.array(adc2mV(buffers[wave], picoData["voltageIndex"], maxADC))
+
+    meanWave = np.mean(voltageData, axis = 0)
 
     # Retrieve trigger time offsets from picoscope
     # NOTE: this function must be changed on 32-bit machines
@@ -256,22 +286,34 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
                                                                                           numberOfWaves - 1)
     assert_pico_ok(picoData["GetValuesTriggerTimeOffsetBulk"])
 
-    # Convert waveform values from ADC to mV
-    # First find the maxADC value
-    maxADC = ctypes.c_int16()
-    picoData["maximumValue"] = ps.ps2000aMaximumValue(cHandle, ctypes.byref(maxADC))
-    assert_pico_ok(picoData["maximumValue"])
+    # Make sure the picoscope is stopped
+    picoData["stop"] = ps.ps2000aStop(cHandle)
+    assert_pico_ok(picoData["stop"])
 
-    # Then convert the mean data array from ADC to mV using the sdk function
-    buffermV = np.array(adc2mV(bufferMean, picoData["voltageIndex"], maxADC))
+    # # Convert waveform values from ADC to mV
+    # # First find the maxADC value
+    # maxADC = ctypes.c_int16()
+    # picoData["maximumValue"] = ps.ps2000aMaximumValue(cHandle, ctypes.byref(maxADC))
+    # assert_pico_ok(picoData["maximumValue"])
+
+    # # Then convert the mean data array from ADC to mV using the sdk function
+    # buffermV = np.array(adc2mV(bufferMean, picoData["voltageIndex"], maxADC))
 
     #Create the time data (i.e. the x-axis) using the time intervals, numberOfSamples, and delay time
     timeInterval = picoData["timeInterval"]
     startTime = picoData["delayIntervals"] * timeInterval
     stopTime = startTime + (timeInterval * (numberOfSamples - 1))
-    waveTime = np.linspace(startTime, stopTime, timeInterval)
+    waveTime = np.linspace(startTime, stopTime, numberOfSamples)
 
-    return buffermV, waveTime
+    return meanWave, waveTime
+
+#ends the connection to the picoscope
+#Input: picoData with the cHandle field filled
+#Returns picoData with the "close" field informed
+def closePicoscope(picoData):
+    picoData["close"] = ps.ps2000aCloseUnit(picoData["cHandle"])
+    assert_pico_ok(picoData["close"])
+    return picoData
 
 #A helper function to calculation the oscilloscope timebase based on desired measurement duration and number of samples
 # Inputs are the numberOfSamples and the desired duration (in us)
@@ -294,7 +336,7 @@ def timebaseFromDurationSamples(numberOfSamples, duration):
 
         #calculate the nearest timebase using the formulate base = floor(log2 (10**9 * interval))
         #math.floor is used instead of np.floor to make it return an int not a float
-        timebase = math.floor(np.log2((10**9) * estimatedInterval))
+        timebase = math.floor(np.log2(estimatedInterval))
         actualInterval = (2**timebase)
         print("Actual measurement duration for calculated timebase is " + str(numberOfSamples * actualInterval / 1000) + " us.")
         return timebase, actualInterval
@@ -303,8 +345,9 @@ def timebaseFromDurationSamples(numberOfSamples, duration):
     elif estimatedInterval < 30000000000:
 
         #Repeat above protocol but use second formula on p28 of API
-        timebase = math.floor((estimatedInterval * 125000000) + 2)
-        actualInterval = (timebase - 2) / 125000000
+        #Large numbers convert between seconds and nanoseconds and back again
+        timebase = math.floor((125000000 * (estimatedInterval * (10**-9))) + 2)
+        actualInterval = (10**9) * (timebase - 2) / 125000000
         print("Actual measurement duration for calculated timebase is " + str(numberOfSamples * actualInterval / 1000) + " us.")
         return timebase, actualInterval
 
@@ -312,3 +355,18 @@ def timebaseFromDurationSamples(numberOfSamples, duration):
     else:
         print("Warning: Requested time interval is too long for picoscope. Use a stopwatch instead.")
         return (2**32)-1, 34000000000
+
+
+############################################
+####Testing#####
+##Move somewhere else soon!###
+testData = {}
+testData = openPicoscope()
+testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10 )
+startMeasure = time.time()
+testY, testX = runPicoMeasurement(testData, 64)
+stopMeasure = time.time()
+print(str(stopMeasure - startMeasure))
+plt.plot(testX, testY)
+plt.show()
+closePicoscope(testData)
