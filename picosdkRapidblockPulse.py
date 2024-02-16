@@ -2,8 +2,8 @@
 # Intended to replace pulse.py for ultrasonic testing
 # General program flow:
 # openPicoscope() -> connects to picoscope using picosdk through USB
-# setupPicoMeasurement() -> takes experimental parameters and converts them to picoscope readable data, passes to scope
-# collectPicoData() -> runs measurement, performs averaging, returns waveform data
+# setupPicoMeasurement() -> takes experimental parameters and converts them to picoscope readable data, opens measurement channels and sets triggers
+# runPicoMeasurement() -> runs rapidblock measurement, performs averaging, returns waveform data
 # closePicoscope() -> ends connection to picoscope
 # necessary data (i.e. oscilloscope handle, status) will be passed between functions as a dict called picoData
 # picoData keys and values:
@@ -47,7 +47,8 @@ def openPicoscope():
     return initPicoData
 
 # setupPicoMeasurement takes experimental parameters and picoData dict and converts it to picoscope-readable data
-#   More specifically, this sets up a rapidBlock measurement with a simple trigger on channel A and ultrasonic data collected on channel B
+#   More specifically, this sets up a measurement with a simple trigger on channel A and ultrasonic data collected on channel B
+#       ps2000aSetChannel is run for both channels, the timebase is calculated, and ps2000aSetSimpleTrigger is run. Statuses are recorded in picoData
 # setupPicoMeasurement(delay, voltageRange, timeResolution, duration, numberToAverage, picoData)
 #   picoData - dict containing picoscope info and statuses. Note that the "cHandle" key must be filled for this function to run!
 #   delay - the delay, in microseconds, between receiving the trigger and starting data collection. Default is 3 us.
@@ -80,6 +81,7 @@ def setupPicoMeasurement(picoData, delay = 3, voltageRange = 1, numberOfSamples 
 
     #now get the index of the voltageLimit, which is what actually gets passed to the scope
     voltageIndex =voltageLimits.index(voltageLimit)
+    picoData["voltageIndex"] = voltageIndex
 
     # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now
     # handle = chandle
@@ -118,19 +120,158 @@ def setupPicoMeasurement(picoData, delay = 3, voltageRange = 1, numberOfSamples 
     # Calculate timebase and timeInterval (in ns) by making a call to a helper function
     timebase, timeInterval = timebaseFromDurationSamples(numberOfSamples, duration)
 
-    #TODO: add getTimebase2 call so that memory can be allocated properly
-    #actually, this may need to be added to the run call rather than the set up call - i don't know if the ctypes memory allocation moves between functions?
+    #Record timebase, timeInterval and numberOfSamples in picoData
+    picoData["timebase"] = timebase
+    picoData["timeInterval"] = timeInterval
+    picoData["numberOfSamples"] = numberOfSamples
 
     # Convert delay time (in us) to delay samples
-    delaySamples = math.floor((delayTime * 1000) / timeInterval)
+    delayIntervals = math.floor((delayTime * 1000) / timeInterval)
+    picoData["delayIntervals"] = delayIntervals
 
-    # Setup trigger
+    # Setup trigger on channel A
+    # cHandle = cHandle
+    # Enable = 1
+    # Source = ps2000a_channel_A = 0
+    # Threshold = 1024 ADC counts
+    # Direction = ps2000a_Rising = 2
+    # Delay = delayIntervals
+    # autoTrigger_ms = 1
+    trigger = ps.ps2000aSetSimpleTrigger(chandle, 1, 0, 1024, 2, delayIntervals, 1)
 
     # Error check trigger
+    if trigger == "PICO_OK":
+        picoData["trigger"] = trigger
+    else:
+        print("Error: Problem setting trigger on channel A: " + trigger)
+        #Raise error and break
+        assert_pico_ok(trigger)
 
-    # Return picoData
+    # TODO: separate everything below (running the measurement) into a separate function?
+    #  #add getTimebase2 call so that memory can be allocated properly
+    # actually, this may need to be added to the run call rather than the set up call - i don't know if the ctypes memory allocation moves between functions?
 
-    return 0
+    return picoData
+
+# runPicoMeasurement runs a rapidblock measurement on the picoscope and returns the waveform data
+#   Inputs are the picoData dict. Note that setupPicoMeasurement must have been run or the dict will not have necessary fields informed and errors will occur
+#   Second input is the number of waveforms to collect in rapid block. Choosing a larger number will result in more waves to average,
+#       but may use up memory. The Picoscope2208B has 64MS buffer memory w/ 2 channels, meaning it can store ~64000 waves with 1000 samples/wave
+#   Returns a numpy array of the average of the numberOfWaves
+def runPicoMeasurement(picoData, numberOfWaves = 64):
+
+    #TODO: add error checking here, need to assert that all necessary picoData fields are informed
+    #these include: cHandle, timebase, numberOfSamples, all channel and trigger statuses
+    #Gather important parameters from picoData dict
+    cHandle = picoData["cHandle"]
+    timebase = picoData["timebase"]
+    numberOfSamples = picoData["numberOfSamples"]
+
+    #Create a c type for numberOfSamples that can be passed to the ps2000a functions
+    # Note that using 2 channels means memory is split, so we need to multiply numberOfSamples by 2 to get the expected number of data points per wave
+    cNumberOfSamples = ctypes.c_int32(2* numberOfSamples)
+
+    #Create overflow . Note: overflow is a flag for whether overvoltage occured on a given channel during measurement
+    overflow = ctypes.c_int16()
+
+    #Divide picoscope memory into segments for rapidblock capture
+    memorySegments = ps.2000aMemorySegments(cHandle, numberOfWaves, ctypes.byref(cNumberOfSamples))
+
+    #Error check memory segmentation
+    if memorySegments == "PICO_OK":
+        picoData["memorySegments"] = memorySegments
+    else:
+        print("Error: Problem setting up memory segments on picoscope: " + memorySegments)
+        #Raise error and break
+        assert_pico_ok(memorySegments)
+
+    #Set the number of captures (=wavesToCollect) on the picoscope
+    setCaptures = ps.ps2000aSetNoOfCaptures(cHandle, numberOfWaves)
+
+    #Error check set captures
+    if setCaptures == "PICO_OK":
+        picoData["setCaptures"] = setCaptures
+    else:
+        print("Error: Problem setting number of captures on picoscope: " + setCaptures)
+        assert_pico_ok(setCaptures)
+
+    #Set up memory buffers to receive data from channel B
+    bufferArray = np.empty((numberOfWaves, numberOfSamples), dtype = np.int16)
+    for wave in range(numberOfWaves):
+        # Setting the data buffer location for data collection from channel B
+        # handle = chandle
+        # source = ps2000a_channel_B = 1
+        # Buffer location = ctypes.byref(bufferArray[wave])
+        # Buffer length = numberOfSampless
+        # Segment index = wave
+        # Ratio mode = ps2000a_Ratio_Mode_None = 0 (we are not downsampling)
+        #TODO: add error checking for each buffer allocation
+        ps.ps2000aSetDataBuffers(cHandle, 1, ctypes.byref(bufferArray[wave]), numberOfSamples, wave, 0)
+
+    # Start block capture
+    # handle = cHandle
+    # Number of prTriggerSamples = 0
+    # Number of postTriggerSamples = numberOfSamples
+    # Timebase = timebase
+    # Oversample is not used (0)
+    # time indisposed ms = None (This is not needed)
+    # Segment index = 0 (start at beginning of memory)
+    # LpRead = None (not used)
+    # pParameter = None (not used)
+    picoData["runblock"] = ps.ps2000aRunBlock(cHandle, 0, numberOfSamples, timebase, 0, None, 0, None, None)
+    #TODO: add better error handling
+    assert_pico_ok(picoData["runblock"])
+
+    #Wait until data collection is finished
+    ready = ctypes.c_int16(0)
+    check = ctypes.c_int16(0)
+    while ready.value == check.value:
+        isReady = ps.ps2000aIsReady(cHandle, ctypes.byref(ready))
+
+    # Retrieve values from picoscope
+    # handle = cHandle
+    # noOfSamples = ctypes.byref(cNumberOfSamples)
+    # fromSegmentIndex = 0
+    # ToSegmentIndex = numberOfWaves - 1
+    # DownSampleRatio = 0
+    # DownSampleRatioMode = 0
+    # Overflow = ctypes.byref(overflow)
+    picoData["GetValuesBulk"] = ps.ps2000aGetValuesBulk(cHandle, ctypes.byref(cNumberOfSamples), 0, numberOfWaves - 1, 0, 0, ctypes.byref(overflow))
+    assert_pico_ok(picoData["GetValuesBulk"])
+
+    #Calculate the average of the waveform values stored in the buffer
+    bufferMean = np.mean(bufferArray, axis = 0)
+
+    # Retrieve trigger time offsets from picoscope
+    # NOTE: this function must be changed on 32-bit machines
+    # handle = cHandle
+    # timeOffsets = one 64-bit int for each wave collected (ctypes.c_int64*numberOfWaves)()
+    # timeUnits = ctypes.c_char() = ctypes.byref(TimeUnits)
+    # Fromsegmentindex = 0
+    # Tosegementindex = numberOfWaves - 1
+    timeOffsets = (ctypes.c_int64 * numberOfWaves)()
+    timeUnits = ctypes.c_char()
+    picoData["GetValuesTriggerTimeOffsetBulk"] = ps.ps2000aGetValuesTriggerTimeOffsetBulk64(cHandle, ctypes.byref(timeOffsets),
+                                                                                          ctypes.byref(timeUnits), 0,
+                                                                                          numberOfWaves - 1)
+    assert_pico_ok(picoData["GetValuesTriggerTimeOffsetBulk"])
+
+    # Convert waveform values from ADC to mV
+    # First find the maxADC value
+    maxADC = ctypes.c_int16()
+    picoData["maximumValue"] = ps.ps2000aMaximumValue(cHandle, ctypes.byref(maxADC))
+    assert_pico_ok(picoData["maximumValue"])
+
+    # Then convert the mean data array from ADC to mV using the sdk function
+    buffermV = np.array(adc2mV(bufferMean, picoData["voltageIndex"], maxADC))
+
+    #Create the time data (i.e. the x-axis) using the time intervals, numberOfSamples, and delay time
+    timeInterval = picoData["timeInterval"]
+    startTime = picoData["delayIntervals"] * timeInterval
+    stopTime = startTime + (timeInterval * (numberOfSamples - 1))
+    waveTime = np.linspace(startTime, stopTime, timeInterval)
+
+    return buffermV, waveTime
 
 #A helper function to calculation the oscilloscope timebase based on desired measurement duration and number of samples
 # Inputs are the numberOfSamples and the desired duration (in us)
