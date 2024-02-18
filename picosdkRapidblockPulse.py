@@ -212,7 +212,7 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
         # Buffer length = numberOfSampless
         # Segment index = wave
         # Ratio mode = ps2000a_Ratio_Mode_None = 0 (we are not downsampling)
-        dataBuffer = ps.ps2000aSetDataBuffer(cHandle, 1, bufferArrayC[wave], numberOfSamples, wave, 0)
+        dataBuffer = ps.ps2000aSetDataBuffer(cHandle, 1, ctypes.byref(bufferArrayC[wave]), numberOfSamples, wave, 0)
         assert_pico_ok(dataBuffer)
 
     # #TODO: this can be implemented faster as a numpy array, but need to play with the ctypes interface a bit more
@@ -365,7 +365,7 @@ def timebaseFromDurationSamples(numberOfSamples, duration):
 # testData = openPicoscope()
 # testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10 )
 # startMeasure = time.time()
-# testY, testX = runPicoMeasurement(testData, 100)
+# testY, testX = runPicoMeasurement(testData, 10000)
 # stopMeasure = time.time()
 # print(str(stopMeasure - startMeasure))
 # plt.plot(testX, testY)
@@ -373,36 +373,36 @@ def timebaseFromDurationSamples(numberOfSamples, duration):
 # closePicoscope(testData)
 
 # #test collecting multiple data sets from one setup
-# testData = {}
-# testData = openPicoscope()
-# testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10 )
-# startMeasure = time.time()
-# testY, testX = runPicoMeasurement(testData, 64)
-# stopMeasure = time.time()
-# print(str(stopMeasure - startMeasure))
-# plt.plot(testX, testY)
-# startMeasure = time.time()
-# testY1, testX1 = runPicoMeasurement(testData, 64)
-# stopMeasure = time.time()
-# print(str(stopMeasure - startMeasure))
+testData = {}
+testData = openPicoscope()
+testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10 )
+startMeasure = time.time()
+testY, testX = runPicoMeasurement(testData, 8)
+stopMeasure = time.time()
+print(str(stopMeasure - startMeasure))
+plt.plot(testX, testY)
+startMeasure = time.time()
+testY1, testX1 = runPicoMeasurement(testData, 5000)
+stopMeasure = time.time()
+print(str(1000 * (stopMeasure - startMeasure)))
 # plt.plot(testX1, testY1)
 # plt.show()
-# closePicoscope(testData)
+closePicoscope(testData)
 #
 # #get timing data
-sampleSizes = [1, 4, 9, 25, 36, 49, 64, 81, 100]
-timingData = {}
-testData = openPicoscope()
-testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10)
-# Do one initial measurement because the first has a large overhead
-runPicoMeasurement(testData, 1)
-for i in sampleSizes:
-    timeList = []
-    for j in range(10):
-        startMeasure = time.time()
-        runPicoMeasurement(testData, i)
-        stopMeasure = time.time()
-        timeList.append(stopMeasure - startMeasure)
-    print("Timing data for " + str(i) + " samples: " + str(timeList))
-    timingData[i] = timeList
-closePicoscope(testData)
+# sampleSizes = [500]
+# timingData = {}
+# testData = openPicoscope()
+# testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10)
+# # Do one initial measurement because the first has a large overhead
+# runPicoMeasurement(testData, 8)
+# for i in sampleSizes:
+#     timeList = []
+#     for j in range(2):
+#         startMeasure = time.time()
+#         runPicoMeasurement(testData, i)
+#         stopMeasure = time.time()
+#         timeList.append(stopMeasure - startMeasure)
+#     print("Timing data for " + str(i) + " samples: " + str(timeList))
+#     timingData[i] = timeList
+# closePicoscope(testData)
