@@ -195,8 +195,8 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
     bufferArrayChannelBCtype = np.ctypeslib.as_ctypes(bufferArrayChannelB)
 
     #Set up memory buffers for channel A. This step may not be necessary
-    bufferArrayChannelA = np.empty((numberOfWaves, numberOfSamples), dtype = ctypes.c_int16)
-    bufferArrayChannelACtype = np.ctypeslib.as_ctypes(bufferArrayChannelA)
+    # bufferArrayChannelA = np.empty((numberOfWaves, numberOfSamples), dtype = ctypes.c_int16)
+    # bufferArrayChannelACtype = np.ctypeslib.as_ctypes(bufferArrayChannelA)
 
     # bufferArrayChannelBPointer = bufferArrayChannelB.ctypes.data_as(c_int16_pointer)
     for wave in range(numberOfWaves):
@@ -215,8 +215,8 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
         assert_pico_ok(dataBufferB)
 
         #repeat above for channel A
-        dataBufferA = ps.ps2000aSetDataBuffer(cHandle, 0, ctypes.byref(bufferArrayChannelACtype[wave]), numberOfSamples, waveC, 0)
-        assert_pico_ok(dataBufferA)
+        # dataBufferA = ps.ps2000aSetDataBuffer(cHandle, 0, ctypes.byref(bufferArrayChannelACtype[wave]), numberOfSamples, waveC, 0)
+        # assert_pico_ok(dataBufferA)
 
     # Start block capture
     # handle = cHandle
@@ -273,7 +273,7 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
 
     #Might need to free up memory for longer scans by deleting the buffer arrays
     del bufferArrayChannelB
-    del bufferArrayChannelA
+    # del bufferArrayChannelA
 
     return buffermV, waveTime
 
@@ -359,19 +359,19 @@ def timebaseFromDurationSamples(numberOfSamples, duration):
 # closePicoscope(testData)
 #
 # #get timing data
-sampleSizes = [1, 8, 64, 100, 1000, 5000, 10000]
+sampleSizes = [1, 8, 64, 100, 1000, 5000]
 timingData = {}
 testData = openPicoscope()
 testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10)
 # Do one initial measurement because the first has a large overhead
 runPicoMeasurement(testData, 8)
 for i in sampleSizes:
-    timeList = []
-    for j in range(10):
+    timeList = np.array([])
+    for j in range(50):
         startMeasure = time.time()
         runPicoMeasurement(testData, i)
         stopMeasure = time.time()
-        timeList.append(1000 * (stopMeasure - startMeasure))
-    print("Timing data for " + str(i) + " samples: " + str(timeList))
+        timeList = np.append(timeList, 1000 * (stopMeasure - startMeasure))
+    print("Timing data for " + str(i) + " samples: " + str(np.mean(timeList)) + " +/- " + str(np.std(timeList)) + " ms")
     timingData[i] = timeList
 closePicoscope(testData)
