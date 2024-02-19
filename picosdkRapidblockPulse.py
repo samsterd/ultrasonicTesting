@@ -134,11 +134,12 @@ def setupPicoMeasurement(picoData, delay = 3, voltageRange = 1, numberOfSamples 
     # cHandle = cHandle
     # Enable = 1
     # Source = ps2000a_channel_A = 0
-    # Threshold = 1024 ADC counts
-    # Direction = ps2000a_Rising = 2
+    # Note on threshold: must be greater than 1024. 10000 chosen because it works, but this will vary depending on the voltage range
+    # Threshold = 10000 ADC counts
+    # Direction = ps2000a_Above = 0
     # Delay = delayIntervals
     # autoTrigger_ms = 1
-    trigger = ps.ps2000aSetSimpleTrigger(cHandle, 1, 0, 1024, 2, delayIntervals, 1)
+    trigger = ps.ps2000aSetSimpleTrigger(cHandle, 1, 0, 10000, 0, delayIntervals, 100)
 
     # Error check trigger
     if trigger == "PICO_OK":
@@ -328,13 +329,13 @@ def timebaseFromDurationSamples(numberOfSamples, duration):
 
 
 ############################################
-####Testing#####
-##Move somewhere else soon!###
+####Example scripts########
+#Collect ultrasonic pulses in water with 5 MHz transducers
 # testData = {}
 # testData = openPicoscope()
-# testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10 )
+# testData = setupPicoMeasurement(testData, 15, 0.1, 1000, 1 )
 # startMeasure = time.time()
-# testY, testX = runPicoMeasurement(testData, 10000)
+# testY, testX = runPicoMeasurement(testData, 1000)
 # stopMeasure = time.time()
 # print(str(stopMeasure - startMeasure))
 # plt.plot(testX, testY)
@@ -359,19 +360,19 @@ def timebaseFromDurationSamples(numberOfSamples, duration):
 # closePicoscope(testData)
 #
 # #get timing data
-sampleSizes = [1, 8, 64, 100, 1000, 5000]
-timingData = {}
-testData = openPicoscope()
-testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10)
-# Do one initial measurement because the first has a large overhead
-runPicoMeasurement(testData, 8)
-for i in sampleSizes:
-    timeList = np.array([])
-    for j in range(50):
-        startMeasure = time.time()
-        runPicoMeasurement(testData, i)
-        stopMeasure = time.time()
-        timeList = np.append(timeList, 1000 * (stopMeasure - startMeasure))
-    print("Timing data for " + str(i) + " samples: " + str(np.mean(timeList)) + " +/- " + str(np.std(timeList)) + " ms")
-    timingData[i] = timeList
-closePicoscope(testData)
+# sampleSizes = [1, 8, 64, 100, 1000, 5000]
+# timingData = {}
+# testData = openPicoscope()
+# testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10)
+# # Do one initial measurement because the first has a large overhead
+# runPicoMeasurement(testData, 8)
+# for i in sampleSizes:
+#     timeList = np.array([])
+#     for j in range(50):
+#         startMeasure = time.time()
+#         runPicoMeasurement(testData, i)
+#         stopMeasure = time.time()
+#         timeList = np.append(timeList, 1000 * (stopMeasure - startMeasure))
+#     print("Timing data for " + str(i) + " samples: " + str(np.mean(timeList)) + " +/- " + str(np.std(timeList)) + " ms")
+#     timingData[i] = timeList
+# closePicoscope(testData)
