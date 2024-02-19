@@ -250,7 +250,6 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
     assert_pico_ok(picoData["GetValuesBulk"])
 
     #Calculate the average of the waveform values stored in the buffer
-    processStart = time.time()
     bufferMean = np.mean(bufferArrayChannelB, axis = 0)
 
     # Make sure the picoscope is stopped
@@ -272,13 +271,11 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
     stopTime = startTime + (timeInterval * (numberOfSamples - 1))
     waveTime = np.linspace(startTime, stopTime, numberOfSamples)
 
-    processEnd = time.time()
-
     #Might need to free up memory for longer scans by deleting the buffer arrays
     del bufferArrayChannelB
     del bufferArrayChannelA
 
-    return buffermV, waveTime, (processEnd - processStart)
+    return buffermV, waveTime
 
 #ends the connection to the picoscope
 #Input: picoData with the cHandle field filled
@@ -370,14 +367,11 @@ testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10)
 runPicoMeasurement(testData, 8)
 for i in sampleSizes:
     timeList = []
-    processTimes = []
     for j in range(10):
         startMeasure = time.time()
-        processTime = runPicoMeasurement(testData, i)[2]
+        runPicoMeasurement(testData, i)
         stopMeasure = time.time()
         timeList.append(1000 * (stopMeasure - startMeasure))
-        processTimes.append(1000 * processTime)
     print("Timing data for " + str(i) + " samples: " + str(timeList))
-    print("Data processing time for " + str(i) + "samples: " + str(processTimes))
     timingData[i] = timeList
 closePicoscope(testData)
