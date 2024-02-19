@@ -172,19 +172,12 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
     cNumberOfSamples = ctypes.c_int32(numberOfSamples)
 
     #Create overflow . Note: overflow is a flag for whether overvoltage occured on a given channel during measurement
-    overflow = (ctypes.c_int16 * numberOfWaves)()
+    #For 2 channel measurements, each channel needs an overflow flag so we allocate 2 * numberOfWaves
+    overflow = (ctypes.c_int16 * numberOfWaves * 2)()
 
     #Divide picoscope memory into segments for rapidblock capture
-    memorySegments = ps.ps2000aMemorySegments(cHandle, numberOfWaves, ctypes.byref(cNumberOfSamples))
+    memorySegments = ps.ps2000aMemorySegments(cHandle, numberOfWaves * 2, ctypes.byref(cNumberOfSamples))
     assert_pico_ok(memorySegments)
-
-    # #Error check memory segmentation
-    # if memorySegments == "PICO_OK":
-    #     picoData["memorySegments"] = memorySegments
-    # else:
-    #     # print("Error: Problem setting up memory segments on picoscope: " + memorySegments)
-    #     #Raise error and break
-    #     assert_pico_ok(memorySegments)
 
     #Set the number of captures (=wavesToCollect) on the picoscope
     setCaptures = ps.ps2000aSetNoOfCaptures(cHandle, numberOfWaves)
@@ -197,38 +190,33 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
         assert_pico_ok(setCaptures)
 
     #Set up memory buffers to receive data from channel B
-    # This version does not work yet, but will be much faster than the dict based version
-    bufferArray = np.empty((numberOfWaves, numberOfSamples), dtype = ctypes.c_int16)
-    #Convert bufferArray to a ctype
-    bufferArrayC = np.ctypeslib.as_ctypes(bufferArray)
-    # bufferArrayPointer = bufferArray.ctypes.data_as(c_int16_pointer)
+    bufferArrayChannelB = np.empty((numberOfWaves, numberOfSamples), dtype = ctypes.c_int16)
+    #Convert bufferArrayChannelB to a ctype
+    bufferArrayChannelBCtype = np.ctypeslib.as_ctypes(bufferArrayChannelB)
+
+    #Set up memory buffers for channel A. This step may not be necessary
+    bufferArrayChannelA = np.empty((numberOfWaves, numberOfSamples), dtype = ctypes.c_int16)
+    bufferArrayChannelACtype = np.ctypeslib.as_ctypes(bufferArrayChannelA)
+
+    # bufferArrayChannelBPointer = bufferArrayChannelB.ctypes.data_as(c_int16_pointer)
     for wave in range(numberOfWaves):
-        # bufferArray[wave] = (ctypes.c_int16 * numberOfSamples)()
-        # dataPointer = bufferArray[wave].ctypes.data_as(c_int16_pointer)
+        # bufferArrayChannelB[wave] = (ctypes.c_int16 * numberOfSamples)()
+        # dataPointer = bufferArrayChannelB[wave].ctypes.data_as(c_int16_pointer)
         # Setting the data buffer location for data collection from channel B
         # handle = chandle
         # source = ps2000a_channel_B = 1
-        # Buffer location = ctypes.byref(bufferArray[wave])
+        # Buffer location = ctypes.byref(bufferArrayChannelB[wave])
         # Buffer length = numberOfSampless
         # Segment index = wave
         # Ratio mode = ps2000a_Ratio_Mode_None = 0 (we are not downsampling)
-        dataBuffer = ps.ps2000aSetDataBuffer(cHandle, 1, ctypes.byref(bufferArrayC[wave]), numberOfSamples, wave, 0)
-        assert_pico_ok(dataBuffer)
+        waveC = ctypes.c_uint32(wave)
 
-    # #TODO: this can be implemented faster as a numpy array, but need to play with the ctypes interface a bit more
-    # buffers = {}
-    # for wave in range(numberOfWaves):
-    #     buffers[wave] = (ctypes.c_int16 * numberOfSamples)()
-    #     # Setting the data buffer location for data collection from channel A
-    #     # handle = chandle
-    #     # source = ps2000a_channel_A = 0
-    #     # Buffer max = ctypes.byref(bufferAMax)
-    #     # Buffer min = ctypes.byref(bufferAMin)
-    #     # Buffer length = maxsamples
-    #     # Segment index = sample
-    #     # Ratio mode = ps2000a_Ratio_Mode_None = 0
-    #     ps.ps2000aSetDataBuffer(cHandle, 0, ctypes.byref(buffers[wave]),
-    #                                                         numberOfSamples, wave, 0)
+        dataBufferB = ps.ps2000aSetDataBuffer(cHandle, 1, ctypes.byref(bufferArrayChannelBCtype[wave]), numberOfSamples, waveC, 0)
+        assert_pico_ok(dataBufferB)
+
+        #repeat above for channel A
+        dataBufferA = ps.ps2000aSetDataBuffer(cHandle, 0, ctypes.byref(bufferArrayChannelACtype[wave]), numberOfSamples, waveC, 0)
+        assert_pico_ok(dataBufferA)
 
     # Start block capture
     # handle = cHandle
@@ -258,34 +246,12 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
     # DownSampleRatio = 0
     # DownSampleRatioMode = 0
     # Overflow = ctypes.byref(overflow)
-    picoData["GetValuesBulk"] = ps.ps2000aGetValuesBulk(cHandle, ctypes.byref(cNumberOfSamples), 0, numberOfWaves - 1, 0, 0, ctypes.byref(overflow))
+    picoData["GetValuesBulk"] = ps.ps2000aGetValuesBulk(cHandle, ctypes.byref(cNumberOfSamples), 0, numberOfWaves- 1, 0, 0, ctypes.byref(overflow))
     assert_pico_ok(picoData["GetValuesBulk"])
 
     #Calculate the average of the waveform values stored in the buffer
-    bufferMean = np.mean(bufferArray, axis = 0)
-
-    #Extract data from buffers dict and turn it into a numpy array
-    # voltageData = np.empty((numberOfWaves, numberOfSamples))
-    # maxADC = ctypes.c_int16()
-    # picoData["maximumValue"] = ps.ps2000aMaximumValue(cHandle, ctypes.byref(maxADC))
-    # for wave in range(numberOfWaves):
-    #     voltageData[wave, :] = np.array(adc2mV(buffers[wave], picoData["voltageIndex"], maxADC))
-    #
-    # meanWave = np.mean(voltageData, axis = 0)
-
-    # Retrieve trigger time offsets from picoscope
-    # NOTE: this function must be changed on 32-bit machines
-    # handle = cHandle
-    # timeOffsets = one 64-bit int for each wave collected (ctypes.c_int64*numberOfWaves)()
-    # timeUnits = ctypes.c_char() = ctypes.byref(TimeUnits)
-    # Fromsegmentindex = 0
-    # Tosegementindex = numberOfWaves - 1
-    timeOffsets = (ctypes.c_int64 * numberOfWaves)()
-    timeUnits = ctypes.c_char()
-    picoData["GetValuesTriggerTimeOffsetBulk"] = ps.ps2000aGetValuesTriggerTimeOffsetBulk64(cHandle, ctypes.byref(timeOffsets),
-                                                                                          ctypes.byref(timeUnits), 0,
-                                                                                          numberOfWaves - 1)
-    assert_pico_ok(picoData["GetValuesTriggerTimeOffsetBulk"])
+    processStart = time.time()
+    bufferMean = np.mean(bufferArrayChannelB, axis = 0)
 
     # Make sure the picoscope is stopped
     picoData["stop"] = ps.ps2000aStop(cHandle)
@@ -306,7 +272,13 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
     stopTime = startTime + (timeInterval * (numberOfSamples - 1))
     waveTime = np.linspace(startTime, stopTime, numberOfSamples)
 
-    return buffermV, waveTime
+    processEnd = time.time()
+
+    #Might need to free up memory for longer scans by deleting the buffer arrays
+    del bufferArrayChannelB
+    del bufferArrayChannelA
+
+    return buffermV, waveTime, (processEnd - processStart)
 
 #ends the connection to the picoscope
 #Input: picoData with the cHandle field filled
@@ -372,37 +344,40 @@ def timebaseFromDurationSamples(numberOfSamples, duration):
 # plt.show()
 # closePicoscope(testData)
 
-# #test collecting multiple data sets from one setup
-testData = {}
-testData = openPicoscope()
-testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10 )
-startMeasure = time.time()
-testY, testX = runPicoMeasurement(testData, 8)
-stopMeasure = time.time()
-print(str(stopMeasure - startMeasure))
-plt.plot(testX, testY)
-startMeasure = time.time()
-testY1, testX1 = runPicoMeasurement(testData, 5000)
-stopMeasure = time.time()
-print(str(1000 * (stopMeasure - startMeasure)))
-# plt.plot(testX1, testY1)
-# plt.show()
-closePicoscope(testData)
+# # #test collecting multiple data sets from one setup
+# testData = {}
+# testData = openPicoscope()
+# testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10 )
+# startMeasure = time.time()
+# testY, testX = runPicoMeasurement(testData, 8)
+# stopMeasure = time.time()
+# print(str(stopMeasure - startMeasure))
+# plt.plot(testX, testY)
+# startMeasure = time.time()
+# testY1, testX1 = runPicoMeasurement(testData, 5000)
+# stopMeasure = time.time()
+# print(str(1000 * (stopMeasure - startMeasure)))
+# # plt.plot(testX1, testY1)
+# # plt.show()
+# closePicoscope(testData)
 #
 # #get timing data
-# sampleSizes = [500]
-# timingData = {}
-# testData = openPicoscope()
-# testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10)
-# # Do one initial measurement because the first has a large overhead
-# runPicoMeasurement(testData, 8)
-# for i in sampleSizes:
-#     timeList = []
-#     for j in range(2):
-#         startMeasure = time.time()
-#         runPicoMeasurement(testData, i)
-#         stopMeasure = time.time()
-#         timeList.append(stopMeasure - startMeasure)
-#     print("Timing data for " + str(i) + " samples: " + str(timeList))
-#     timingData[i] = timeList
-# closePicoscope(testData)
+sampleSizes = [1, 8, 64, 100, 1000, 5000, 10000]
+timingData = {}
+testData = openPicoscope()
+testData = setupPicoMeasurement(testData, 3, 0.1, 1000, 10)
+# Do one initial measurement because the first has a large overhead
+runPicoMeasurement(testData, 8)
+for i in sampleSizes:
+    timeList = []
+    processTimes = []
+    for j in range(10):
+        startMeasure = time.time()
+        processTime = runPicoMeasurement(testData, i)[2]
+        stopMeasure = time.time()
+        timeList.append(1000 * (stopMeasure - startMeasure))
+        processTimes.append(1000 * processTime)
+    print("Timing data for " + str(i) + " samples: " + str(timeList))
+    print("Data processing time for " + str(i) + "samples: " + str(processTimes))
+    timingData[i] = timeList
+closePicoscope(testData)
