@@ -17,3 +17,17 @@ numpy
 matplotlib
 
 Currently tested on 64 bit windows. Picoscope controller will likely break on 32 bit machines
+
+Running on Linux may require adjusting USB port permissions. The following seems to work:
+
+sudo chmod 666 /dev/ttyUSB#
+
+Also needed to install Tkinter on python: sudo apt-get install python3-tk
+
+Then make sure the matplotlib backend is set to Tkinter:
+
+import matplotlib
+
+matplotlib.use('TkAgg')
+
+import matplotlib.pyplot as plt
