@@ -20,7 +20,7 @@ def openEnder(port, baudRate = 115200):
 
     #catch errors in connection
     except serial.SerialException as error:
-        print(f"Error: {error}")
+        print(f"Error opening Ender connection: {error}")
 
         #return -1 for error
         return -1
@@ -41,7 +41,7 @@ def writeToEnder(serialConnection, command):
         serialConnection.write(formattedCommand.encode('utf-8'))
 
     except serial.SerialException as error:
-        print(f"Error: {error}")
+        print(f"Error writing command to Ender: {error}")
         return -1
 
     else:
@@ -49,31 +49,24 @@ def writeToEnder(serialConnection, command):
 
 # Writes a series of commands to perform relative movements with the Ender
 # Inputs: serial connection object, the axis of motion as a string ('X','Y', or 'Z'), and the distance to move (in mm) (can be negative)
-# Outputs: 0 if executed correctly, -1 if error
+# Outputs: None
 def moveEnder(serialConnection, axis, distance):
 
     # Convert axis and distance inputs into the proper G-Code
     motionCommand = "G1 " + axis + str(distance)
 
-    try:
-        #Set ender to mm
-        writeToEnder(serialConnection, "G21")
+    #Set ender units to millimeters
+    unitRes = writeToEnder(serialConnection, "G21")
 
-        #Set positioning to relative (not absolute)
-        writeToEnder(serialConnection, "G91")
+    #Set positioning to relative (not absolute)
+    posRes = writeToEnder(serialConnection, "G91")
 
-        #Pop the last state pushed onto the Ender stack
-        writeToEnder(serialConnection, "M121")
+    #Pop the last state pushed onto the Ender stack
+    popRes = writeToEnder(serialConnection, "M121")
 
-        #Send motion command
-        writeToEnder(serialConnection, motionCommand)
+    #Send motion command
+    moveRes = writeToEnder(serialConnection, motionCommand)
 
-    except serial.SerialException as error:
-        print(f"Error: {error}")
-        return -1
-
-    else:
-        return 0
 
 # Closes connection to the Ender
 # Inputs: serialConnection object

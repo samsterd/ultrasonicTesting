@@ -17,7 +17,7 @@ class PulserProperties:
 
 # Opens pyserial connection to the pulser
 # Input is a string name of the port (i.e. 'COM3')
-# returns a serial class for the connection
+# returns a serial class for the connection or -1 if an error occurred
 #TODO: add confirmation, error handling, scanning for proper port
 def openPulser(portName):
     #Note pyserial defaults match the ultratek connection parameters
@@ -27,8 +27,15 @@ def openPulser(portName):
     #parity = PARITY_NONE
     #stopbits = STOPBITS_ONE
     #xonxoff = False
-    pulserSerial = serial.Serial(portName)
-    return pulserSerial
+    try:
+        pulserSerial = serial.Serial(portName)
+
+    except serial.SerialException as error:
+        print(f"Error opening pulser: {error}")
+        return -1
+
+    else:
+        return pulserSerial
 
 # Function to send commands to the pulser. Useful for turning things on/off or adjusting parameters
 # Inputs: serialConnection Serial object for the pulser and the string command to send
@@ -36,25 +43,46 @@ def openPulser(portName):
 # TODO: add verification that message is received
 def writeToPulser(serialConnection, command):
     commandString = command + '\r'
-    serialConnection.write(commandString.encode('ascii'))
+
+    try:
+        serialConnection.write(commandString.encode('ascii'))
+
+    except serial.SerialException as error:
+        print(f"Error writing command to pulser: {error}")
+        return -1
+
+    else:
+        return 0
 
 # function to change the pulsing parameters
 # takes a list of parameters and iterates through them with writeToPulser()
 def pulserParameters(serialConnection, parameters):
+
     return 0
 
-# Turns the pulser on at a pulse repitition frequency of 5000 Hz
+# Turns the pulser on at a pulse repetition frequency of 5000 Hz
+# Returns None
 # TODO: make frequency variable
 def pulserOn(serialConnection):
-    writeToPulser(serialConnection, 'P500')
-    return 0
 
+    writeToPulser(serialConnection, 'P500')
+
+# Turns off pulser by setting pulse repetition frequency to 0
+# Returns None
 def pulserOff(serialConnection):
+
     writeToPulser(serialConnection, 'P0')
-    return 0
 
 # Closes serial connection to the pulser
 # TODO: add confirmation, error handling
 def closePulser(serialConnection):
-    serialConnection.close()
-    return 0
+
+    try:
+        serialConnection.close()
+
+    except serial.SerialException as error:
+        print(f"Error closing pulser connection: {error}")
+        return -1
+
+    else:
+        return 0
