@@ -15,28 +15,28 @@ import time
 # Ender is moved before the pulse is run!
 controlParams = {
     'moveEnder' : False,   # Should the Ender be moved when the script is executed
-    'runPulse' : False     # Should a single pulse be collected when the script is executed
+    'runPulse' : True     # Should a single pulse be collected when the script is executed
 }
 
 #Names of ports the pulser and ender are connected to
 instrumentPorts = {
-    'pulserPort' : 'COM2',#Ultratek pulser port name
-    'enderPort' : 'COM3'  #Ender port name
+    'pulserPort' : 'COM5',#Ultratek pulser port name
+    'enderPort' : 'COM7'  #Ender port name
 }
 
 #Parameters for moving the ender
 enderParams = {
     'axis' : 'X',      #Axis to move ender
-    'distance' : 1     #Distance in mm to move ender
+    'distance' : -3     #Distance in mm to move ender
 }
 
 #Parameters for collecting data with the picoscope
 picoParams = {
-    'measureTime' : 2,   #Approx measurement time, in us
-    'measureDelay' : 15, #Approx delay after trigger to start measuring, in us
+    'measureTime' : 1,   #Approx measurement time, in us
+    'measureDelay' : 13.5, #Approx delay after trigger to start measuring, in us
     'voltageRange' : 0.1,#Picoscope data range
     'waves' : 1000,      #Number of waves to collect and average
-    'samples': 1000      #Number of data points per wave
+    'samples': 500      #Number of data points per wave
 }
 
 
@@ -63,7 +63,7 @@ def singlePulseMeasure(ports, params):
                                                picoParams['measureTime'])
 
     # Run pico measurement
-    times, voltages = pico.runPicoMeasurement(picoConnection, picoParams['waves'])
+    voltages, times = pico.runPicoMeasurement(picoConnection, picoParams['waves'])
 
     # Turn off pulser
     pulser.pulserOff(pulserConnection)

@@ -4,32 +4,36 @@ import picosdkRapidblockPulse as pico
 import ultratekPulser as pulser
 import enderControl as ender
 import math
+import time
 import matplotlib.pyplot as plt
 import json
 
+#TODO:
+#   get formatting right
+
 scanParams = {
     #Data saving location
-    'experimentName' : 'scan_test',  # Name for json file containing data
-    'experimentFolder' : 'files/ultrasound',  # Name of folder to dump data
+    'experimentName' : 'at_testdata',  # Name for json file containing data
+    'experimentFolder' : 'data',  # Name of folder to dump data
 
     #Scanning parameters
     'primaryAxis' : 'X',              #First axis of motion for the scan
     'secondaryAxis' : 'Z',            #Second axis of motion for the scan
-    'primaryAxisRange' : '10',         #Distance in mm to scan on the primary axis
-    'primaryAxisStep' : '1',           #Distance in mm between each scan on the primary axis
-    'secondaryAxisRange' : '10',       #Distance in mm to scan on the secondary axis
-    'secondaryAxisStep' : '1',         #Distance in mm between each scan on the secondary axis
+    'primaryAxisRange' : 4,         #Distance in mm to scan on the primary axis
+    'primaryAxisStep' : 0.1,           #Distance in mm between each scan on the primary axis
+    'secondaryAxisRange' : 4,       #Distance in mm to scan on the secondary axis
+    'secondaryAxisStep' : -0.1,         #Distance in mm between each scan on the secondary axis
 
     #Picoscope collection parameters
-    'measureTime' : 2,  # Approx measurement time, in us
-    'measureDelay' : 15,  # Approx delay after trigger to start measuring, in us
-    'voltageRange' : 0.1,  # Picoscope data range
-    'waves' : 1000,  # Number of waves to collect and average
-    'samples' : 1000,  # Number of data points per wave
+    'measureTime' : 1,   #Approx measurement time, in us
+    'measureDelay' : 13.5, #Approx delay after trigger to start measuring, in us
+    'voltageRange' : 0.1,#Picoscope data range
+    'waves' : 1000,      #Number of waves to collect and average
+    'samples': 500,      #Number of data points per wave
 
     #Names of ports for instruments
-    'pulserPort' : 'COM2',  # Ultratek pulser port name
-    'enderPort' : 'COM3'  # Ender port name
+    'pulserPort' : 'COM5',  # Ultratek pulser port name
+    'enderPort' : 'COM7'  # Ender port name
 }
 
 # Runs a 2D scan, taking ultrasonic pulse data at every point, and saves to the specified folder
@@ -37,7 +41,7 @@ scanParams = {
 def runScan(params):
 
     #setup save file
-    filename = params['experimentFolder'] + params['experimentName'] + ".json"
+    filename = params['experimentFolder'] + '\\' + params['experimentName'] + ".json"
 
     #connect to database?
 
@@ -58,26 +62,43 @@ def runScan(params):
 
     #Calculate number of steps on each axis
     #math.ceiling is used to ensure the result is an integer
-    primaryAxisSteps = math.ceil(params['primaryAxisRange'] / params['primaryAxisStep'])
-    secondaryAxisSteps = math.ceil(params['secondaryAxisRange'] / params['secondaryAxisStep'])
+    primaryAxisSteps = math.ceil(params['primaryAxisRange'] / abs(params['primaryAxisStep']))
+    secondaryAxisSteps = math.ceil(params['secondaryAxisRange'] / abs(params['secondaryAxisStep']))
 
     #start scan
-    for i in range(secondaryAxisSteps + 1):
+    for i in range(secondaryAxisSteps):
 
-        for j in range(primaryAxisSteps + 1):
+        for j in range(primaryAxisSteps):
 
             #collect data
             waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
 
-            #clear old plot and plot current data
-            plt.clf()
-            plt.plot(waveform[0], waveform[1])
+            #Make data pretty for json
+            waveformList = []
+            waveformList.append(list(waveform[0]))
+            waveformList.append(list(waveform[1]))
+
+            #calculate location to add to file
+            iLoc = i * params['secondaryAxisStep']
+            jLoc = j * params['primaryAxisStep']
+
+            iString = params['secondaryAxis'] + ": " + str(iLoc)
+            jString = params['primaryAxis'] + ": " + str(jLoc)
+
+            timeString = "Time: " + str(time.time())
+
+            metaDataList = [iString, jString, timeString]
+
+            # #clear old plot and plot current data
+            # plt.plot(waveform[0], waveform[1])
+            # plt.show()
 
             #TODO: check formatting, add other data (i.e. scan position, time)
 
             #write data
             with open(filename, 'a') as file:
-                json.dump(waveform, file)
+                json.dump(waveformList, file)
+                json.dump(metaDataList, file)
                 file.write('\n')
 
             #TODO: get database saving working
