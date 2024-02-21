@@ -10,9 +10,9 @@ import json
 from tqdm import tqdm
 
 #TODO:
+#   return to start location after scan!
 #   get formatting right
 #   make scan plot live update
-#   create progress messages / bars
 #   get database code from docker, implement it here
 #   improve ui, especially on scanSetup
 #   improve documentation
@@ -74,7 +74,7 @@ def runScan(params):
     #start scan. tqdm adds progress bars
     for i in tqdm(range(secondaryAxisSteps)):
 
-        for j in tqdm(range(primaryAxisSteps)):
+        for j in range(primaryAxisSteps):
 
             #collect data
             waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
@@ -117,6 +117,10 @@ def runScan(params):
 
         # Increment position on secondary axis
         ender.moveEnder(enderConnection, params['secondaryAxis'], params['secondaryAxisStep'])
+
+    #Return to the start position. Only needs to be done on the secondary axis since the parimary axis resets at the end of the loop
+    #ender.moveEnder(enderConnection, params['primaryAxis'], -1 * primaryAxisSteps * params['primaryAxisStep'])
+    ender.moveEnder(enderConnection, params['secondaryAxis'], -1 * secondaryAxisSteps * params['secondaryAxisStep'])
 
     #Turn off pulser
     pulser.pulserOff(pulserConnection)
