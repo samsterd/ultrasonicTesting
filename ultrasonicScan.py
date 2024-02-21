@@ -68,8 +68,9 @@ def runScan(params):
 
     #Calculate number of steps on each axis
     #math.ceiling is used to ensure the result is an integer
-    primaryAxisSteps = math.ceil(params['primaryAxisRange'] / abs(params['primaryAxisStep']))
-    secondaryAxisSteps = math.ceil(params['secondaryAxisRange'] / abs(params['secondaryAxisStep']))
+    #+1 added at end to make the ranges inclusive of the ends
+    primaryAxisSteps = math.ceil(params['primaryAxisRange'] / abs(params['primaryAxisStep'])) + 1
+    secondaryAxisSteps = math.ceil(params['secondaryAxisRange'] / abs(params['secondaryAxisStep'])) + 1
 
     #start scan. tqdm adds progress bars
     for i in tqdm(range(secondaryAxisSteps)):
@@ -118,8 +119,10 @@ def runScan(params):
         # Increment position on secondary axis
         ender.moveEnder(enderConnection, params['secondaryAxis'], params['secondaryAxisStep'])
 
+        # Wait 2 seconds for motion to finish
+        time.sleep(2)
+
     #Return to the start position. Only needs to be done on the secondary axis since the parimary axis resets at the end of the loop
-    #ender.moveEnder(enderConnection, params['primaryAxis'], -1 * primaryAxisSteps * params['primaryAxisStep'])
     ender.moveEnder(enderConnection, params['secondaryAxis'], -1 * secondaryAxisSteps * params['secondaryAxisStep'])
 
     #Turn off pulser
