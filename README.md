@@ -16,6 +16,8 @@ numpy
 
 matplotlib
 
+tqdm (progress bar)
+
 Currently tested on 64 bit windows. Picoscope controller will likely break on 32 bit machines
 
 Running on Linux may require adjusting USB port permissions. The following seems to work:

@@ -7,9 +7,15 @@ import math
 import time
 import matplotlib.pyplot as plt
 import json
+from tqdm import tqdm
 
 #TODO:
 #   get formatting right
+#   make scan plot live update
+#   create progress messages / bars
+#   get database code from docker, implement it here
+#   improve ui, especially on scanSetup
+#   improve documentation
 
 scanParams = {
     #Data saving location
@@ -65,10 +71,10 @@ def runScan(params):
     primaryAxisSteps = math.ceil(params['primaryAxisRange'] / abs(params['primaryAxisStep']))
     secondaryAxisSteps = math.ceil(params['secondaryAxisRange'] / abs(params['secondaryAxisStep']))
 
-    #start scan
-    for i in range(secondaryAxisSteps):
+    #start scan. tqdm adds progress bars
+    for i in tqdm(range(secondaryAxisSteps)):
 
-        for j in range(primaryAxisSteps):
+        for j in tqdm(range(primaryAxisSteps)):
 
             #collect data
             waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
