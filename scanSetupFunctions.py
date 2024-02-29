@@ -11,34 +11,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-# Controls whether the script runs a pulse, moves the ender, or both
-# Ender is moved before the pulse is run!
-controlParams = {
-    'moveEnder' : False,   # Should the Ender be moved when the script is executed
-    'runPulse' : True     # Should a single pulse be collected when the script is executed
-}
-
-#Names of ports the pulser and ender are connected to
-instrumentPorts = {
-    'pulserPort' : 'COM5',#Ultratek pulser port name
-    'enderPort' : 'COM7'  #Ender port name
-}
-
-#Parameters for moving the ender
-enderParams = {
-    'axis' : 'X',      #Axis to move ender
-    'distance' : -3     #Distance in mm to move ender
-}
-
-#Parameters for collecting data with the picoscope
-picoParams = {
-    'measureTime' : 1,   #Approx measurement time, in us
-    'measureDelay' : 13.5, #Approx delay after trigger to start measuring, in us
-    'voltageRange' : 0.1,#Picoscope data range
-    'waves' : 1000,      #Number of waves to collect and average
-    'samples': 500      #Number of data points per wave
-}
-
 
 # Function to test collection parameters
 # Inputs: instrument ports dict and parameter dict defined at top of script

@@ -18,30 +18,6 @@ from tqdm import tqdm
 #   improve ui, especially on scanSetup
 #   improve documentation
 
-scanParams = {
-    #Data saving location
-    'experimentName' : 'at_testdata',  # Name for json file containing data
-    'experimentFolder' : 'data',  # Name of folder to dump data
-
-    #Scanning parameters
-    'primaryAxis' : 'X',              #First axis of motion for the scan
-    'secondaryAxis' : 'Z',            #Second axis of motion for the scan
-    'primaryAxisRange' : 4,         #Distance in mm to scan on the primary axis
-    'primaryAxisStep' : 0.1,           #Distance in mm between each scan on the primary axis
-    'secondaryAxisRange' : 4,       #Distance in mm to scan on the secondary axis
-    'secondaryAxisStep' : -0.1,         #Distance in mm between each scan on the secondary axis
-
-    #Picoscope collection parameters
-    'measureTime' : 1,   #Approx measurement time, in us
-    'measureDelay' : 13.5, #Approx delay after trigger to start measuring, in us
-    'voltageRange' : 0.1,#Picoscope data range
-    'waves' : 1000,      #Number of waves to collect and average
-    'samples': 500,      #Number of data points per wave
-
-    #Names of ports for instruments
-    'pulserPort' : 'COM5',  # Ultratek pulser port name
-    'enderPort' : 'COM7'  # Ender port name
-}
 
 # Runs a 2D scan, taking ultrasonic pulse data at every point, and saves to the specified folder
 # Inputs: parameters specified above
@@ -132,5 +108,3 @@ def runScan(params):
     pulser.closePulser(pulserConnection)
     ender.closeEnder(enderConnection)
     pico.closePicoscope(picoConnection)
-
-    return 0
