@@ -54,5 +54,3 @@ def multiscan(params):
             time.sleep(1)
 
     return 0
-
-multiscan(scanParams)

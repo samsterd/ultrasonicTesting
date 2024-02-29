@@ -44,10 +44,10 @@ picoParams = {
 # Inputs: instrument ports dict and parameter dict defined at top of script
 # Outputs: Plot of pulse data received by the picoscope
 # Outline: connects to pulser, picoscope, turns on pulser, sets up picoscope measurement, collects data, closes connections, plots data
-def singlePulseMeasure(ports, params):
+def singlePulseMeasure(params):
 
     # Connect to pulser
-    pulserConnection = pulser.openPulser(instrumentPorts['pulserPort'])
+    pulserConnection = pulser.openPulser(params['pulserPort'])
 
     # Connect to picoscope
     picoConnection = pico.openPicoscope()
@@ -57,13 +57,13 @@ def singlePulseMeasure(ports, params):
 
     # Set up pico measurement
     picoConnection = pico.setupPicoMeasurement(picoConnection,
-                                               picoParams['measureDelay'],
-                                               picoParams['voltageRange'],
-                                               picoParams['samples'],
-                                               picoParams['measureTime'])
+                                               params['measureDelay'],
+                                               params['voltageRange'],
+                                               params['samples'],
+                                               params['measureTime'])
 
     # Run pico measurement
-    voltages, times = pico.runPicoMeasurement(picoConnection, picoParams['waves'])
+    voltages, times = pico.runPicoMeasurement(picoConnection, params['waves'])
 
     # Turn off pulser
     pulser.pulserOff(pulserConnection)
@@ -78,25 +78,15 @@ def singlePulseMeasure(ports, params):
     plt.ylabel('Voltage (mV)')
     plt.show()
 
-    return 0
-
 # Helper function to connect and move the Ender
 # Inputs: instrumentPorts dict, the axis to move, and the distance
-def repositionEnder(ports, params):
+def repositionEnder(params):
 
     # Connect to Ender
-    enderConnection = ender.openEnder(ports['enderPort'])
+    enderConnection = ender.openEnder(params['enderPort'])
 
     # Move ender
     ender.moveEnder(enderConnection, params['axis'], params['distance'])
 
     # Close connection
     ender.closeEnder(enderConnection)
-
-    return 0
-
-#Run script
-if controlParams['moveEnder'] == True:
-    repositionEnder(instrumentPorts, enderParams)
-if controlParams['runPulse'] == True:
-    singlePulseMeasure(instrumentPorts, picoParams)

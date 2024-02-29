@@ -10,9 +10,10 @@ import json
 from tqdm import tqdm
 
 #TODO:
-#   return to start location after scan!
-#   get formatting right
+#   get formatting right - save scan parameters somewhere!
 #   make scan plot live update
+#   make scan snake/raster instead of line by line
+#   add tiny sleep between collections to prevent collection while moving
 #   get database code from docker, implement it here
 #   improve ui, especially on scanSetup
 #   improve documentation
@@ -100,11 +101,10 @@ def runScan(params):
             # plt.plot(waveform[0], waveform[1])
             # plt.show()
 
-            #TODO: check formatting, add other data (i.e. scan position, time)
-
             #write data
             with open(filename, 'a') as file:
                 json.dump(waveformList, file)
+                file.write('\n')
                 json.dump(metaDataList, file)
                 file.write('\n')
 
@@ -134,5 +134,3 @@ def runScan(params):
     pico.closePicoscope(picoConnection)
 
     return 0
-
-runScan(scanParams)
