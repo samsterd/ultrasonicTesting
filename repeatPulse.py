@@ -3,6 +3,9 @@ import picosdkRapidblockPulse as pico
 import ultratekPulser as pulser
 import time
 import tqdm
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
 
 
 def repeatPulse(params):
@@ -13,6 +16,15 @@ def repeatPulse(params):
 
     # generate filename for current scan json
     scanFileName = params['experimentFolder'] + params['experimentName']
+
+    # Set up plot
+    plt.ion()
+    figure, ax = plt.subplots()
+
+    wavePlot, = ax.plot([1,2], [1,2])
+    plt.xlabel('Time (ns)')
+    plt.ylabel('Intensity (mV)')
+    plt.title('Initializing plot')
 
     # Setup picoscope
     picoConnection = pico.setupPicoMeasurement(picoConnection,
@@ -41,6 +53,14 @@ def repeatPulse(params):
         # collect data
         waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
 
+        # Plot the data
+        wavePlot.set_xdata(waveform[1])
+        wavePlot.set_ydata(waveform[0])
+
+        #draw updated plot
+        figure.canvas.draw()
+        figure.canvas.flush_events()
+
         # Make data pretty for json
         waveformList = []
         waveformList.append(list(waveform[0]))
@@ -53,8 +73,6 @@ def repeatPulse(params):
         # #clear old plot and plot current data
         # plt.plot(waveform[0], waveform[1])
         # plt.show()
-
-        # TODO: check formatting, add other data (i.e. scan position, time)
 
         # write data
         with open(scanFileName, 'a') as file:
