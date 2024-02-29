@@ -1,6 +1,7 @@
 import ultrasonicScan as scan
 import multiscan
 import scanSetupFunctions as setup
+import repeatPulse
 
 ###################################################################
 #################  Operating Instructions  ########################
@@ -17,6 +18,7 @@ experimentParams = {
     # What do you want to do?
     #'move' = move the transducers
     #'single pulse' = perform a single test pulse
+    #'repeat pulse' = repeat a pulse at a single location for a certain time at a certain frequency
     #'single scan' = perform a single 2D scan
     #'multi scan' = repeat a 2D scan with a set frequency
     #Once you have selected, fill out the values in the parameter list in the correct section
@@ -43,12 +45,12 @@ experimentParams = {
     'samples': 500,                                  # Number of data points per wave
 
     ################################################################################
-    ####################### File Names #############################################
-    ####### Applies to 'single scan' and 'multi scan' experiment ###################
+    ########################### File Names ##########################################
+    ##### Applies to 'single scan', 'multi scan', and 'repeat pulse' experiment ####
     ################################################################################
 
     'experimentFolder': 'data',                     # Name of folder to dump data
-    'experimentName' : 'test_data',                 # File name for single scan experiment. Will be appended with .json
+    'experimentName' : 'test_data',                 # File name for single scan and repeat pulse experiment. Will be appended with .json
     'experimentBaseName' : 'test_multiscan_data',   # Base filename for multi scan experiment, which will have the scan # appended to it
 
     ################################################################################
@@ -63,8 +65,15 @@ experimentParams = {
     'secondaryAxisRange' : 4,                       # Distance in mm to scan on the secondary axis
     'secondaryAxisStep' : -0.1,                     # Distance in mm between each scan on the secondary axis
 
+    ################################################################################
+    ################ Repeat Measure Parameters #####################################
+    ###### Applies to 'multi scan' and 'repeat pulse' experiments ##################
+    ################################################################################
+
     'scanInterval' : 3600,                          # For multi scans: Minimum time between start of scans, in seconds.
     'numberOfScans' : 10,                           # For multi scans: Number of times to run the scan
+    'pulseInterval' : 10,                           # For repeat pulse: Minimum time between pulse collection, in seconds
+    'experimentTime' : 3600,                        # For repeat pulse: Time to collect data, in seconds
 
     #################################################################################
     ########################## Port Names ###########################################
@@ -106,6 +115,9 @@ def runExperiment(params):
 
         case 'single pulse':
             setup.singlePulseMeasure(params)
+
+        case 'repeat pulse':
+            repeatPulse.repeatPulse(params)
 
         case 'single scan':
             scan.runScan(params)

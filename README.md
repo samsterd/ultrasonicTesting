@@ -33,3 +33,6 @@ import matplotlib
 matplotlib.use('TkAgg')
 
 import matplotlib.pyplot as plt
+
+Upcoming features:
+sqlite integration, continuous plotting, simultaneous pulse-echo
