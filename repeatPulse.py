@@ -7,19 +7,9 @@ import tqdm
 
 def repeatPulse(params):
 
-    # initialize time
-    startTime = time.time()
-    endTime = startTime + params['experimentTime']
-
-    # initialize progress bar
-    pbar = tqdm.tqdm(total=params['experimentTime'])
-
     # Connect to picoscope, ender, pulser
     picoConnection = pico.openPicoscope()
     pulserConnection = pulser.openPulser(params['pulserPort'])
-
-    #Calculate numberOfScans
-    params['numberOfScans'] = math.ceil(params['experimentTime'] / params['pulseInterval'])
 
     # generate filename for current scan json
     scanFileName = params['experimentFolder'] + params['experimentName']
@@ -33,6 +23,14 @@ def repeatPulse(params):
 
     # Turn on pulser
     pulser.pulserOn(pulserConnection)
+
+    # initialize time
+    experimentTime = params['experimentTime']
+    startTime = time.time()
+    endTime = startTime + experimentTime
+
+    # initialize progress bar
+    pbar = tqdm.tqdm(total=experimentTime)
 
     #start pulse collection loop. Run until end of experiment
     while time.time() < endTime:
@@ -81,3 +79,8 @@ def repeatPulse(params):
         # iterationTime is longer than pulse interval. Immediately repeat the iteration and update pbar the correct amount
         else:
             pbar.update(iterationTime)
+
+    pbar.close()
+
+    pulser.pulserOff(pulserConnection)
+    pico.closePicoscope(picoConnection)

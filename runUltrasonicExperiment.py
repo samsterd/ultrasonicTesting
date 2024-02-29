@@ -79,8 +79,8 @@ experimentParams = {
     ########################## Port Names ###########################################
     ######### Only change if instrument USB ports are changed! ######################
     #################################################################################
-    'pulserPort' : 'COM5',                          # Ultratek pulser port name
-    'enderPort' : 'COM7'                            # Ender port name
+    'pulserPort' : '/dev/ttyUSB1',                          # Ultratek pulser port name
+    'enderPort' : '/dev/ttyUSB0'                            # Ender port name
 }
 
 ##########################################################################################
