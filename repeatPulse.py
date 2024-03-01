@@ -17,22 +17,6 @@ def repeatPulse(params):
     # generate filename for current scan json
     scanFileName = params['experimentFolder'] + params['experimentName']
 
-    # Set up plot
-    fig, ax = plt.subplots()
-
-    (wave, ) = ax.plot([params['measureDelay'] - 1, params['measureDelay'] + params['measureTime'] + 1],
-                       [-1 * params['voltageRange'], params['voltageRange']], animated = True)
-    plt.xlabel('Time (ns)')
-    plt.ylabel('Intensity (mV)')
-    plt.show(block = False)
-
-    #Copy figure background to allow fast updating
-    background = fig.canvas.copy_from_bbox(fig.boox)
-    # Draw initial filler data
-    ax.draw_artist(wave)
-    # Show result
-    fig.canvas.blit(fig.bbox)
-
     # Setup picoscope
     picoConnection = pico.setupPicoMeasurement(picoConnection,
                                                params['measureDelay'],
@@ -59,23 +43,6 @@ def repeatPulse(params):
 
         # collect data
         waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
-
-        # Plot the data
-        wavePlot.set_xdata(waveform[1])
-        wavePlot.set_ydata(waveform[0])
-
-        #draw updated plot
-        #reset the background
-        fig.canvas.restore_region(background)
-        #update data
-        wave.set_xdata(waveform[1])
-        wave.set_ydata(waveform[0])
-        #draw it
-        ax.draw_artist(wave)
-        #copy image to gui
-        fig.canvas.blit(fig.bbox)
-        #flush impending gui events
-        fig.canvas.flush_events()
 
         # Make data pretty for json
         waveformList = []
