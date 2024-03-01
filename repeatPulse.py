@@ -7,7 +7,7 @@ import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
-
+#TODO: fix the plotting code. it doesn't work.
 def repeatPulse(params):
 
     # Connect to picoscope, ender, pulser
@@ -76,6 +76,7 @@ def repeatPulse(params):
         fig.canvas.blit(fig.bbox)
         #flush impending gui events
         fig.canvas.flush_events()
+        plt.show(block = False)
 
         # Make data pretty for json
         waveformList = []
