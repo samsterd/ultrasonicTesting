@@ -8,6 +8,7 @@ import time
 import matplotlib.pyplot as plt
 import json
 from tqdm import tqdm
+from database import Database
 
 #TODO:
 #   get formatting right - save scan parameters somewhere!
@@ -24,9 +25,10 @@ from tqdm import tqdm
 def runScan(params):
 
     #setup save file
-    filename = params['experimentFolder'] + '\\' + params['experimentName'] + ".json"
+    params['fileName'] = params['experimentFolder'] + '\\' + params['experimentName']
 
-    #connect to database?
+    #setup database
+    database = Database(params)
 
     #Connect to picoscope, ender, pulser
     picoConnection = pico.openPicoscope()
@@ -57,34 +59,45 @@ def runScan(params):
             #collect data
             waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
 
-            #Make data pretty for json
-            waveformList = []
-            waveformList.append(list(waveform[0]))
-            waveformList.append(list(waveform[1]))
+            #Make a data dict for sqlite
+            pixelData = {}
+
+            #Add waveform data to pixelData
+            pixelData['voltage'] = list(waveform[0])
+            pixelData['time'] = list(waveform[1])
+
+            #Add collection metadata
+            pixelData['time_collected'] = time.time()
+            pixelData['waves'] = params['waves']
+            pixelData['delay'] = params['measureDelay']
+            pixelData['voltage_range'] = params['voltageRange']
 
             #calculate location to add to file
             iLoc = i * params['secondaryAxisStep']
             jLoc = j * params['primaryAxisStep']
 
-            iString = params['secondaryAxis'] + ": " + str(iLoc)
-            jString = params['primaryAxis'] + ": " + str(jLoc)
+            iKey = params['secondaryAxis']
+            jKey = params['primaryAxis']
 
-            timeString = "Time: " + str(time.time())
+            #add location to pixelData
+            pixelData[iKey] = iLoc
+            pixelData[jKey] = jLoc
 
-            metaDataList = [iString, jString, timeString]
+            query = database.parse_query(pixelData)
+            database.write(query)
 
             # #clear old plot and plot current data
             # plt.plot(waveform[0], waveform[1])
             # plt.show()
 
             #write data
-            with open(filename, 'a') as file:
-                json.dump(waveformList, file)
-                file.write('\n')
-                json.dump(metaDataList, file)
-                file.write('\n')
+            # with open(filename, 'a') as file:
+            #     json.dump(waveformList, file)
+            #     file.write('\n')
+            #     json.dump(metaDataList, file)
+            #     file.write('\n')
 
-            #TODO: get database saving working
+            query : database.parse_query()
 
             #Increment position along primary axis
             ender.moveEnder(enderConnection, params['primaryAxis'], params['primaryAxisStep'])
