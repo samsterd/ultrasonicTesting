@@ -6,6 +6,7 @@ import tqdm
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+from database import Database
 
 
 def repeatPulse(params):
@@ -14,8 +15,12 @@ def repeatPulse(params):
     picoConnection = pico.openPicoscope()
     pulserConnection = pulser.openPulser(params['pulserPort'])
 
-    # generate filename for current scan json
+    # generate filename for current scan
     scanFileName = params['experimentFolder'] + params['experimentName']
+
+    # if saveFormat is sqlite, initialize the database
+    if params['saveFormat'] == 'sqlite':
+        database = Database(params)
 
     # Setup picoscope
     picoConnection = pico.setupPicoMeasurement(picoConnection,
@@ -44,25 +49,24 @@ def repeatPulse(params):
         # collect data
         waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
 
-        # Make data pretty for json
-        waveformList = []
-        waveformList.append(list(waveform[0]))
-        waveformList.append(list(waveform[1]))
+        # Make a data dict for saving
+        waveData = {}
 
-        timeString = "Time: " + str(time.time())
+        waveData['voltage'] = list(waveform[0])
+        waveData['time'] = list(waveform[1])
 
-        metaDataList = [timeString]
+        waveData['time_collected'] = time.time()
 
-        # #clear old plot and plot current data
-        # plt.plot(waveform[0], waveform[1])
-        # plt.show()
+        # save data as sqlite database
+        if params['saveFormat'] == 'sqlite':
+            query = database.parse_query(waveData)
+            database.write(query)
 
-        # write data
-        with open(scanFileName, 'a') as file:
-            json.dump(waveformList, file)
-            file.write('\n')
-            json.dump(metaDataList, file)
-            file.write('\n')
+        # save data as json
+        else:
+            with open(scanFileName, 'a') as file:
+                json.dump(waveData, file)
+                file.write('\n')
 
         # calculate time elapsed in this iteration
         iterationTime = time.time() - pulseStartTime

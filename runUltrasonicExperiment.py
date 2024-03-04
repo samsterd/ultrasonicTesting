@@ -45,13 +45,14 @@ experimentParams = {
     'samples': 500,                                  # Number of data points per wave
 
     ################################################################################
-    ########################### File Names ##########################################
+    ########################### Saving Names ##########################################
     ##### Applies to 'single scan', 'multi scan', and 'repeat pulse' experiment ####
     ################################################################################
 
     'experimentFolder': 'data',                     # Name of folder to dump data
-    'experimentName' : 'test_data',                 # File name for single scan and repeat pulse experiment. Will be appended with .json
+    'experimentName' : 'testdb01',                 # File name for single scan and repeat pulse experiment. Will be appended with .json
     'experimentBaseName' : 'test_multiscan_data',   # Base filename for multi scan experiment, which will have the scan # appended to it
+    'saveFormat' : 'sqlite',                        # Format to save data. Options are sqlite or json. Sqlite is recommended
 
     ################################################################################
     ####################### Scan Parameters ########################################
@@ -99,7 +100,7 @@ experimentParams = {
 
 
 # Function to choose experiment function based on parameters
-def runExperiment(params):
+def runExperiment(params : dict):
 
     # get the experiment from the input
     experiment = params['experiment']

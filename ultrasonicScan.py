@@ -8,15 +8,7 @@ import time
 import matplotlib.pyplot as plt
 import json
 from tqdm import tqdm
-
-#TODO:
-#   get formatting right - save scan parameters somewhere!
-#   make scan plot live update
-#   make scan snake/raster instead of line by line
-#   add tiny sleep between collections to prevent collection while moving
-#   get database code from docker, implement it here
-#   improve ui, especially on scanSetup
-#   improve documentation
+from database import Database
 
 
 # Runs a 2D scan, taking ultrasonic pulse data at every point, and saves to the specified folder
@@ -24,9 +16,11 @@ from tqdm import tqdm
 def runScan(params):
 
     #setup save file
-    filename = params['experimentFolder'] + '\\' + params['experimentName'] + ".json"
+    params['fileName'] = params['experimentFolder'] + '//' + params['experimentName']
 
-    #connect to database?
+    #setup database if saving as sqlite
+    if params['saveFormat'] == 'sqlite':
+        database = Database(params)
 
     #Connect to picoscope, ender, pulser
     picoConnection = pico.openPicoscope()
@@ -57,37 +51,42 @@ def runScan(params):
             #collect data
             waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
 
-            #Make data pretty for json
-            waveformList = []
-            waveformList.append(list(waveform[0]))
-            waveformList.append(list(waveform[1]))
+            #Make a data dict for saving
+            pixelData = {}
+
+            #Add waveform data to pixelData
+            pixelData['voltage'] = list(waveform[0])
+            pixelData['time'] = list(waveform[1])
+
+            #Add collection metadata
+            pixelData['time_collected'] = time.time()
 
             #calculate location to add to file
             iLoc = i * params['secondaryAxisStep']
             jLoc = j * params['primaryAxisStep']
 
-            iString = params['secondaryAxis'] + ": " + str(iLoc)
-            jString = params['primaryAxis'] + ": " + str(jLoc)
+            iKey = params['secondaryAxis']
+            jKey = params['primaryAxis']
 
-            timeString = "Time: " + str(time.time())
+            #add location to pixelData
+            pixelData[iKey] = iLoc
+            pixelData[jKey] = jLoc
 
-            metaDataList = [iString, jString, timeString]
+            # save data as sqlite database
+            if params['saveFormat'] == 'sqlite':
+                query = database.parse_query(pixelData)
+                database.write(query)
 
-            # #clear old plot and plot current data
-            # plt.plot(waveform[0], waveform[1])
-            # plt.show()
-
-            #write data
-            with open(filename, 'a') as file:
-                json.dump(waveformList, file)
-                file.write('\n')
-                json.dump(metaDataList, file)
-                file.write('\n')
-
-            #TODO: get database saving working
+            # save format is json, so dump data, then dump metadata
+            else:
+                #write data to json for redundancy
+                with open(params['fileName'], 'a') as file:
+                    json.dump(pixelData, file)
+                    file.write('\n')
 
             #Increment position along primary axis
             ender.moveEnder(enderConnection, params['primaryAxis'], params['primaryAxisStep'])
+
 
         # Move back to origin of primary axis
         ender.moveEnder(enderConnection, params['primaryAxis'], -1 * primaryAxisSteps * params['primaryAxisStep'])
