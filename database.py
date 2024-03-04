@@ -5,6 +5,7 @@
 import sqlite3
 import numpy as np
 import io
+import time
 
 #todo: gather all experiment metadata here. this is experiment dependent, so create an initializer helper function that
 #takes the experiment type
@@ -36,13 +37,24 @@ class Database:
         self.connection = sqlite3.connect(params['fileName'] + '.sqlite3')
         self.cursor = self.connection.cursor()
 
-        #create table_initializer based on experiment type
-        tableInit = self.table_initializer(params)
+        #create data_table_initializer and parameters_table_initializer based on experiment type
+        paramTableInit = self.parameter_table_initializer(params)
+        dataTableInit = self.data_table_initializer(params)
 
-        #create db table
-        self.cursor.execute(tableInit)
+        #create parameters table
+        self.cursor.execute(paramTableInit)
 
-    def table_initializer(self, params : dict):
+        #generate command to write parameters to the table
+        paramQuery = self.write_parameter_table(params)
+
+        #write query to parameter table
+        self.write(paramQuery)
+
+        #create data table
+        self.cursor.execute(dataTableInit)
+
+
+    def data_table_initializer(self, params : dict):
         #acoustics is name of TABLE. Not sure if we want this hardcoded
         # general table structure that is true in all experiments
         #TODO: synchronize these to input keys in runUltrasonicExperiment
@@ -51,9 +63,6 @@ class Database:
             voltage BLOB,
             time REAL,
             time_collected REAL PRIMARY KEY,
-            waves REAL,
-            delay REAL,
-            voltage_range REAL
         '''
         # If the experiment involves scanning, also include the location and axis data
         if params['experiment'] == 'single scan' or params['experiment'] == 'multi scan':
@@ -68,8 +77,38 @@ class Database:
 
         return initTable + ')'
 
+    # initialize table to record oscilloscope parameters
+    def parameter_table_initializer(self, params : dict):
+        initTable = '''CREATE TABLE IF NOT EXISTS parameters (
+            time_started REAL PRIMARY KEY,
+            measure_time REAL,
+            delay REAL,
+            waves REAL,
+            samples REAL,
+            voltage_range REAL)
+        '''
+        return initTable
+
+    # Generates a database query for writing the experimental parameters
+    def write_parameter_table(self, params : dict):
+
+        # copy over parameters into a separate dict. This isn't the best way to do this and really exposes some bad namespace choices :(
+        parameters = {}
+        parameters['time_started'] = time.time()
+        parameters['measure_time'] = params['measureTime']
+        parameters['delay'] = params['measureDelay']
+        parameters['waves'] = params['waves']
+        parameters['samples'] = params['samples']
+        parameters['voltage_range'] = params['voltageRange']
+
+        #create db query for the parameters to the parameters table
+        query = self.parse_query(parameters, 'parameters')
+
+        return query
+
     @staticmethod
     def parse_query(payload: dict, table: str = 'acoustics') -> str:
+        #TODO: update this approach. Also using ? for data, not string formatting, is best practice
         """Prepares the query.
 
         It's very hacky, but leaving for now. We have to parse the amps to a

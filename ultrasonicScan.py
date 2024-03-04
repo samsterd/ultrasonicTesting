@@ -15,9 +15,6 @@ from database import Database
 #   make scan plot live update
 #   make scan snake/raster instead of line by line
 #   add tiny sleep between collections to prevent collection while moving
-#   get database code from docker, implement it here
-#   improve ui, especially on scanSetup
-#   improve documentation
 
 
 # Runs a 2D scan, taking ultrasonic pulse data at every point, and saves to the specified folder
@@ -25,7 +22,7 @@ from database import Database
 def runScan(params):
 
     #setup save file
-    params['fileName'] = params['experimentFolder'] + '\\' + params['experimentName']
+    params['fileName'] = params['experimentFolder'] + '//' + params['experimentName']
 
     #setup database
     database = Database(params)
@@ -68,9 +65,6 @@ def runScan(params):
 
             #Add collection metadata
             pixelData['time_collected'] = time.time()
-            pixelData['waves'] = params['waves']
-            pixelData['delay'] = params['measureDelay']
-            pixelData['voltage_range'] = params['voltageRange']
 
             #calculate location to add to file
             iLoc = i * params['secondaryAxisStep']
@@ -90,17 +84,18 @@ def runScan(params):
             # plt.plot(waveform[0], waveform[1])
             # plt.show()
 
-            #write data
-            # with open(filename, 'a') as file:
-            #     json.dump(waveformList, file)
-            #     file.write('\n')
-            #     json.dump(metaDataList, file)
-            #     file.write('\n')
+            #write data to json for redundancy
+            with open(filename, 'a') as file:
+                json.dump(waveformList, file)
+                file.write('\n')
+                json.dump(metaDataList, file)
+                file.write('\n')
 
             query : database.parse_query()
 
             #Increment position along primary axis
             ender.moveEnder(enderConnection, params['primaryAxis'], params['primaryAxisStep'])
+
 
         # Move back to origin of primary axis
         ender.moveEnder(enderConnection, params['primaryAxis'], -1 * primaryAxisSteps * params['primaryAxisStep'])
