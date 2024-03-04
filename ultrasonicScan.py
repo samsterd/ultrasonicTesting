@@ -10,12 +10,6 @@ import json
 from tqdm import tqdm
 from database import Database
 
-#TODO:
-#   get formatting right - save scan parameters somewhere!
-#   make scan plot live update
-#   make scan snake/raster instead of line by line
-#   add tiny sleep between collections to prevent collection while moving
-
 
 # Runs a 2D scan, taking ultrasonic pulse data at every point, and saves to the specified folder
 # Inputs: parameters specified above
