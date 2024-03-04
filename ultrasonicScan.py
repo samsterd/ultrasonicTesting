@@ -24,8 +24,9 @@ def runScan(params):
     #setup save file
     params['fileName'] = params['experimentFolder'] + '//' + params['experimentName']
 
-    #setup database
-    database = Database(params)
+    #setup database if saving as sqlite
+    if params['saveFormat'] == 'sqlite':
+        database = Database(params)
 
     #Connect to picoscope, ender, pulser
     picoConnection = pico.openPicoscope()
@@ -56,7 +57,7 @@ def runScan(params):
             #collect data
             waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
 
-            #Make a data dict for sqlite
+            #Make a data dict for saving
             pixelData = {}
 
             #Add waveform data to pixelData
@@ -77,21 +78,17 @@ def runScan(params):
             pixelData[iKey] = iLoc
             pixelData[jKey] = jLoc
 
-            query = database.parse_query(pixelData)
-            database.write(query)
+            # save data as sqlite database
+            if params['saveFormat'] == 'sqlite':
+                query = database.parse_query(pixelData)
+                database.write(query)
 
-            # #clear old plot and plot current data
-            # plt.plot(waveform[0], waveform[1])
-            # plt.show()
-
-            #write data to json for redundancy
-            with open(filename, 'a') as file:
-                json.dump(waveformList, file)
-                file.write('\n')
-                json.dump(metaDataList, file)
-                file.write('\n')
-
-            query : database.parse_query()
+            # save format is json, so dump data, then dump metadata
+            else:
+                #write data to json for redundancy
+                with open(params['fileName'], 'a') as file:
+                    json.dump(pixelData, file)
+                    file.write('\n')
 
             #Increment position along primary axis
             ender.moveEnder(enderConnection, params['primaryAxis'], params['primaryAxisStep'])
