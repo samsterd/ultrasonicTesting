@@ -1,24 +1,10 @@
-##Author:
-##Notes: Interface with writing to database.
-##pithytimeout=0
+## Modified from previous code
+# TODO: modify style to bring in line with rest of project
 
 import sqlite3
 import numpy as np
 import io
 import time
-
-#todo: gather all experiment metadata here. this is experiment dependent, so create an initializer helper function that
-#takes the experiment type
-# TABLE_INITIALIZER = f'''CREATE TABLE IF NOT EXISTS {TABLE} (
-#     voltage BLOB,
-#     time REAL PRIMARY KEY,
-#     waves REAL,
-#     delay REAL,
-#     voltage_range REAL,
-#     duration REAL
-# )
-# '''
-
 
 class Database:
     """Writes to a local database.
@@ -53,17 +39,18 @@ class Database:
         #create data table
         self.cursor.execute(dataTableInit)
 
-
+    # Generates an SQL query string to intialize the data table based on the experiment function
     def data_table_initializer(self, params : dict):
-        #acoustics is name of TABLE. Not sure if we want this hardcoded
+
+        # acoustics is name of TABLE. Not sure if we want this hardcoded
         # general table structure that is true in all experiments
         #TODO: synchronize these to input keys in runUltrasonicExperiment
-        #TODO: find a better way to record these, since they are redundant for scans
         initTable = '''CREATE TABLE IF NOT EXISTS acoustics (
             voltage BLOB,
             time REAL,
             time_collected REAL PRIMARY KEY,
         '''
+
         # If the experiment involves scanning, also include the location and axis data
         if params['experiment'] == 'single scan' or params['experiment'] == 'multi scan':
 
@@ -93,6 +80,7 @@ class Database:
     def write_parameter_table(self, params : dict):
 
         # copy over parameters into a separate dict. This isn't the best way to do this and really exposes some bad namespace choices :(
+        # TODO: return to this and improve it
         parameters = {}
         parameters['time_started'] = time.time()
         parameters['measure_time'] = params['measureTime']
@@ -106,10 +94,11 @@ class Database:
 
         return query
 
+    # Parse query takes a dict and turns it into an SQL-readable format for writing the data
     @staticmethod
     def parse_query(payload: dict, table: str = 'acoustics') -> str:
         #TODO: update this approach. Also using ? for data, not string formatting, is best practice
-        """Prepares the query.
+        """Taken from Wes' prior code. Prepares the query.
 
         It's very hacky, but leaving for now. We have to parse the amps to a
         SQL-readable format. It doesn't accept the pythonic list directly;
@@ -117,7 +106,7 @@ class Database:
 
         Args:
             payload (dict): The payload, with one entry being the acoustics data
-                as received from picoscope.callback().
+                as received from runPicoMeasurement().
             table (str, optional): Table name, Defaults to "acoustics".
 
         Returns:
