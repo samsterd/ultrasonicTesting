@@ -2,6 +2,7 @@
 # Uses pyserial to connect and send commands. The pulser takes simple commands encoded as ascii ('string'.encode('ascii'))
 
 import serial
+import math
 
 # @dataclass
 # class PulserProperties:
@@ -53,11 +54,19 @@ def writeToPulser(serialConnection, command):
     else:
         return 0
 
-# function to change the pulsing parameters
-# takes a list of parameters and iterates through them with writeToPulser()
-def pulserParameters(serialConnection, parameters):
+# function to change the pulse width based on the frequency of the ultrasonic transducer used in the experiment
+# Inputs a serial connection object and the central frequency (in MHz) of the transducer
+# Uses writeToPulser to set the appropriate pulse width
+def transducerFrequencyToPulseWidth(serialConnection, frequency):
 
-    return 0
+    # Calculate pulse width from frequency. First convert freq to period (in ns) then divide by 2 -> 500 / freq
+    # math.floor is used to find the nearest integer
+    pulseWidth = math.floor(500 / frequency)
+
+    # Convert the pulseWidth to the appropriate pulser command
+    pulseWidthCommand = 'W' + str(pulseWidth)
+
+    writeToPulser(serialConnection, pulseWidthCommand)
 
 # Turns the pulser on at a pulse repetition frequency of 5000 Hz
 # Returns None

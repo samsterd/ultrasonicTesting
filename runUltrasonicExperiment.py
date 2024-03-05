@@ -34,10 +34,11 @@ experimentParams = {
     'distance': -3,                                  # Distance in mm to move ender
 
     #################################################################################
-    ###################### Picoscope Parameters #####################################
+    ###################### Ultrasonic Parameters #####################################
     #### Applies to 'single pulse', 'single scan', and 'multi scan' experiments #####
     #################################################################################
 
+    'transducerFrequency' : 2.25,                    # Central frequency of the ultrasonic transducer, in MHz
     'measureTime' : 1,                               # Approx measurement time, in us
     'measureDelay' : 13.5,                           # Approx delay after trigger to start measuring, in us
     'voltageRange' : 0.1,                            # Picoscope data range

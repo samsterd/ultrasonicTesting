@@ -24,6 +24,9 @@ def singlePulseMeasure(params):
     # Connect to picoscope
     picoConnection = pico.openPicoscope()
 
+    # Adjust pulser pulsewidth
+    pulser.transducerFrequencyToPulseWidth(pulserConnection, params['transducerFrequency'])
+
     # Turn on the pulser
     pulser.pulserOn(pulserConnection)
 

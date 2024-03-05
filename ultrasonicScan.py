@@ -34,6 +34,9 @@ def runScan(params):
                                                params['samples'],
                                                params['measureTime'])
 
+    # Adjust pulser pulsewidth
+    pulser.transducerFrequencyToPulseWidth(pulserConnection, params['transducerFrequency'])
+
     #Turn on pulser
     pulser.pulserOn(pulserConnection)
 
