@@ -39,6 +39,9 @@ def repeatPulse(params):
     startTime = time.time()
     endTime = startTime + experimentTime
 
+    # Initialize the collection index which is used in the saved data table
+    collectionIndex = 0
+
     # initialize progress bar
     pbar = tqdm.tqdm(total=experimentTime)
 
@@ -58,6 +61,8 @@ def repeatPulse(params):
         waveData['time'] = list(waveform[1])
 
         waveData['time_collected'] = time.time()
+        waveData['collection_index'] = collectionIndex
+        collectionIndex += 1
 
         # save data as sqlite database
         if params['saveFormat'] == 'sqlite':
