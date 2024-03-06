@@ -4,6 +4,7 @@ import numpy as np
 from typing import Callable
 from tqdm import tqdm
 import time
+from  matplotlib import pyplot as plt
 
 # TODO: create cursors within functions rather than pass around a global cursor
 # Open a connection to the database specified in filepath and initialize a cursor
@@ -169,10 +170,32 @@ def stringListToArray(strList : str):
 
     return np.array(floatList)
 
-# Create a new column in a database
-
-# Write values to new column
-
-# Load map coordinates and a data column
 
 # plot a map
+def plot2DScan(cursor, xCol : str, yCol : str, datCol : str, table = 'acoustics'):
+
+    # Format the requested columns for the db query
+    columns = xCol + ', ' + yCol + ', ' + datCol
+
+    # Formate and execute SELECt query
+    selectQuery = "SELECT " + columns + " FROM " + table
+
+    rawData = cursor.execute(selectQuery).fetchall()
+
+    xDat = np.array([])
+    yDat = np.array([])
+    cDat = np.array([])
+
+    for row in rawData:
+        xDat = np.append(xDat, float(row[0]))
+        yDat = np.append(yDat, float(row[1]))
+        cDat = np.append(cDat, float(row[2]))
+
+    plt.scatter(xDat, yDat, c = cDat)
+    plt.show()
+
+    # Make SELECT query
+
+    # Convert data to np arrays
+
+    # plot

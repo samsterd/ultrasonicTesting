@@ -49,8 +49,7 @@ class Database:
             voltage BLOB,
             time REAL,
             time_collected REAL,
-            collection_index INTEGER PRIMARY KEY
-        '''
+            collection_index INTEGER PRIMARY KEY'''
 
         # If the experiment involves scanning, also include the location and axis data
         if params['experiment'] == 'single scan' or params['experiment'] == 'multi scan':
