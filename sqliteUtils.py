@@ -73,18 +73,24 @@ def retrieveParameters(cursor, table = 'parameters'):
 
     return paramDict
 
-# A function to write a data value to a specific row
-# Inputs the connection and cursor objects, the name of the column to insert into, the name of the table
+# A function that executes an UPDATE query at a single (row,col) in the DB but does not commit it
+#   Avoiding commits gives a large speed improvement when iterating over many rows
+# Inputs the connection and cursor objects, the name of the column to update, the name of the table
 #     and the column and value to use as the row identifier (should be the PRIMARY KEY of the table)
-# Saves the data to the database and returns nothing
-def writeToDB(con, cur, column : str, table : str, value, keyCol, keyVal):
+# Outputs nothing
+def updateRowCol(con, cur, column : str, table : str, value, keyCol, keyVal):
 
     # Generate the INSERT query based
     updateQuery = "UPDATE " + table + " SET " + column + " = " + str(value) + " WHERE " + keyCol + " = " + str(keyVal)
 
     # Execute and commit the result
+    start = time.time()
     cur.execute(updateQuery)
-    con.commit()
+    exTime = time.time()
+    # print(exTime - start)
+    # con.commit()
+    # comTime = time.time()
+    # print(comTime - exTime)
 
 # Create a new column within a table
 def createNewColumn(con, cur, table : str, columnName : str):
@@ -153,9 +159,11 @@ def applyFunctionToData(connection, cursor, func : Callable, resName : str, data
 
         funcResult = func(arrayList, *funcArgs)
 
-        writeToDB(connection, writeCursor, resName, table, funcResult, keyColumn[0], keyValue)
+        updateRowCol(connection, writeCursor, resName, table, funcResult, keyColumn[0], keyValue)
 
         funcResultList.append(funcResult)
+
+    connection.commit()
 
     return funcResultList
 
