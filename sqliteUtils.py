@@ -14,7 +14,7 @@ from matplotlib import pyplot as plt
 #plot pixel range
 #grab pixel data
 #grab pixel data over time
-#save plots without show()
+#xsave plots without show()
 #xanalyze multiple files
 #xanalyze folder
 #change over to ? from string formatting
@@ -305,6 +305,131 @@ def defaultMultiScanAnalysis(dir):
     # generate plots
     generate2DScansDirectory(dir, 'X', 'Z', colNames)
 
+# Retrieves the values in dataColumn at a given pixel coordinate
+def singleDataAtPixel(cursor, dataColumn : str, primaryCoor, secondaryCoor, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics'):
+
+    # format axes and coors into a WHERE statement
+    whereCondition = primaryAxis + " = " + str(primaryCoor) + " AND " + secondaryAxis + " = " + str(secondaryCoor)
+
+    # Combine info into a SELECT query
+    selectQuery = "SELECT " + dataColumn + " FROM " + table + " WHERE " + whereCondition
+
+    # Execute query and fetch data
+    cursor.execute(selectQuery)
+    data = cursor.fetchone()
+
+    # If data was not found, print a warning and return None
+    # Otherwise, convert the data to floats and put it with the correct data key
+    if data == None:
+        print("dataAtPixel: no data returned. Check that the provided coordinates (" + str(primaryCoor) + ", " + str(secondaryCoor) + ") exist within the data set")
+        return None
+    else:
+        return float(data[0])
+
+def dataAtPixels(cursor, dataColumn : str, primaryCoors : list, secondaryCoors : list, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics'):
+
+    # check that primary and secondary coor lists are valid
+    if len(primaryCoors) != len(secondaryCoors):
+        print("dataAtPixels: length of primaryCoors and secondaryCoors must be equal. Returning None")
+        return None
+
+    # generate (x,y) tuples from primary and secondary coors
+    coorList = []
+    for i in range(len(primaryCoors)):
+        coorList.append((primaryCoors[i], secondaryCoors[i]))
+
+    dataDict = {}
+    # iterate through coordinates and run dataAtPixel for each one
+    for coor in coorList:
+        dataDict[coor] = dataAtPixel(cursor, dataColumn, coor[0], coor[1], primaryAxis, secondaryAxis, table)
+
+    return dataDict
+
+
+# Retrieves the values in dataColumns at a given pixel coordinate
+# Returns the values as an dict with dataColumns as the keys and the float-converted data as values
+def dataAtPixel(cursor, dataColumns : list, primaryCoor, secondaryCoor, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics'):
+
+    # format axes and coors into a WHERE statement
+    whereCondition = primaryAxis + " = " + str(primaryCoor) + " AND " + secondaryAxis + " = " + str(secondaryCoor)
+
+    # Format data columns
+    formattedDataColumns = ", ".join(dataColumns)
+
+    # Combine info into a SELECT query
+    selectQuery = "SELECT " + formattedDataColumns + " FROM " + table + " WHERE " + whereCondition
+
+    # Execute query and fetch data
+    cursor.execute(selectQuery)
+    data = cursor.fetchone()
+
+    dataDict = {}
+    # If data was not found, print a warning and return None
+    # Otherwise, convert the data to floats and put it with the correct data key
+    if data == None:
+        print("dataAtPixel: no data returned. Check that the provided coordinates (" + str(primaryCoor) + ", " + str(secondaryCoor) + ") exist within the data set")
+        return None
+    else:
+        for i in range(len(data)):
+            dataDict[dataColumns[i]] = float(data[i])
+        return dataDict
+
+# TODO: this is very slow (~500 ms / iteration). find the bottleneck and speed it up
+# Runs dataAtPixels across multiple scans,
+# Returns a dict with the keys as (x,y) coordinates, and the values as a dict with keys as data columns and values as a numpy array
+def multiScanDataAtPixels(fileNames : list, dataColumns : list, primaryCoors : list, secondaryCoors : list, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics', verbose = True):
+
+    # initialize storage list
+    dataDictList = []
+
+    # Iterate through files
+    for file in fileNames:
+
+        if verbose == True:
+            print("Gathering data from " + file)
+
+        # open connection
+        con, cur = openDB(file)
+
+        # collect data at pixels
+        dataDictList.append(dataAtPixels(cur, dataColumns, primaryCoors, secondaryCoors, primaryAxis, secondaryAxis, table))
+
+        con.close()
+
+    # Merge data. storage list is a list of dicts of dicts. This got ugly...
+
+    # First make a copy of dataDictList[0] but with the values as numpy arrays
+    masterDict = {}
+
+    for coordinate, coordinateData in dataDictList[0].items():
+        masterDict[coordinate] = {dataColumn : np.array(value) for dataColumn, value in coordinateData.items()}
+
+    # Now iterate through the rest of dataDictList, merging the values into the arrays of masterDict
+    for scan in dataDictList[1:]:
+
+        # for each scan in list, iterate through the keys (coordinates) and values (values == innerDict of data columns)
+        for key, coordinateData in scan.items():
+
+            # set the value of masterDict[coordinate/key][data column / inn
+            for dataColumn, value in coordinateData.items():
+                masterDict[key][dataColumn] = np.append(masterDict[key][dataColumn], value)
+
+    return masterDict
+
+# Runs multiScanDataAtPixels on all of the files within a given directory
+# Returns a dict with the keys as (x,y) coordinates, and the values as a dict with keys as data columns and values as a numpy array
+def directoryScanDataAtPixels(dir : str, dataColumns : list, primaryCoors : list, secondaryCoors : list, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics', verbose = True):
+
+    # Grab list of files with .sqlite3 extension in the folder
+    files = os.listdir(dir)
+    fileNames = []
+    for file in files:
+        if file.endswith(".sqlite3"):
+            fileNames.append(os.path.join(dir, file))
+
+    data = multiScanDataAtPixels(fileNames, dataColumns, primaryCoors, secondaryCoors, primaryAxis, secondaryAxis, table, verbose)
+
+    return data
 
 # Helper function to convert a 'stringified' list ('[1.1, 3.2, 4.3]') into a numpy array ([1.1, 3.2, 4.3])
 # Inputs the string, outputs the list
@@ -343,13 +468,27 @@ def plotWaveform(cursor, xCol = 'time', yCol = 'voltage', table = 'acoustics'):
     plt.plot(xDat, yDat)
     plt.show()
 
-# TODO: finish writing this once you write a findPixel function
+# TODO: finish this now that dataAtPixel is done
 # def plotPixel(cursor, primaryCoor, secondaryCoor, primaryAxis = 'X', secondaryAxis = 'Z', xCol = 'time', yCol = 'voltage', table = 'acoustics'):
 #
 #     dataColumns = xCol + ', ' + yCol
 #
 #     # Format pixel coordinates as a WHERE statement
 #     wherePixel = 'WHERE ' +
+
+# Generates a plot of the given data column at certain coordinate values for all databases in a directory
+# Plot x-axis is the first entry in dataColumns, y-axis is the second
+# useful for multiscans
+def plotScanDataAtPixels(dir : str, dataColumns : list, primaryCoors : list, secondaryCoors : list, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics', verbose = True):
+
+    dataDict = directoryScanDataAtPixels(dir, dataColumns, primaryCoors, secondaryCoors, primaryAxis, secondaryAxis, table, verbose)
+
+    for coor in dataDict.keys():
+        plt.scatter(dataDict[coor][dataColumns[0]], dataDict[coor][dataColumns[1]], label = str(coor))
+
+    plt.legend()
+    plt.show()
+
 
 # plot a map
 def plot2DScan(cursor, xCol : str, yCol : str, datCol : str, save = False, show = True, fileName = '', table = 'acoustics'):
