@@ -157,6 +157,40 @@ def fastLookup(cursor, index: int, dataColumns: list, table='acoustics'):
 
     return data
 
+# Helper function that takes in a string returned from a table lookup and attempts to convert it to the appropriate data type
+# Only handles floats and lists right now. If it isn't recognized, it returns the unchanged string
+def stringConverter(string : str):
+
+    # First attempt a float
+    try:
+        data = float(string)
+        return data
+    except ValueError:
+        # it isn't a float, so try to convert a list
+        try:
+            data = stringListToArray(string)
+            return data
+        # it isn't a list either. return the string unchanged
+        except ValueError:
+            return string
+
+# Helper function to convert a 'stringified' list ('[1.1, 3.2, 4.3]') into a numpy array ([1.1, 3.2, 4.3])
+# Inputs the string, outputs the list
+# Used to convert sql-saved lists into numpy arrays
+# TODO: in the future, saving and loading can be made smarter - save the data as binary and directly load it into an array
+def stringListToArray(strList : str):
+
+    # Reformat the string by removing brackets and splitting along the ','
+    strFormatted = strList.strip('[]').split(', ')
+
+    floatList = []
+    # Convert the string numbers to floats
+    for num in strFormatted:
+        floatList.append(float(num))
+
+    return np.array(floatList)
+
+
 ##########################################################################
 ########## Data Analysis #################################################
 #########################################################################
@@ -166,7 +200,6 @@ def fastLookup(cursor, index: int, dataColumns: list, table='acoustics'):
 #   the column names to retrieve the data from (a list of strings), and the name of the table to retrieve from
 # NOTE: func is assumed to operate on a list of two arrays i.e. [ ([x1,x2,...]), ([y1,y2,...])]
 # Outputs: the result of applying the function to all rows as a list. It also writes the result into a new column in the database
-# TODO: this function has become bloated and might need to be broken up
 def applyFunctionToData(connection, cursor, func : Callable, resName : str, dataColumns = ['time', 'voltage'], keyColumn = ['collection_index'], table = 'acoustics', *funcArgs):
 
     # Gather the number of rows in the db
@@ -196,7 +229,7 @@ def applyFunctionToData(connection, cursor, func : Callable, resName : str, data
         # row is a tuple of length >= 2, with the final entry being the primary key
         # convert each entry in row to an array except the final primary key
         for i in range(len(row) - 1):
-            arrayList.append(stringListToArray(row[i]))
+            arrayList.append(stringConverter(row[i]))
 
         # Retrieve the primary key value of the row as the last member
         keyValue = row[-1]
@@ -247,7 +280,7 @@ def applyFunctionsToData(connection, cursor, funcs : list, resNames : list, data
         # row is a tuple of length >= 2, with the final entry being the primary key
         # convert each entry in row to an array except the final primary key
         for i in range(len(row) - 1):
-            arrayList.append(stringListToArray(row[i]))
+            arrayList.append(stringConverter(row[i]))
 
         # Retrieve the primary key value of the row as the last member
         keyValue = row[-1]
@@ -347,7 +380,7 @@ def dataAtPixel(cursor, dataColumns : list, primaryCoor, secondaryCoor, primaryA
         return None
     else:
         for i in range(len(data)):
-            dataDict[dataColumns[i]] = float(data[i])
+            dataDict[dataColumns[i]] = stringConverter(data[i])
         return dataDict
 
 # Retrieves the values in dataColumns for given pixel coordinates
@@ -381,7 +414,7 @@ def dataAtPixels(cursor, dataColumns: list, primaryCoors, secondaryCoors, primar
         else:
             data = fastLookup(cursor, index, dataColumns, table)
             for i in range(len(dataColumns)):
-                dataDict[dataColumns[i]] = float(data[i])
+                dataDict[dataColumns[i]] = stringConverter(data[i])
         coorDict[coor] = dataDict.copy()
 
     return coorDict
@@ -532,21 +565,6 @@ def directoryScanDataAtPixels(dir : str, dataColumns : list, primaryCoors : list
 
     return data
 
-# Helper function to convert a 'stringified' list ('[1.1, 3.2, 4.3]') into a numpy array ([1.1, 3.2, 4.3])
-# Inputs the string, outputs the list
-# Used to convert sql-saved lists into numpy arrays
-# TODO: in the future, saving and loading can be made smarter - save the data as binary and directly load it into an array
-def stringListToArray(strList : str):
-
-    # Reformat the string by removing brackets and splitting along the ','
-    strFormatted = strList.strip('[]').split(', ')
-
-    floatList = []
-    # Convert the string numbers to floats
-    for num in strFormatted:
-        floatList.append(float(num))
-
-    return np.array(floatList)
 
 ########################################################################
 ################## Plotting ############################################
@@ -563,8 +581,8 @@ def plotWaveform(cursor, xCol = 'time', yCol = 'voltage', table = 'acoustics'):
 
     rawData = cursor.execute(selectQuery).fetchone()
 
-    xDat = stringListToArray(rawData[0])
-    yDat = stringListToArray(rawData[1])
+    xDat = stringConverter(rawData[0])
+    yDat = stringConverter(rawData[1])
 
     plt.plot(xDat, yDat)
     plt.show()
@@ -579,8 +597,8 @@ def plotPixelWaveform(cursor, primaryCoor, secondaryCoor, primaryAxis = 'X', sec
     data = fastLookup(cursor, pixelIndex, [xCol, yCol], table)
 
     # convert the data to a numpy array
-    xDat = stringListToArray(data[0])
-    yDat = stringListToArray(data[1])
+    xDat = stringConverter(data[0])
+    yDat = stringConverter(data[1])
 
     # plot
     plt.plot(xDat, yDat, label = "(" + str(primaryCoor) + ", " + str(secondaryCoor) + ")")
@@ -610,8 +628,8 @@ def plotPixelsWaveform(cursor, primaryCoors : list, secondaryCoors : list, prima
         data = fastLookup(cursor, pixel, [xCol, yCol], table)
 
         # convert the data to a numpy array
-        xDat = stringListToArray(data[0])
-        yDat = stringListToArray(data[1])
+        xDat = stringConverter(data[0])
+        yDat = stringConverter(data[1])
 
         # plot
         plt.plot(xDat, yDat, label=str(coor))
@@ -670,9 +688,9 @@ def plot2DScan(cursor, xCol : str, yCol : str, datCol : str, save = False, show 
     cDat = np.array([])
 
     for row in rawData:
-        xDat = np.append(xDat, float(row[0]))
-        yDat = np.append(yDat, float(row[1]))
-        cDat = np.append(cDat, float(row[2]))
+        xDat = np.append(xDat, stringConverter(row[0]))
+        yDat = np.append(yDat, stringConverter(row[1]))
+        cDat = np.append(cDat, stringConverter(row[2]))
 
     plt.scatter(xDat, yDat, c = cDat)
     plt.colorbar()
