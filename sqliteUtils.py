@@ -5,18 +5,22 @@ from tqdm import tqdm
 import bottleneck as bn
 import os
 import time
+import math
 from matplotlib import pyplot as plt
 
 #Roadmap:
 #xmulti column update
 #xmulti function analysis
-#select pixel range
-#plot pixel range
-#grab pixel data
-#grab pixel data over time
+#xselect pixel range
+#xplot pixel range
+#xgrab pixel data
+#xgrab pixel data over time
 #xsave plots without show()
 #xanalyze multiple files
 #xanalyze folder
+#speed up multiscan by consolidating into one file?
+# - speed benchmark pixel selection
+#fft
 #change over to ? from string formatting
 
 ###############################################################
@@ -132,7 +136,26 @@ def deleteColumn(con, cur, table: str, columnName: str):
     cur.execute(query)
     con.commit()
 
-# TODO: make a search pixels function to SELECT WHERE (pixelrange)
+
+# Function to lookup data from dataColumns list using collection_index as the selection parameter
+#   Using collection_index is much faster than other search criteria
+def fastLookup(cursor, index: int, dataColumns: list, table='acoustics'):
+
+    # generate a where query using the pixel's index
+    whereCondition = "collection_index = " + str(index)
+
+    # format the datacolumns for the query
+    formattedDataColumns = ", ".join(dataColumns)
+
+    # Combine info into a SELECT query
+    selectQuery = "SELECT " + formattedDataColumns + " FROM " + table + " WHERE " + whereCondition
+
+    # Execute query and fetch data
+    cursor.execute(selectQuery)
+    # fetchone() is used because we are searching by primary key so only one result should return
+    data = cursor.fetchone()
+
+    return data
 
 ##########################################################################
 ########## Data Analysis #################################################
@@ -308,6 +331,7 @@ def defaultMultiScanAnalysis(dir):
 # Retrieves the values in dataColumn at a given pixel coordinate
 def singleDataAtPixel(cursor, dataColumn : str, primaryCoor, secondaryCoor, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics'):
 
+    # start = time.time()
     # format axes and coors into a WHERE statement
     whereCondition = primaryAxis + " = " + str(primaryCoor) + " AND " + secondaryAxis + " = " + str(secondaryCoor)
 
@@ -317,6 +341,7 @@ def singleDataAtPixel(cursor, dataColumn : str, primaryCoor, secondaryCoor, prim
     # Execute query and fetch data
     cursor.execute(selectQuery)
     data = cursor.fetchone()
+    # queryTime = time.time() - start
 
     # If data was not found, print a warning and return None
     # Otherwise, convert the data to floats and put it with the correct data key
@@ -326,7 +351,9 @@ def singleDataAtPixel(cursor, dataColumn : str, primaryCoor, secondaryCoor, prim
     else:
         return float(data[0])
 
-def dataAtPixels(cursor, dataColumn : str, primaryCoors : list, secondaryCoors : list, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics'):
+#TODO: combine select calls into single query w/ OR, then fetchall
+#   even faster: convert coors to collection_index - need to quickly calculate coor steps
+def dataAtPixels(cursor, dataColumns : list, primaryCoors : list, secondaryCoors : list, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics'):
 
     # check that primary and secondary coor lists are valid
     if len(primaryCoors) != len(secondaryCoors):
@@ -341,16 +368,167 @@ def dataAtPixels(cursor, dataColumn : str, primaryCoors : list, secondaryCoors :
     dataDict = {}
     # iterate through coordinates and run dataAtPixel for each one
     for coor in coorList:
-        dataDict[coor] = dataAtPixel(cursor, dataColumn, coor[0], coor[1], primaryAxis, secondaryAxis, table)
+        start = time.time()
+        dataDict[coor] = dataAtPixel(cursor, dataColumns, coor[0], coor[1], primaryAxis, secondaryAxis, table)
+        stop = time.time()
+        print('data collection time = ' + str(stop - start))
 
     return dataDict
 
+# Retrieves the values in dataColumns at a given pixel coordinate
+# Returns the values as an dict with dataColumns as the keys and the float-converted data as values
+# Explanation for the speedup can be found in the function coordinatesToCollectionIndex
+def fastDataAtPixel(cursor, dataColumns : list, primaryCoor, secondaryCoor, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics', verbose = False):
+
+    # Convert input coordinate to a collection_index
+    pixelIndex = coordinatesToCollectionIndex(cursor, [primaryCoor], [secondaryCoor], primaryAxis, secondaryAxis, table, verbose)[0]
+
+    data = fastLookup(cursor, pixelIndex, dataColumns, table)
+
+    dataDict = {}
+    # If data was not found, print a warning and return None
+    # Otherwise, convert the data to floats and put it with the correct data key
+    if data == None:
+        print("dataAtPixel: no data returned. Check that the provided coordinates (" + str(primaryCoor) + ", " + str(
+            secondaryCoor) + ") exist within the data set")
+        return None
+    else:
+        for i in range(len(data)):
+            dataDict[dataColumns[i]] = float(data[i])
+        return dataDict
+
+# Retrieves the values in dataColumns for given pixel coordinates
+# Returns the values as a dict of dicts with dataColumns as the keys and the float-converted data as values
+#                 (x0, z0) : {column 0 : val 00, column 1 : val 01, ...}
+#   pixelsDat = { (x1, z1) : {column 0 : val 10, column 1 : val 11, ...}  }
+#                 (x2, z2) : {column 0 : val 20, column 1 : val 21, ...}
+# Explanation for the speedup can be found in the function coordinatesToCollectionIndex
+def fastDataAtPixels(cursor, dataColumns: list, primaryCoors, secondaryCoors, primaryAxis='X', secondaryAxis='Z', table='acoustics', verbose=False):
+
+    # check that primary and secondary coor lists are valid
+    if len(primaryCoors) != len(secondaryCoors):
+        print("dataAtPixels: length of primaryCoors and secondaryCoors must be equal. Returning None")
+        return None
+
+    # Convert input coordinate to a collection_index
+    pixelIndices = coordinatesToCollectionIndex(cursor, primaryCoors, secondaryCoors, primaryAxis, secondaryAxis, table, verbose)
+
+    coorDict = {}
+    # iterate through pixels, grab data, convert to a dict, add to coorDict
+    for i in range(len(pixelIndices)):
+        index = pixelIndices[i]
+        coor = (primaryCoors[i], secondaryCoors[i])
+        dataDict = {}
+        if index == None:
+            print(
+                "fastDataAtPixels: data index is None. Check that the provided coordinates (" + str(coor[0]) + ", " + str(
+                    coor[1]) + ") exist within the data set")
+            for i in range(len(dataColumns)):
+                dataDict[dataColumns[i]] = None
+        else:
+            data = fastLookup(cursor, index, dataColumns, table)
+            for i in range(len(dataColumns)):
+                dataDict[dataColumns[i]] = float(data[i])
+        coorDict[coor] = dataDict.copy()
+
+    return coorDict
+
+# Function to convert coordinates to a collection_index
+    # Inputs a list of coordinates and axes, outputs the collection_index corresponding to each coordinate
+# This does some algebra to massively speed up queries. More details are here:
+#       Motivation: SQL searches are O(1) or O(ln n) with the int primary key (vs O(n) w/ other keys)
+#       In order to search for pixels by primary key, we need a function which converts a given coordinate to a collection_index
+#           This requires some algebra since we do not know a priori what the coordinate steps are. We must solve that using
+#           the known ranges and a few sample coordinates. The math works as follows:
+#           For an (x,z) scan, let xs, zs be the coordinate step that the map was collected at
+#           Let (xf, zf) be the final coordinates at the last collection_index kf
+#           Let (x0, z0) be the coordinates of the second to last collection_index k0 = kf - 1
+#                Looking up both of these coordinates takes O(1) time since we start from collection_index
+#           Let (m, n) be the number of rows and columns of a given map
+#           Our system of equations is then:
+#               1)  kf = nm - 1
+#               2)  xf = (n - 1) xs
+#               3)  zf = (m - 1) zs
+#               4)  kf = n (zf / zs) + xf/xs
+#               5)  k0 = n (z0 / zs) + x0/xs
+#               6) either xs = xf - x0 OR zs = zf - z0
+#           We can directly solve (6) by checking which coordinate changes between kf and k0
+#           The other unknowns (n, m, the remaining of xs or zs) can then be solved straighforwardly
+def coordinatesToCollectionIndex(cursor, primaryCoors : list, secondaryCoors : list, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics', verbose = True):
+
+    # check that primary and secondary coor lists are valid
+    if len(primaryCoors) != len(secondaryCoors):
+        print("dataAtPixels: length of primaryCoors and secondaryCoors must be equal. Returning None")
+        return None
+
+    # Collect the needed constants
+    # We will be using x as the primary coordinate and z as the secondary to match most common scanning data
+    # (kf, xf, zf)
+    kf = numberOfRows(cursor, table) - 1
+    # Do some quick error checking - make sure kf > 0 or else the rest will fail
+    if kf <= 1:
+        print("coordinatesToCollectionIndex: input table only has one row. Check that the table and data are correct")
+        return None
+    # xf, zf == coordinates at kf
+    formattedCoordinates = primaryAxis + ", " + secondaryAxis
+    xfzfQuery = "SELECT " + formattedCoordinates + " FROM " + table + " WHERE collection_index = " + str(kf)
+    xfzfTuple = cursor.execute(xfzfQuery).fetchone()
+    xf = xfzfTuple[0]
+    zf = xfzfTuple[1]
+
+    # collect a second set of (k, x, z) at the second to last coordinate
+    k0 = kf - 1
+    x0z0Query = "SELECT " + formattedCoordinates + " FROM " + table + " WHERE collection_index = " + str(k0)
+    x0z0Tuple = cursor.execute(x0z0Query).fetchone()
+    x0 = x0z0Tuple[0]
+    z0 = x0z0Tuple[1]
+
+    # Check which coordinate changed and use that to solve the equations
+    # First handle case where x coordinate changed
+    if zf == z0:
+        xs = xf - x0
+        n = (xf / xs) + 1
+        m = (kf + 1) / n
+        zs = zf / (m - 1)
+    elif xf == x0:
+        zs = zf - z0
+        m = (zf / zs) + 1
+        n = (kf + 1) / m
+        xs = xf / (n - 1)
+    # We should not enter the final branch, but just in case lets put a panicked error message
+    else:
+        print("coordinatesToCollectionIndex: unable to identify coordinate step. Unclear what went wrong, but its probably related to floating point rounding. Your data is probably cursed, contact Sam for an exorcism (or debugging).")
+        return None
+
+    # Now iterate through the input coordinates and convert to indices
+    # using equation k = n(z/zs) + (x/xs)
+    collectionIndices = []
+
+    for i in range(len(primaryCoors)):
+        x = primaryCoors[i]
+        # Raise warnings if rounding
+        if verbose == True and (x % xs != 0):
+            print('coordinatesToCollectionIndex: primary coordinate ' + str(x) + 'is not a multiple of the primary step. Rounding coordinate.')
+
+        z = secondaryCoors[i]
+        if verbose == True and (z % zs != 0):
+            print('coordinatesToCollectionIndex: secondary coordinate ' + str(z) + 'is not a multiple of the secondary step. Rounding coordinate.')
+
+        index = (n * (z / zs)) + (x / xs)
+
+        # handle out of bounds indices as None
+        if index <= 0:
+            collectionIndices.append(None)
+        else:
+            collectionIndices.append(int(index))
+
+    return collectionIndices
 
 # Retrieves the values in dataColumns at a given pixel coordinate
 # Returns the values as an dict with dataColumns as the keys and the float-converted data as values
 def dataAtPixel(cursor, dataColumns : list, primaryCoor, secondaryCoor, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics'):
 
-    # format axes and coors into a WHERE statement
+    # use collection_index to make a WHERE statement
     whereCondition = primaryAxis + " = " + str(primaryCoor) + " AND " + secondaryAxis + " = " + str(secondaryCoor)
 
     # Format data columns
@@ -392,7 +570,7 @@ def multiScanDataAtPixels(fileNames : list, dataColumns : list, primaryCoors : l
         con, cur = openDB(file)
 
         # collect data at pixels
-        dataDictList.append(dataAtPixels(cur, dataColumns, primaryCoors, secondaryCoors, primaryAxis, secondaryAxis, table))
+        dataDictList.append(fastDataAtPixels(cur, dataColumns, primaryCoors, secondaryCoors, primaryAxis, secondaryAxis, table))
 
         con.close()
 
@@ -479,6 +657,7 @@ def plotWaveform(cursor, xCol = 'time', yCol = 'voltage', table = 'acoustics'):
 # Generates a plot of the given data column at certain coordinate values for all databases in a directory
 # Plot x-axis is the first entry in dataColumns, y-axis is the second
 # useful for multiscans
+#TODO: add conversion if x-axis is time
 def plotScanDataAtPixels(dir : str, dataColumns : list, primaryCoors : list, secondaryCoors : list, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics', verbose = True):
 
     dataDict = directoryScanDataAtPixels(dir, dataColumns, primaryCoors, secondaryCoors, primaryAxis, secondaryAxis, table, verbose)
@@ -487,7 +666,7 @@ def plotScanDataAtPixels(dir : str, dataColumns : list, primaryCoors : list, sec
         plt.scatter(dataDict[coor][dataColumns[0]], dataDict[coor][dataColumns[1]], label = str(coor))
 
     plt.legend()
-    plt.show()
+    # plt.show()
 
 
 # plot a map
