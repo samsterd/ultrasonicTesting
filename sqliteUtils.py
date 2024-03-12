@@ -7,6 +7,7 @@ import os
 import time
 import math
 from matplotlib import pyplot as plt
+from matplotlib import colormaps as cmp
 
 #Roadmap:
 #xmulti column update
@@ -542,11 +543,14 @@ def multiScanDataAtPixels(fileNames : list, dataColumns : list, primaryCoors : l
     for scan in dataDictList[1:]:
 
         # for each scan in list, iterate through the keys (coordinates) and values (values == innerDict of data columns)
-        for key, coordinateData in scan.items():
+        for coor, coordinateData in scan.items():
 
             # set the value of masterDict[coordinate/key][data column / inn
             for dataColumn, value in coordinateData.items():
-                masterDict[key][dataColumn] = np.append(masterDict[key][dataColumn], value)
+                if type(value) == float:
+                    masterDict[coor][dataColumn] = np.append(masterDict[coor][dataColumn], value)
+                elif type(value) == np.ndarray:
+                    masterDict[coor][dataColumn] = np.vstack((masterDict[coor][dataColumn], value))
 
     return masterDict
 
@@ -639,6 +643,26 @@ def plotPixelsWaveform(cursor, primaryCoors : list, secondaryCoors : list, prima
     plt.legend()
     plt.show()
 
+# Plots the waveform at a specific single pixel
+def plotPixelWaveformOverTime(dir, primaryCoor, secondaryCoor, primaryAxis = 'X', secondaryAxis = 'Z', xCol = 'time', yCol = 'voltage', table = 'acoustics'):
+
+    dataDict = directoryScanDataAtPixels(dir, [xCol, yCol, 'time_collected'], [primaryCoor], [secondaryCoor], primaryAxis, secondaryAxis,
+                                         table, verbose = True)
+
+    # Convert time_collected to a common zero, then normalize it to [0,1] for use in colormaps'
+    timesCollected = dataDict[(primaryCoor, secondaryCoor)]['time_collected']
+    minTime = min(timesCollected)
+    timesCollectZeroRef = timesCollected - minTime
+    maxTime = max(timesCollectZeroRef)
+    normTime = timesCollectZeroRef/maxTime
+
+    for coor in dataDict.keys():
+        for wave in range(len(dataDict[coor][xCol])):
+            plt.plot(dataDict[coor][xCol][wave], dataDict[coor][yCol][wave],
+                     c = cmp['viridis'](normTime[wave]),
+                     label = round(timesCollectZeroRef[wave]/3600, 2))
+    plt.legend()
+    plt.show()
 
 
 # Generates a plot of the given data column at certain coordinate values for all databases in a directory
