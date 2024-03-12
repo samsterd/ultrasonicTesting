@@ -740,8 +740,10 @@ def plotScanDataAtPixels(dir : str, dataColumns : list, primaryCoors : list, sec
 
 
 # plot a map
+# xCol, yCol, datCol - names of the table columns for the xy coordinates and the data to colormap to
+# datRange = [min, max] clips the datCol values to max or min values. This helps to make the colormap more uniform across different maps
 # todo: put limits on the z/color axis to allow easier comparison between scans
-def plot2DScan(cursor, xCol : str, yCol : str, datCol : str, save = False, show = True, fileName = '', table = 'acoustics'):
+def plot2DScan(cursor, xCol : str, yCol : str, datCol : str, datRange = [None, None], save = False, show = True, fileName = '', table = 'acoustics'):
 
     # Format the requested columns for the db query
     columns = xCol + ', ' + yCol + ', ' + datCol
@@ -760,6 +762,10 @@ def plot2DScan(cursor, xCol : str, yCol : str, datCol : str, save = False, show 
         yDat = np.append(yDat, stringConverter(row[1]))
         cDat = np.append(cDat, stringConverter(row[2]))
 
+    if datRange[0] != None or datRange[1] != None:
+        cDat = np.clip(cDat, datRange[0], datRange[1])
+
+
     plt.scatter(xDat, yDat, c = cDat)
     plt.colorbar()
 
@@ -770,16 +776,10 @@ def plot2DScan(cursor, xCol : str, yCol : str, datCol : str, save = False, show 
     if show == True:
         plt.show()
 
-    # Make SELECT query
-
-    # Convert data to np arrays
-
-    # plot
-
 # Function to generate plots from several DB files.
 # Saves plots from multiple files and can handle multiple data columns to plot as the z (color) axis
 # Save the plots as datCol//fileName_datCol
-def generate2DScans(fileNames : list, xCol : str, yCol : str, datCols : list, format = '.png', verbose = True):
+def generate2DScans(fileNames : list, xCol : str, yCol : str, datCols : list, datRange = [None, None],  format = '.png', verbose = True):
 
     for file in fileNames:
 
@@ -804,12 +804,12 @@ def generate2DScans(fileNames : list, xCol : str, yCol : str, datCols : list, fo
             saveFile = saveDir + saveName
 
             # run plot2dscan with save = True and show = False
-            plot2DScan(cur, xCol, yCol, dat, save = True, show = False, fileName = saveFile)
+            plot2DScan(cur, xCol, yCol, dat, datRange, save = True, show = False, fileName = saveFile)
 
         # Close db connection
         con.close()
 
-def generate2DScansDirectory(dir, xCol : str, yCol : str, datCols : list, format = '.png', verbose = True):
+def generate2DScansDirectory(dir, xCol : str, yCol : str, datCols : list, datRange = [None, None],  format = '.png', verbose = True):
 
     # Grab list of files with .sqlite3 extension in the folder
     files = os.listdir(dir)
@@ -819,7 +819,7 @@ def generate2DScansDirectory(dir, xCol : str, yCol : str, datCols : list, format
             fileNames.append(os.path.join(dir, file))
 
     # run multiGenerateScanPlots with the list of fileNames
-    generate2DScans(fileNames, xCol, yCol, datCols, format, verbose)
+    generate2DScans(fileNames, xCol, yCol, datCols, datRange,  format, verbose)
 
 ##########################################################################33
 ############### Analysis Functions #########################################
