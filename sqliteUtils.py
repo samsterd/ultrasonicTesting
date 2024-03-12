@@ -137,6 +137,20 @@ def deleteColumn(con, cur, table: str, columnName: str):
     cur.execute(query)
     con.commit()
 
+# Retrieve data within a column
+# TODO: update functionality to properly handle arrays
+def fetchData(cursor, column : str, table = 'acoustics'):
+
+    selectQuery = "SELECT " + column + " FROM " + table
+
+    #execute query
+    cursor.execute(selectQuery)
+    rawData = cursor.fetchall()
+
+    formattedData = np.array([float(x[0]) for x in rawData])
+
+    return formattedData
+
 
 # Function to lookup data from dataColumns list using collection_index as the selection parameter
 #   Using collection_index is much faster than other search criteria
@@ -166,7 +180,7 @@ def stringConverter(string : str):
     try:
         data = float(string)
         return data
-    except ValueError:
+    except ValueError or TypeError:
         # it isn't a float, so try to convert a list
         try:
             data = stringListToArray(string)
@@ -590,6 +604,36 @@ def plotWaveform(cursor, xCol = 'time', yCol = 'voltage', table = 'acoustics'):
 
     plt.plot(xDat, yDat)
     plt.show()
+
+def plotRepeatPulseData(cursor, xCol : str, yCol : str, table = 'acoustics'):
+
+    # gather data
+    xDat = fetchData(cursor, xCol, table)
+    yDat = fetchData(cursor, yCol, table)
+
+    # If x-axis is time_collected, bring the data to 0 and convert to hours
+    if xCol == 'time_collected':
+
+        minTime = min(xDat)
+        xDat = (xDat - minTime) / 3600
+
+    plt.scatter(xDat, yDat)
+    plt.show()
+
+# def plotRepeatPulseWaveOverTime(cursor, xCol: str, yCol: str, table='acoustics'):
+#
+#     # gather data
+#     xDat = fetchData(cursor, xCol, table)
+#     yDat = fetchData(cursor, yCol, table)
+#
+#     # If x-axis is time_collected, bring the data to 0 and convert to hours
+#     if xCol == 'time_collected':
+#         minTime = min(xDat)
+#         xDat = (xDat - minTime) / 3600
+#
+#     plt.scatter(xDat, yDat)
+#     plt.show()
+
 
 # Plots the waveform at a specific single pixel
 def plotPixelWaveform(cursor, primaryCoor, secondaryCoor, primaryAxis = 'X', secondaryAxis = 'Z', xCol = 'time', yCol = 'voltage', table = 'acoustics'):
