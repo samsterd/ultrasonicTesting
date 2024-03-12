@@ -46,6 +46,9 @@ def runScan(params):
     primaryAxisSteps = math.ceil(params['primaryAxisRange'] / abs(params['primaryAxisStep'])) + 1
     secondaryAxisSteps = math.ceil(params['secondaryAxisRange'] / abs(params['secondaryAxisStep'])) + 1
 
+    # Initialize the collection index which is used in the saved data table
+    collectionIndex = 0
+
     #start scan. tqdm adds progress bars
     for i in tqdm(range(secondaryAxisSteps)):
 
@@ -63,6 +66,8 @@ def runScan(params):
 
             #Add collection metadata
             pixelData['time_collected'] = time.time()
+            pixelData['collection_index'] = collectionIndex
+            collectionIndex += 1
 
             #calculate location to add to file
             iLoc = i * params['secondaryAxisStep']
