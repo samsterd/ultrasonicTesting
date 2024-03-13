@@ -151,6 +151,31 @@ def fetchData(cursor, column : str, table = 'acoustics'):
 
     return formattedData
 
+# Retrieve data columns that are within certain coordinate ranges
+# Returns requested data as a dict where the keys are dataColumns and values are arrays
+# NOTE: ordering cannot be guaranteed in the data. To get the coordinate that corresponds to the data,
+#   include the coordinates in the dataColumns
+def fetchDataInBox(cursor, dataColumns : list, primaryCoorLimits : list, secondaryCoorLimits : list, primaryAxis = 'X', secondaryAxis = 'Z', table = 'acoustics'):
+
+    # format the datacolumns for the query
+    formattedDataColumns = ", ".join(dataColumns)
+
+    # format the coor limits for the query
+    primaryBounds = primaryAxis + ' > ' + str(primaryCoorLimits[0]) + ' AND ' + primaryAxis + ' < ' + str(primaryCoorLimits[1]) + ' AND '
+    secondaryBounds = secondaryAxis + ' > ' + str(secondaryCoorLimits[0]) + ' AND ' + secondaryAxis + ' < ' + str(secondaryCoorLimits[1])
+    whereCondition = ' WHERE ' + primaryBounds + secondaryBounds
+
+    selectQuery = 'SELECT ' + formattedDataColumns + ' FROM ' + table + whereCondition
+
+    cursor.execute(selectQuery)
+
+    data = cursor.fetchall()
+
+    dataDict = {}
+    for i in range(len(dataColumns)):
+        dataDict[dataColumns[i]] = np.array([stringConverter(x[i]) for x in data])
+
+    return dataDict
 
 # Function to lookup data from dataColumns list using collection_index as the selection parameter
 #   Using collection_index is much faster than other search criteria
@@ -873,3 +898,23 @@ def stalta(array, shortWindow, longWindow):
     lta = bn.move_mean(arrSquared, longWindow)
 
     return sta / lta
+
+# generate a grid of coordinates compatible with pixel isolating functions
+# inputs one of the corners of the grid, the length in both dimensions, and the steps between points in both dimensions
+# outputs a list of x and y coordinates
+def generateCoordinateGrid(corner, lengths, steps):
+
+    xStart = corner[0]
+    xStop = xStart + lengths[0]
+    # calculate the number of points in the linspace. Take abs since coordinates could be negative. Floor insures it is an int
+    xPts = math.floor(abs(xStop - xStart)/steps[0]) + 1
+    xLinspace = np.linspace(xStart, xStop, xPts)
+
+    yStart = corner[1]
+    yStop = yStart + lengths[1]
+    yPts = math.floor(abs(yStop - yStart)/steps[1]) + 1
+    yLinspace = np.linspace(yStart, yStop, yPts)
+
+    x, y = np.meshgrid(xLinspace, yLinspace)
+
+    return x.flatten(), y.flatten()
