@@ -147,7 +147,7 @@ def fetchData(cursor, column : str, table = 'acoustics'):
     cursor.execute(selectQuery)
     rawData = cursor.fetchall()
 
-    formattedData = np.array([float(x[0]) for x in rawData])
+    formattedData = np.array([stringConverter(x[0]) for x in rawData])
 
     return formattedData
 
@@ -196,14 +196,9 @@ def stringConverter(string : str):
 def stringListToArray(strList : str):
 
     # Reformat the string by removing brackets and splitting along the ','
-    strFormatted = strList.strip('[]').split(', ')
+    strFormatted = strList.strip('[]')
 
-    floatList = []
-    # Convert the string numbers to floats
-    for num in strFormatted:
-        floatList.append(float(num))
-
-    return np.array(floatList)
+    return np.fromstring(strFormatted, sep = ', ')
 
 
 ##########################################################################
@@ -352,7 +347,7 @@ def analyzeDirectory(dir, funcs : list, resNames : list, dataColumns = ['time', 
 # Perform a routine set of analysis of multiscan data within a folder
 # Analysis functions: absolute_sum, arrayMax, and staltaFirstBreak(5,30,0.75)
 # Results are stored as columns with the function names and parameters
-def defaultMultiScanAnalysis(dir):
+def defaultMultiScanAnalysis(dir, plot = True):
 
     # list functions and dict their optional parameters
     funcList = [absoluteSum, arrayMax, staltaFirstBreak]
@@ -374,7 +369,8 @@ def defaultMultiScanAnalysis(dir):
     analyzeDirectory(dir, funcList, colNames, funcArgs = funcParams)
 
     # generate plots
-    generate2DScansDirectory(dir, 'X', 'Z', colNames)
+    if plot:
+        generate2DScansDirectory(dir, 'X', 'Z', colNames)
 
 # Retrieves the values in dataColumns at a given pixel coordinate
 # Returns the values as an dict with dataColumns as the keys and the float-converted data as values
@@ -651,7 +647,7 @@ def plotPixelWaveform(cursor, primaryCoor, secondaryCoor, primaryAxis = 'X', sec
     # plot
     plt.plot(xDat, yDat, label = "(" + str(primaryCoor) + ", " + str(secondaryCoor) + ")")
     plt.xlabel("Time (ns)")
-    plt.ylabel("Voltage (V)")
+    plt.ylabel("Voltage (mV)")
     plt.show()
 
 # Plots the waveform at a a list of pixels
@@ -854,6 +850,10 @@ def staltaFirstBreak(arrayList, shortWindow : int, longWindow : int, thresholdRa
 
     # No value was found above threshold. Return -1
     return -1
+
+# return absolute value of the real fast Fourier Transform
+# def fft(arrList):
+#     return abs(np.fft.rfft(arrList[1]))
 
 ###########################################################################
 ########## Analysis Helper Functions ####################################
