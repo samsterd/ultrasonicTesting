@@ -23,7 +23,7 @@ experimentParams = {
     #'multi scan' = repeat a 2D scan with a set frequency
     #Once you have selected, fill out the values in the parameter list in the correct section
     #NOTE: ONLY CHANGE THE VALUES AFTER THE COLON ON EACH LINE
-    'experiment' : 'single pulse',
+    'experiment' : 'move',
 
     #####################################################################
     ################# 'move' parameters #################################
@@ -39,9 +39,11 @@ experimentParams = {
     #################################################################################
 
     'transducerFrequency' : 2.25,                    # Central frequency of the ultrasonic transducer, in MHz
-    'measureTime' : 1,                               # Approx measurement time, in us
+    'measureTime' : 1,                               # Approx measurement time, in us. Note this can be changed by the picoscope time interval based on samples
+                                                     #      Changes to the measureTime will be printed in the console when the script is run
     'measureDelay' : 13.5,                           # Approx delay after trigger to start measuring, in us
-    'voltageRange' : 0.1,                            # Picoscope data range
+    'voltageRange' : 0.1,                            # Picoscope voltage range in V. Note this is the total : 1 V = [-0.5 V, 0.5 V]
+                                                     # Allowed voltages = (0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20
     'waves' : 1000,                                  # Number of waves to collect and average
     'samples': 500,                                  # Number of data points per wave
 
