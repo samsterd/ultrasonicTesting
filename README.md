@@ -18,6 +18,11 @@ matplotlib
 
 tqdm (progress bar)
 
+bottleneck
+
+if using USB-UT350 Tone Burst pulser: msl-loadlib and installation of required drivers. Make sure to add the location of
+the SDK dll file USBUT.dll to the file usbut350Server.py
+
 Currently tested on 64 bit windows. Picoscope controller will likely break on 32 bit machines
 
 Running on Linux may require adjusting USB port permissions. The following seems to work:
@@ -33,6 +38,3 @@ import matplotlib
 matplotlib.use('TkAgg')
 
 import matplotlib.pyplot as plt
-
-Upcoming features:
-sqlite integration, continuous plotting, simultaneous pulse-echo

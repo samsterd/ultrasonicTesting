@@ -1,96 +1,175 @@
-# Code for connecting to an Ultratek CompactPulser, starting and stopping pulses, and disconnecting over a serial port
-# Uses pyserial to connect and send commands. The pulser takes simple commands encoded as ascii ('string'.encode('ascii'))
+# Code for running pulser
+# Each function has separate handling depending on whether pulserType = 'standard' or 'tone burst'
+#   standard - communicates to Ultratek CompactPulser over serial connection using pyserial using ascii commands
+#   tone burst - communicates to USBUT350 using MSL-LoadLib to access their 32 bit C SDK
+
 
 import serial
 import math
+from msl.loadlib import Client64
 
-# @dataclass
-# class PulserProperties:
-#     """Everything needed to configure Ultratek pulser."""
-#     damping: str = 'D0'
-#     mode: str = 'M0'
-#     pulse_voltage: str = 'V300'
-#     pulse_width: str = 'W220'
-#     pulse_repetition_rate: str = 'P500'
-#     mode: str = 'T0'  # internal
-#     # LPF: str = 'L2' #low pass filter of 48 MHz
+# Pulser connections are implemented as a class
+# both types of pulsers will have the same function names, but they will behave differently depending on their type
+class Pulser():
 
-# Opens pyserial connection to the pulser
-# Input is a string name of the port (i.e. 'COM3')
-# returns a serial class for the connection or -1 if an error occurred
-#TODO: add confirmation, scanning for proper port
-def openPulser(portName):
-    #Note pyserial defaults match the ultratek connection parameters
-    #For reference these are:
-    #baudrate = 9600
-    #bytesize = EIGHTBITS
-    #parity = PARITY_NONE
-    #stopbits = STOPBITS_ONE
-    #xonxoff = False
-    try:
-        pulserSerial = serial.Serial(portName)
+    # pulserType is required. kwargs will be the port name for 'standard' or the dll file location for 'tone burst'
+    def __init__(self, pulserType, **kwargs):
 
-    except serial.SerialException as error:
-        print(f"Error opening pulser: {error}")
-        return -1
+        # Inform the pulserType
+        self.type = pulserType
 
-    else:
-        return pulserSerial
+        # Initialize connection to the pulser based on the type
+        self.connection = self.openPulser(pulserType, kwargs)
 
-# Function to send commands to the pulser. Useful for turning things on/off or adjusting parameters
-# Inputs: serialConnection Serial object for the pulser and the string command to send
-# Function adds a carriage return to the command, encodes it to ascii, then sends to the pulser
-# TODO: add verification that message is received
-def writeToPulser(serialConnection, command):
-    commandString = command + '\r'
+    # creates the connection object based on the pulserType, either a pyserial instance or a win64 server
+    def openPulser(self, pulserType, **kwargs):
 
-    try:
-        serialConnection.write(commandString.encode('ascii'))
+        if pulserType == 'standard':
 
-    except serial.SerialException as error:
-        print(f"Error writing command to pulser: {error}")
-        return -1
+            # Create a pyserial connection object
+            # Note pyserial defaults match the ultratek connection parameters
+            # For reference these are:
+            # baudrate = 9600
+            # bytesize = EIGHTBITS
+            # parity = PARITY_NONE
+            # stopbits = STOPBITS_ONE
+            # xonxoff = False
+            try:
+                pulserSerial = serial.Serial(kwargs['portName'])
 
-    else:
-        return 0
+            except serial.SerialException as error:
+                print(f"Error opening pulser: {error}")
+                return -1
 
-# function to change the pulse width based on the frequency of the ultrasonic transducer used in the experiment
-# Inputs a serial connection object and the central frequency (in MHz) of the transducer
-# Uses writeToPulser to set the appropriate pulse width
-def transducerFrequencyToPulseWidth(serialConnection, frequency):
+            else:
+                return pulserSerial
 
-    # Calculate pulse width from frequency. First convert freq to period (in ns) then divide by 2 -> 500 / freq
-    # math.floor is used to find the nearest integer
-    pulseWidth = math.floor(500 / frequency)
+        elif pulserType == 'tone burst':
 
-    # Convert the pulseWidth to the appropriate pulser command
-    pulseWidthCommand = 'W' + str(pulseWidth)
+            # Create an instance of the win64 client for interacting with the 32-bit dll
+            return usbut350Client(kwargs['dllFile'])
 
-    writeToPulser(serialConnection, pulseWidthCommand)
+        else:
 
-# Turns the pulser on at a pulse repetition frequency of 5000 Hz
-# Returns None
-# TODO: make frequency variable
-def pulserOn(serialConnection):
+            print("pulserType not recognized. Make sure to set pulserType to either 'standard' or 'tone burst'")
+            return -1
 
-    writeToPulser(serialConnection, 'P500')
+    # Function to send commands to the standard pulser by serial. Useful for turning things on/off or adjusting parameters
+    # Inputs: string command to send
+    # Function adds a carriage return to the command, encodes it to ascii, then sends to the pulser
+    # TODO: add verification that message is received
+    def writeToPulser(self, command):
 
-# Turns off pulser by setting pulse repetition frequency to 0
-# Returns None
-def pulserOff(serialConnection):
+        if self.type = 'standard':
 
-    writeToPulser(serialConnection, 'P0')
+            commandString = command + '\r'
 
-# Closes serial connection to the pulser
-# TODO: add confirmation, error handling
-def closePulser(serialConnection):
+            try:
+                self.connection.write(commandString.encode('ascii'))
 
-    try:
-        serialConnection.close()
+            except serial.SerialException as error:
+                print(f"Error writing command to pulser: {error}")
+                return -1
 
-    except serial.SerialException as error:
-        print(f"Error closing pulser connection: {error}")
-        return -1
+            else:
+                return 0
 
-    else:
-        return 0
+        else:
+            print("writeToPulser: pulserType is not Standard, serial commands not sent")
+            return -1
+
+    # Change the frequency of the pulser
+    # Inputs a frequency in MHz
+    def setFrequency(self, freq):
+
+        if self.type == 'standard':
+            # Calculate pulse width from frequency. First convert freq to period (in ns) then divide by 2 -> 500 / freq
+            # math.floor is used to find the nearest integer
+            pulseWidth = math.floor(500 / freq)
+
+            # Convert the pulseWidth to the appropriate pulser command
+            pulseWidthCommand = 'W' + str(pulseWidth)
+
+            self.writeToPulser(pulseWidthCommand)
+
+        elif self.type == "tone burst":
+
+            # convert frequency to kHz
+            freqkhz = freq * 1000
+
+            # send command
+            self.connection.setFrequency(freqkhz)
+
+    # Turns the pulser on at maximum pulse repitition frequency (PRF)
+    # Returns None
+    def pulserOn(self):
+
+        # Compact PUlser max PRF is 5000 Hz. P# command sets PRF to 10 * #, so P500 = 5000 Hz
+        if self.type == 'standard':
+            self.writeToPulser('P500')
+
+        # Tone burst max PRF is 1000 Hz
+        elif self.type == 'tone burst':
+            self.connection.setPRF(1000)
+
+    # Turns off pulser by setting pulse repetition frequency to 0
+    # Returns None
+    def pulserOff(self):
+
+        if self.type == 'standard':
+            self.writeToPulser('P0')
+
+        elif self.type == 'tone burst':
+            self.connection.setPRF(0)
+
+    # Closes connection to pulser
+    def closePulser(self):
+
+        if self.type == 'standard':
+            try:
+                self.connection.close()
+
+            except serial.SerialException as error:
+                print(f"Error closing pulser connection: {error}")
+                return -1
+
+            else:
+                return 0
+
+        elif self.type == 'tone burst':
+            return self.connection.shutdown_server32()
+
+# Set up class for calling tone burst functions using msl-loadlib 64 bit client
+class usbut350Client(Client64):
+    """Call a function in 'my_lib.dll' via the 'MyServer' wrapper."""
+
+    def __init__(self, dllLocation):
+        # Specify the name of the Python module to execute on the 32-bit server (i.e., 'my_server')
+        super(usbut350Client, self).__init__(module32='usbut350Server', dllFile = dllLocation)
+
+    def initialize(self, port = 0):
+        return self.request32('initialize', port)
+
+    def findPort(self):
+        return self.request32('findPort')
+
+    def setPRF(self, freq):
+        return self.request32('setPRF', freq)
+
+    def pulserOn(self):
+        return self.request32('pulserOn')
+
+    def pulserOff(self):
+        return self.request32('pulserOff')
+
+    def setFrequency(self, freq = 2250, polarity = 0):
+        return self.request32('setFrequency', freq, polarity)
+
+    def setHalfCycles(self, halfCycles = 16):
+        return self.request32('setHalfCycles', halfCycles)
+
+    # incomplete version, just sets to max voltage
+    # TODO: implement actual selection
+    def setVoltage(self):
+        return self.request32('setVoltage')
+

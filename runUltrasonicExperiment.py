@@ -39,6 +39,7 @@ experimentParams = {
     #################################################################################
 
     'transducerFrequency' : 2.25,                    # Central frequency of the ultrasonic transducer, in MHz
+    'pulserType' : 'standard',                       # Type of pulser. 'standard' is the single wave CompactPulser. 'tone burst' uses the USBUT350 tone burst pulser
     'measureTime' : 1,                               # Approx measurement time, in us. Note this can be changed by the picoscope time interval based on samples
                                                      #      Changes to the measureTime will be printed in the console when the script is run
     'measureDelay' : 13.5,                           # Approx delay after trigger to start measuring, in us
@@ -46,6 +47,7 @@ experimentParams = {
                                                      # Allowed voltages = (0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20
     'waves' : 1000,                                  # Number of waves to collect and average
     'samples': 500,                                  # Number of data points per wave
+    'halfWidths' : 16,                               # Tone burst pulser only. Number of half-widths in a tone burst pulse
 
     ################################################################################
     ########################### Saving Names ##########################################
@@ -84,7 +86,8 @@ experimentParams = {
     ######### Only change if instrument USB ports are changed! ######################
     #################################################################################
     'pulserPort' : '/dev/ttyUSB1',                          # Ultratek pulser port name
-    'enderPort' : '/dev/ttyUSB0'                            # Ender port name
+    'enderPort' : '/dev/ttyUSB0',                           # Ender port name
+    'dllFile' : 'C://USUTSDK//USBUTSDKC//USBUT.dll'         # Only used for 'pulserType' : 'tone burst'. Location of USBUT350 pulser SDK
 }
 
 ##########################################################################################
