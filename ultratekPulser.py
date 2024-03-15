@@ -60,7 +60,7 @@ class Pulser():
     # TODO: add verification that message is received
     def writeToPulser(self, command):
 
-        if self.type = 'standard':
+        if self.type == 'standard':
 
             commandString = command + '\r'
 
@@ -99,6 +99,22 @@ class Pulser():
 
             # send command
             self.connection.setFrequency(freqkhz)
+
+    def setHalfCycles(self, halfCycles : int):
+
+        if self.type == 'standard':
+
+            # standard pulser does not have this attribute. Print warning message and continue
+            print("pulser.setHalfCycles: pulserType 'standard' does not have attribute 'halfCycles'. Ignoring command.")
+
+        elif self.type == 'tone burst':
+
+            if 1 <= halfCycles and halfCycles <= 32:
+
+                self.connection.setHalfCycles(halfCycles)
+
+            else:
+                print("pulser.setHalfCycles: parameter 'halfCycles' must be an integer between 1 and 32")
 
     # Turns the pulser on at maximum pulse repitition frequency (PRF)
     # Returns None

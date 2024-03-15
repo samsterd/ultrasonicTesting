@@ -5,7 +5,7 @@
 # This interface should be improved to better match setup protocols
 
 import picosdkRapidblockPulse as pico
-import ultratekPulser as pulser
+import ultratekPulser as utp
 import enderControl as ender
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,17 +18,21 @@ import time
 # Outline: connects to pulser, picoscope, turns on pulser, sets up picoscope measurement, collects data, closes connections, plots data
 def singlePulseMeasure(params):
 
-    # Connect to pulser
-    pulserConnection = pulser.openPulser(params['pulserPort'])
-
     # Connect to picoscope
     picoConnection = pico.openPicoscope()
 
+    # Open connection to pulser
+    pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
+
     # Adjust pulser pulsewidth
-    pulser.transducerFrequencyToPulseWidth(pulserConnection, params['transducerFrequency'])
+    pulser.setFrequency(params['transducerFrequency'])
+
+    # Set the number of half cycles if using tone burst pulser
+    if pulser.type == 'tone burst':
+        pulser.setHalfCycles(params['halfCycles'])
 
     # Turn on the pulser
-    pulser.pulserOn(pulserConnection)
+    pulser.pulserOn()
 
     # Set up pico measurement
     picoConnection = pico.setupPicoMeasurement(picoConnection,
@@ -41,10 +45,10 @@ def singlePulseMeasure(params):
     voltages, times = pico.runPicoMeasurement(picoConnection, params['waves'])
 
     # Turn off pulser
-    pulser.pulserOff(pulserConnection)
+    pulser.pulserOff()
 
     # Close connection to pulser and picoscope
-    pulser.closePulser(pulserConnection)
+    pulser.closePulser()
     pico.closePicoscope(picoConnection)
 
     # Plot data

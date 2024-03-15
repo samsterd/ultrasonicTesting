@@ -1,7 +1,7 @@
 # Script to run a 2D ultrasonic scan
 
 import picosdkRapidblockPulse as pico
-import ultratekPulser as pulser
+import ultratekPulser as utp
 import enderControl as ender
 import math
 import time
@@ -24,7 +24,7 @@ def runScan(params):
 
     #Connect to picoscope, ender, pulser
     picoConnection = pico.openPicoscope()
-    pulserConnection = pulser.openPulser(params['pulserPort'])
+    pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
     enderConnection = ender.openEnder(params['enderPort'])
 
     #Setup picoscope
@@ -35,10 +35,14 @@ def runScan(params):
                                                params['measureTime'])
 
     # Adjust pulser pulsewidth
-    pulser.transducerFrequencyToPulseWidth(pulserConnection, params['transducerFrequency'])
+    pulser.setFrequency(params['transducerFrequency'])
 
-    #Turn on pulser
-    pulser.pulserOn(pulserConnection)
+    # Set the number of half cycles if using tone burst pulser
+    if pulser.type == 'tone burst':
+        pulser.setHalfCycles(params['halfCycles'])
+
+    # Turn on the pulser
+    pulser.pulserOn()
 
     #Calculate number of steps on each axis
     #math.ceiling is used to ensure the result is an integer
@@ -109,9 +113,9 @@ def runScan(params):
     ender.moveEnder(enderConnection, params['secondaryAxis'], -1 * secondaryAxisSteps * params['secondaryAxisStep'])
 
     #Turn off pulser
-    pulser.pulserOff(pulserConnection)
+    pulser.pulserOff()
 
     #Close connection to pulser, picoscope, and ender
-    pulser.closePulser(pulserConnection)
+    pulser.closePulser()
     ender.closeEnder(enderConnection)
     pico.closePicoscope(picoConnection)

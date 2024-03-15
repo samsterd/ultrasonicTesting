@@ -1,6 +1,6 @@
 import json
 import picosdkRapidblockPulse as pico
-import ultratekPulser as pulser
+import ultratekPulser as utp
 import time
 import tqdm
 import matplotlib
@@ -13,7 +13,7 @@ def repeatPulse(params):
 
     # Connect to picoscope, ender, pulser
     picoConnection = pico.openPicoscope()
-    pulserConnection = pulser.openPulser(params['pulserPort'])
+    pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
 
     # generate filename for current scan
     scanFileName = params['experimentFolder'] + params['experimentName']
@@ -29,10 +29,14 @@ def repeatPulse(params):
                                                params['samples'],
                                                params['measureTime'])
     # Adjust pulser pulsewidth
-    pulser.transducerFrequencyToPulseWidth(pulserConnection, params['transducerFrequency'])
+    pulser.setFrequency(params['transducerFrequency'])
 
-    # Turn on pulser
-    pulser.pulserOn(pulserConnection)
+    # Set the number of half cycles if using tone burst pulser
+    if pulser.type == 'tone burst':
+        pulser.setHalfCycles(params['halfCycles'])
+
+    # Turn on the pulser
+    pulser.pulserOn()
 
     # initialize time
     experimentTime = params['experimentTime']
@@ -94,5 +98,6 @@ def repeatPulse(params):
 
     pbar.close()
 
-    pulser.pulserOff(pulserConnection)
+    pulser.pulserOff()
+    pulser.closePulser()
     pico.closePicoscope(picoConnection)

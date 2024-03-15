@@ -47,7 +47,7 @@ experimentParams = {
                                                      # Allowed voltages = (0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20
     'waves' : 1000,                                  # Number of waves to collect and average
     'samples': 500,                                  # Number of data points per wave
-    'halfWidths' : 16,                               # Tone burst pulser only. Number of half-widths in a tone burst pulse
+    'halfCycles' : 16,                               # Tone burst pulser only. Number of half-cycles in a tone burst pulse
 
     ################################################################################
     ########################### Saving Names ##########################################
