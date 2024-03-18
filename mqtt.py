@@ -1,4 +1,4 @@
-# Provides 2 lightweight functions to integrate MQTT data transfer
+# Provides 4 lightweight functions to integrate MQTT data transfer
 #
 # Functions:
 #   mqtt_connect(clientid)
@@ -52,10 +52,11 @@ def create_publish_properties():
 #   data - The data to be transferred
 #   file - Name of the file to store the data in
 #   topic - Pathname the broker will use to send data to subscribers. Should be a string of form "/topic/"
-def mqtt_quick_pub(client, publish_properties, data, file, topic):
+def mqtt_quick_pub(client, publish_properties, data, key, file, topic):
     publish_properties.UserProperty = [
         ('File-Name', file),
-        ('File-Size', str(len(data)))]
+        ('File-Size', str(len(data))),
+        ('Key', key)]
     client.publish(topic, data, 0, False, properties=publish_properties)
 
 
