@@ -75,8 +75,8 @@ def repeatPulse(params):
         collectionIndex += 1
 
         # Save data to the Mac Mini
-        mqtt_quick_pub(mqtt_client, mqtt_publish_properties, keys, True, "WaveDataRaw",  "/pulser/WaveData")
-        mqtt_quick_pub(mqtt_client, mqtt_publish_properties, data, False, "WaveDataRaw",  "/pulser/WaveData")
+        mqtt_quick_pub(mqtt_client, mqtt_publish_properties, keys, "key", "WaveDataRaw",  "/pulser/WaveData")
+        mqtt_quick_pub(mqtt_client, mqtt_publish_properties, data, "data", "WaveDataRaw",  "/pulser/WaveData")
 
         # save data as sqlite database
         if params['saveFormat'] == 'sqlite':
