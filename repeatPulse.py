@@ -7,8 +7,10 @@ import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from database import Database
+from mqtt import *
 
-
+mqtt_client = mqtt_connect("pulser")
+mqtt_publish_properties = create_publish_properties()
 def repeatPulse(params):
 
     # Connect to picoscope, ender, pulser
@@ -68,6 +70,9 @@ def repeatPulse(params):
         waveData['collection_index'] = collectionIndex
         collectionIndex += 1
 
+        # Save data to the Mac Mini
+        mqtt_quick_pub(mqtt_client, mqtt_publish_properties, waveData, "WaveDataRaw", "/pulser/WaveData")
+
         # save data as sqlite database
         if params['saveFormat'] == 'sqlite':
             query = database.parse_query(waveData)
@@ -97,6 +102,8 @@ def repeatPulse(params):
             pbar.update(iterationTime)
 
     pbar.close()
+
+    mqtt_close(mqtt_client)
 
     pulser.pulserOff()
     pulser.closePulser()
