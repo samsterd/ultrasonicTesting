@@ -70,7 +70,7 @@ def repeatPulse(params):
         waveData['collection_index'] = collectionIndex
 
         keys = ":".join(key for key in waveData)
-        data = ":".join(f'"{str(val)}"' if isinstance(val, list) else str(val) for val in waveData)
+        data = ":".join(f'"{str(val)}"' if isinstance(val, list) else str(val) for val in waveData.values())
 
         collectionIndex += 1
 
