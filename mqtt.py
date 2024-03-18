@@ -21,18 +21,8 @@ def mqtt_connect(clientid):
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=clientid, protocol=mqtt.MQTTv5)
     client.username_pw_set("changlab", "electrode")
 
-    def on_log(client, userdata, level, buf):
-        print("log: ", buf)
-
-    def on_connect(client, userdata, flags, rc, properties):
-        if rc != 0:
-            print("Connection failed. error code ", rc)
-
     client.connect(broker, 1883, 60)
     client.loop_start()
-
-    client.on_connect = on_connect
-    client.on_log = on_log
 
     return client
 
