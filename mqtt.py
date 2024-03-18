@@ -48,6 +48,7 @@ def mqtt_quick_pub(client, publish_properties, data, key, file, topic):
         ('File-Size', str(len(data))),
         ('Key', key)]
     client.publish(topic, data, 0, False, properties=publish_properties)
+    publish_properties.UserProperty.clear()
 
 
 # Stops the loop and disconnects client from broker
