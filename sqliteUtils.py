@@ -1,5 +1,6 @@
 import sqlite3
 import numpy as np
+from scipy.signal import hilbert
 from typing import Callable
 from tqdm import tqdm
 import bottleneck as bn
@@ -875,6 +876,28 @@ def staltaFirstBreak(arrayList, shortWindow : int, longWindow : int, thresholdRa
 
     # No value was found above threshold. Return -1
     return -1
+
+def hilbertEnvelope(arrList):
+
+    hilbertTransform = hilbert(arrList[1])
+
+    return np.abs(hilbertTransform)
+
+# method to calculate the time of flight by calculating the function envelope using a
+# hilbert transform and finding the time where the envelope reaches a certain fraction of
+# its max value
+def envelopeThresholdTOF(arrList, threshold = 0.1):
+
+    envelope = hilbertEnvelope(arrList)
+
+    thresh = threshold * bn.nanmax(envelope)
+
+    for i in range(len(envelope)):
+        if envelope[i] > thresh:
+            return arrList[0][i]
+
+    print("envelopeThresholdTOF: no value was found above the threshold. Check that 0 < threshold < 1")
+    return 0
 
 # return absolute value of the real fast Fourier Transform
 # def fft(arrList):
