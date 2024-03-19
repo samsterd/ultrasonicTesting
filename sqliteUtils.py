@@ -376,7 +376,7 @@ def analyzeDirectory(dir, funcs : list, resNames : list, dataColumns = ['time', 
 def defaultMultiScanAnalysis(dir, plot = True):
 
     # list functions and dict their optional parameters
-    funcList = [absoluteSum, arrayMax, staltaFirstBreak]
+    funcList = [absoluteSum, arrayMax, staltaFirstBreak, envelopeThresholdTOF]
     funcParams = {staltaFirstBreak : (5, 30, 0.75)}
 
     # Convert function and parameter information into column names
@@ -397,6 +397,7 @@ def defaultMultiScanAnalysis(dir, plot = True):
     # generate plots
     if plot:
         generate2DScansDirectory(dir, 'X', 'Z', colNames)
+
 
 # Retrieves the values in dataColumns at a given pixel coordinate
 # Returns the values as an dict with dataColumns as the keys and the float-converted data as values
@@ -734,8 +735,9 @@ def plotPixelWaveformOverTime(dir, primaryCoor, secondaryCoor, primaryAxis = 'X'
 # Generates a plot of the given data column at certain coordinate values for all databases in a directory
 # Plot x-axis is the first entry in dataColumns, y-axis is the second
 # useful for multiscans
+# If the normalized option is set to True, all values in dataColumns[1] will be divided by the value at the first coordinate
 # If the
-def plotScanDataAtPixels(dir : str, dataColumns : list, primaryCoors : list, secondaryCoors : list, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics', verbose = True):
+def plotScanDataAtPixels(dir : str, dataColumns : list, primaryCoors : list, secondaryCoors : list, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics', verbose = True, normalized = False):
 
     dataDict = directoryScanDataAtPixels(dir, dataColumns, primaryCoors, secondaryCoors, primaryAxis, secondaryAxis, table, verbose)
 
@@ -749,6 +751,14 @@ def plotScanDataAtPixels(dir : str, dataColumns : list, primaryCoors : list, sec
 
         # Find the experiment start time by taking the min of the mins
         t0 = min(minTimes)
+
+    if normalized == True:
+        # grab values from first coordinate
+        normValue = dataDict[(primaryCoors[0], secondaryCoors[0])][dataColumns[1]]
+        # iterate through all coors and divide by first coordinate
+        for coor in dataDict.keys():
+            # be wary of issues with copy and references here - may need to revise
+            dataDict[coor][dataColumns[1]] = dataDict[coor][dataColumns[1]]/normValue
 
     for coor in dataDict.keys():
         if dataColumns[0] == 'time_collected':
