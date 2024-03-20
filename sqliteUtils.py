@@ -7,6 +7,7 @@ import bottleneck as bn
 import os
 import time
 import math
+import json
 from matplotlib import pyplot as plt
 from matplotlib import colormaps as cmp
 
@@ -99,10 +100,43 @@ def retrieveParameters(cursor, table = 'parameters'):
 def updateCol(cur, column : str, table : str, value, keyCol, keyVal):
 
     # Generate the UPDATE query
-    updateQuery = "UPDATE " + table + " SET " + column + " = " + str(value) + " WHERE " + keyCol + " = " + str(keyVal)
+    updateQuery = "UPDATE " + table + " SET " + column + " = ? WHERE " + keyCol + " = ?"
 
     # Execute and commit the result
-    cur.execute(updateQuery)
+    cur.execute(updateQuery, (value, keyVal))
+
+# Faster function to update columns using a list of values and their corresponding PRIMARY KEY values
+# Works by setting some memory parameters that increase speed (at the risk of corruption)
+# Then it manually opens a transaction, executes the update query, and closes the transation
+# Should be a MASSIVE performance improvement
+def fastUpdateCol(cur, column : str, table : str, values, keyCol : str, keyValues):
+
+    if len(values) != len(keyValues):
+        print("Error (fastUpdateCol): values and keyValues lists must have equal length")
+        return -1
+
+    start = time.time()
+    # First we convert the values and keyValues into paired sequences
+    insertSeq = ((v, kv) for v, kv in zip(values, keyValues))
+    seqTime = time.time()
+    print("seq time: " + str(seqTime - start))
+
+    # speed boost from using ram as temp memory and not waiting for write confirmation
+    cur.execute("PRAGMA synchronous = OFF")
+    cur.execute("PRAGMA temp_store = MEMORY")
+    cur.execute("PRAGMA journal_mode = MEMORY")
+
+    # Manually opening and closing the transaction gives a large speed increase
+    cur.execute("BEGIN TRANSACTION")
+
+    updateQuery = "UPDATE " + table + " SET " + column + " = ? WHERE " + keyCol + " = ?"
+    cur.executemany(updateQuery, insertSeq)
+    exTime = time.time()
+    print("execute time: " + str(exTime - seqTime))
+
+    cur.execute("END TRANSACTION")
+    comTime = time.time()
+    print("commit time: " + str(comTime - exTime))
 
 # Adds multiple values to multiple columns within a row. Executes the UPDATE query but does not commit
 # Inputs cursor, a list of columns, a table name, a list of values, and a key columns and value to identify the row (should use PRIMARY KEY as the keyCol)
@@ -212,7 +246,7 @@ def stringConverter(string : str):
             data = stringListToArray(string)
             return data
         # it isn't a list either. return the string unchanged
-        except ValueError:
+        except json.decoder.JSONDecodeError:
             return string
 
 # Helper function to convert a 'stringified' list ('[1.1, 3.2, 4.3]') into a numpy array ([1.1, 3.2, 4.3])
@@ -221,10 +255,8 @@ def stringConverter(string : str):
 # TODO: in the future, saving and loading can be made smarter - save the data as binary and directly load it into an array
 def stringListToArray(strList : str):
 
-    # Reformat the string by removing brackets and splitting along the ','
-    strFormatted = strList.strip('[]')
-
-    return np.fromstring(strFormatted, sep = ', ')
+    # For some reason it is faster to use json.loads rather than np.fromstring
+    return np.array(json.loads(strList))
 
 
 ##########################################################################
@@ -250,15 +282,22 @@ def applyFunctionToData(connection, cursor, func : Callable, resName : str, data
 
     res = cursor.execute(selectQuery)
 
-    writeCursor = connection.cursor()
-
+    # Track the function results and their corresponding PRIMARY KEY values in index-matched lists
     funcResultList = []
+    keyList = []
+    startTimes = []
+    fetchTimes = []
+    convertTimes = []
+    funcTimes = []
+    appendTimes = []
 
-    # Iterate through the result, convert the data to numpy arrays, apply the function, and save the result
+    # Iterate through the result, convert the data to numpy arrays, apply the function, record in a list with keys
     for i in tqdm(range(numRows)):
 
+        start = time.time()
         row = res.fetchone()
-
+        fetch = time.time()
+        fetchTimes.append(fetch - start)
         # Initialize a list to save the data arrays
         arrayList = []
 
@@ -266,19 +305,38 @@ def applyFunctionToData(connection, cursor, func : Callable, resName : str, data
         # convert each entry in row to an array except the final primary key
         for i in range(len(row) - 1):
             arrayList.append(stringConverter(row[i]))
-
+        conv = time.time()
+        convertTimes.append(conv - fetch)
         # Retrieve the primary key value of the row as the last member
         keyValue = row[-1]
 
         funcResult = func(arrayList, *funcArgs)
-
-        updateCol(writeCursor, resName, table, funcResult, keyColumn[0], keyValue)
-
+        funcTime = time.time()
+        funcTimes.append(funcTime - conv)
         funcResultList.append(funcResult)
+        keyList.append(keyValue)
+        appendTime = time.time()
+        appendTimes.append(appendTime - funcTime)
 
-    connection.commit()
+    print("fetch time: " + str(np.mean(fetchTimes)))
+    print("convert time: " + str(np.mean(convertTimes)))
+    print("func time: " + str(np.mean(funcTimes)))
+    print("append time: " + str(np.mean(appendTimes)))
+
+    # Write the results within a single transaction
+    # First open a db transaction
+    writeCursor = connection.cursor()
+    # fastUpdateCol(writeCursor, resName, table, funcResultList, keyColumn[0], keyList)
+    # connection.commit()
+
+    fastUpdateCol(writeCursor, resName, table, funcResultList, keyColumn[0], keyList)
+
+
+
+    # connection.commit()
 
     return funcResultList
+
 
 # Version of applyFunctionToData that applies muliple functions to the same data set and saves it
 #   This version should be significantly faster vs calling applyFunctionToData multiple times
@@ -353,7 +411,10 @@ def analyzeDatabases(fileNames : list, funcs : list, resNames : list, dataColumn
         con, cur = openDB(file)
 
         #Run applyFunctionsToData
-        applyFunctionsToData(con, cur, funcs, resNames, dataColumns, keyColumn, table, funcArgs)
+        if len(funcs) > 1:
+            applyFunctionsToData(con, cur, funcs, resNames, dataColumns, keyColumn, table, funcArgs)
+        else:
+            applyFunctionToData(con, cur, funcs[0], resNames[0], dataColumns, keyColumn, table)
 
         #Close connection
         con.close()
@@ -770,6 +831,38 @@ def plotScanDataAtPixels(dir : str, dataColumns : list, primaryCoors : list, sec
     plt.legend()
     plt.show()
 
+def baselineTest(dir : str, dataColumns : list, primaryCoors : list, secondaryCoors : list, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics', verbose = True, normalized = False):
+
+    dataDict = directoryScanDataAtPixels(dir, dataColumns, primaryCoors, secondaryCoors, primaryAxis, secondaryAxis, table, verbose)
+
+    # Convert time axis to a common zero if the x-axis is experiment time'
+    if dataColumns[0] == 'time_collected':
+        minTimes = []
+        for coor in dataDict:
+            times = dataDict[coor]['time_collected']
+            # Collect the first time (which should be the minimum)
+            minTimes.append(times[0])
+
+        # Find the experiment start time by taking the min of the mins
+        t0 = min(minTimes)
+
+    if normalized == True:
+        # grab values from first coordinate
+        normValue = dataDict[(primaryCoors[0], secondaryCoors[0])][dataColumns[1]]
+        # iterate through all coors and divide by first coordinate
+        for coor in dataDict.keys():
+            # be wary of issues with copy and references here - may need to revise
+            dataDict[coor][dataColumns[1]] = dataDict[coor][dataColumns[1]]/normValue
+
+    for coor in dataDict.keys():
+        if dataColumns[0] == 'time_collected':
+            # Convert to common 0 by subtracting start time. Divide by 3600 to display in hours instead of seconds
+            plt.scatter((dataDict[coor][dataColumns[0]] - t0)/3600, dataDict[coor][dataColumns[1]] -  dataDict[coor][dataColumns[2]], label = str(coor))
+        else:
+            plt.scatter(dataDict[coor][dataColumns[0]], dataDict[coor][dataColumns[1]], label=str(coor))
+
+    plt.legend()
+    plt.show()
 
 # plot a map
 # xCol, yCol, datCol - names of the table columns for the xy coordinates and the data to colormap to
@@ -866,6 +959,14 @@ def absoluteSum(arrList):
 def arrayMax(arrList):
     return bn.nanmax(arrList[1])
 
+# Calculate the mean of the last n y-values. Used to estimate the baseline for correcting oscilloscope wandering
+def endMean(arrList, n = 5):
+
+    # take last n values
+    lastN = arrList[1][-n:]
+
+    return np.mean(lastN)
+
 # Calculate the time of the first break using STA/LTA algorithm
 # Inputs the arrayList from applyFunctionToData, the length (in number of elements, NOT time) of the short and long averaging window,
 #   and tresholdRatio, a number in (0,1) that determines what fraction of the maximum STA/LTA counts as the first break
@@ -951,3 +1052,25 @@ def generateCoordinateGrid(corner, lengths, steps):
     x, y = np.meshgrid(xLinspace, yLinspace)
 
     return x.flatten(), y.flatten()
+
+######################################################################
+#### DEPRECATED CODE GRAVEYARD #################################
+
+# code fragments from a prior write speed experiment
+# wrote columns by creating a temporary table and merging it
+    # # Create the temporary table
+    # cur.execute("CREATE TABLE temp (" + column + " REAL, " + keyCol + " INTEGER PRIMARY KEY)")
+    #
+    # # Insert our values into the temp table
+    # cur.executemany("INSERT INTO temp VALUES(?,?)", insertSeq)
+    #
+    # # Merge temp table into target table
+    # # Example: table = acoustics, data column is absoluteSum and keyCol is collection_index
+    # # "UPDATE acoustics SET(absoluteSum)=(temp.absoluteSum) FROM temp WHERE acoustics.collection_index = temp.collection_index
+    # mergeQuery = "UPDATE " + table + " SET(" + column + ")=(temp." + column + ") FROM temp WHERE " + table + "." + keyCol + " = temp." + keyCol
+    # cur.execute(mergeQuery)
+    #
+    # # delete the temp table
+    # cur.execute("DROP TABLE temp")
+    #
+    # cur.execute("END TRANSACTION")
