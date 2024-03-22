@@ -115,11 +115,8 @@ def fastUpdateCol(cur, column : str, table : str, values, keyCol : str, keyValue
         print("Error (fastUpdateCol): values and keyValues lists must have equal length")
         return -1
 
-    start = time.time()
     # First we convert the values and keyValues into paired sequences
     insertSeq = ((v, kv) for v, kv in zip(values, keyValues))
-    seqTime = time.time()
-    print("seq time: " + str(seqTime - start))
 
     # speed boost from using ram as temp memory and not waiting for write confirmation
     cur.execute("PRAGMA synchronous = OFF")
@@ -131,24 +128,37 @@ def fastUpdateCol(cur, column : str, table : str, values, keyCol : str, keyValue
 
     updateQuery = "UPDATE " + table + " SET " + column + " = ? WHERE " + keyCol + " = ?"
     cur.executemany(updateQuery, insertSeq)
-    exTime = time.time()
-    print("execute time: " + str(exTime - seqTime))
 
     cur.execute("END TRANSACTION")
-    comTime = time.time()
-    print("commit time: " + str(comTime - exTime))
 
-# Adds multiple values to multiple columns within a row. Executes the UPDATE query but does not commit
-# Inputs cursor, a list of columns, a table name, a list of values, and a key columns and value to identify the row (should use PRIMARY KEY as the keyCol)
-def updateCols(cur, columns : list, table : str, values : list, keyCol : str, keyVal):
+# Adds multiple values to multiple columns within a row. Runs many UPDATE queries in an optimized manner
+# columns is a list of column names as string. values is a list of tuples. The final member of each tuple must be the key value, the others are the column values
+#   the length of each tuple is then len(columns) + 1. keyCol is the name of the PRIMARY KEY used for updating. Code will work if it is not the primary key but it
+#   will be signicantly slower
+def updateCols(cur, columns : list, values : list, keyCol : str, table  = 'acoustics'):
 
     # convert the columns and values lists into properly formatted strings
     formattedColumns = "(" +  ", ".join(columns) + ")"
-    formattedValues = str(tuple(values))
 
-    # Generate UPDATE query, execute
-    updateQuery = "UPDATE " + table + " SET " + formattedColumns + " = " + formattedValues + " WHERE " + keyCol + " = " + str(keyVal)
-    cur.execute(updateQuery)
+    # generate a string (?,?,...?) that is as long as len(columns)
+    qMarks = "(" + ("?," * (len(columns)-1)) + "?)"
+
+    # Generate UPDATE query
+    # UPDATE table SET (column0,column1,...) = (?,?,...) WHERE keyCol = ?
+    updateQuery = "UPDATE " + table + " SET " + formattedColumns + " = " + qMarks + " WHERE " + keyCol + " = ?"
+
+    # speed boost from using ram as temp memory and not waiting for write confirmation
+    # NOTE: this is mildly unsafe and could result in corrupted data if the program crashes mid-write
+    cur.execute("PRAGMA synchronous = OFF")
+    cur.execute("PRAGMA temp_store = MEMORY")
+    cur.execute("PRAGMA journal_mode = MEMORY")
+
+    # Manually opening and closing the transaction gives a large speed increase
+    cur.execute("BEGIN TRANSACTION")
+
+    cur.executemany(updateQuery, values)
+
+    cur.execute("END TRANSACTION")
 
 
 # Create a new column within a table
@@ -285,19 +295,12 @@ def applyFunctionToData(connection, cursor, func : Callable, resName : str, data
     # Track the function results and their corresponding PRIMARY KEY values in index-matched lists
     funcResultList = []
     keyList = []
-    startTimes = []
-    fetchTimes = []
-    convertTimes = []
-    funcTimes = []
-    appendTimes = []
 
     # Iterate through the result, convert the data to numpy arrays, apply the function, record in a list with keys
     for i in tqdm(range(numRows)):
 
-        start = time.time()
         row = res.fetchone()
-        fetch = time.time()
-        fetchTimes.append(fetch - start)
+
         # Initialize a list to save the data arrays
         arrayList = []
 
@@ -305,23 +308,14 @@ def applyFunctionToData(connection, cursor, func : Callable, resName : str, data
         # convert each entry in row to an array except the final primary key
         for i in range(len(row) - 1):
             arrayList.append(stringConverter(row[i]))
-        conv = time.time()
-        convertTimes.append(conv - fetch)
+
         # Retrieve the primary key value of the row as the last member
         keyValue = row[-1]
 
         funcResult = func(arrayList, *funcArgs)
-        funcTime = time.time()
-        funcTimes.append(funcTime - conv)
+
         funcResultList.append(funcResult)
         keyList.append(keyValue)
-        appendTime = time.time()
-        appendTimes.append(appendTime - funcTime)
-
-    print("fetch time: " + str(np.mean(fetchTimes)))
-    print("convert time: " + str(np.mean(convertTimes)))
-    print("func time: " + str(np.mean(funcTimes)))
-    print("append time: " + str(np.mean(appendTimes)))
 
     # Write the results within a single transaction
     # First open a db transaction
@@ -330,8 +324,6 @@ def applyFunctionToData(connection, cursor, func : Callable, resName : str, data
     # connection.commit()
 
     fastUpdateCol(writeCursor, resName, table, funcResultList, keyColumn[0], keyList)
-
-
 
     # connection.commit()
 
@@ -361,7 +353,9 @@ def applyFunctionsToData(connection, cursor, funcs : list, resNames : list, data
 
     res = cursor.execute(selectQuery)
 
-    writeCursor = connection.cursor()
+    # create a list to track the values and associate keyValue for each row
+    # This list will be populated with tuples which will be fed to updateCols
+    funcResultsList = []
 
     # Iterate through the result, convert the data to numpy arrays, apply the functions, and save the results
     for i in tqdm(range(numRows)):
@@ -392,8 +386,17 @@ def applyFunctionsToData(connection, cursor, funcs : list, resNames : list, data
             else:
                 funcResults.append(func(arrayList))
 
-        # write func results into current row
-        updateCols(writeCursor, resNames, table, funcResults, keyColumn[0], keyValue)
+        #add the keyValue to the end of funcResults, convert it to a tuple, then append it to funcResultList
+        #This puts the results in the format [(func0(row0), func1(row0), .., key(row0)), (func0(row1), func1....]
+        # which is nice for sql queries
+        funcResults.append(keyValue)
+        funcResTuple = tuple(funcResults)
+
+        funcResultsList.append(funcResTuple)
+
+    writeCursor = connection.cursor()
+    # write func results into current row
+    updateCols(writeCursor, resNames, funcResultsList, keyColumn[0], table)
 
     connection.commit()
 
@@ -958,6 +961,11 @@ def absoluteSum(arrList):
 # Return the  max of the y-values
 def arrayMax(arrList):
     return bn.nanmax(arrList[1])
+
+# Return the maximum minus the minimum. This value should indicated changes in attenuation without influence of baseline
+#   drift
+def maxMinusMin(arrList):
+    return bn.nanmax(arrList[1]) - bn.nanmin(arrList[1])
 
 # Calculate the mean of the last n y-values. Used to estimate the baseline for correcting oscilloscope wandering
 def endMean(arrList, n = 5):
