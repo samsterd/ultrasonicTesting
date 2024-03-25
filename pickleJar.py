@@ -18,7 +18,9 @@
 #
 #  1 : { same keys : new data }
 # ...
-#  'fileName' : name of file to load and save the pickle?
+#  'fileName' : name of file to load and save the pickle
+#   All experimental parameters are saved as a sub-dict with key 'parameters'
+#  'parameters' :{time_started : x, delay : y,...}
 # }
 
 import pickle
@@ -82,10 +84,26 @@ def sqliteToPickle(file : str):
         dataDict[index] = {}
 
         for i in range(len(colNames)):
+            # some tables have blank columns due to code bugs. This skips over them
             if row[i] != None:
                 dataDict[index][colNames[i]] = squ.stringConverter(row[i])
             else:
                 pass
+
+    # extract the experimental parameters from the sql table
+    paramNames = squ.columnNames(cur, 'parameters')
+    paramQuery = "SELECT " + ", ".join(paramNames) + " FROM parameters"
+    paramRes = cur.execute(paramQuery)
+    # only need to fetchone since the parameter table should be a single row
+    params = paramRes.fetchone()
+
+    # write the experimental parameters into a subdict of the dataDict
+    dataDict['parameters'] = {}
+    for i in range(len(paramNames)):
+        if params[i] != None:
+            dataDict['parameters'][paramNames[i]] = squ.stringConverter(params[i])
+        else:
+            pass
 
     # remove .sqlite3 extension and .pickle extension
     pickleFile = os.path.splitext(file)[0] + '.pickle'
@@ -159,18 +177,57 @@ def loadPickle(fileName : str):
 
 # apply function to key
 # takes a dataDict, a function, the key to store the result in, a list of keys to use as the function arguments, and a list of additional arguments if needed
-# def applyFunctionToData(dataDict : dict, func : Callable, resKey, dataKeys : list, *funcArgs):
-#
-#     # Iterate through the keys (coordinates) in the dataDict
-#     for key in dataDict:
-#
-#         # Gather the data from dataKeys into a list to use as input to func
-#         funcInputs = [dataDict[key][dataKey] for dataKey in dataKeys]
-#
-#         dataDict[key][resKey] = func(*funcInputs, *funcArgs)
-#
-#     # Repickle
+# NOTE: if dataDict[collection_index][resKey] already exists, it will be overwritten
+def applyFunctionToData(dataDict : dict, func : Callable, resKey, dataKeys, *funcArgs):
 
+    # check if dataKeys is a list. If it isn't convert it to one
+    dataKeys = [dataKeys] if not isinstance(dataKeys, list) else dataKeys
+
+    # Iterate through the keys (coordinates) in the dataDict
+    for key in dataDict:
+
+        # check that the key is a collection_index (an int), not 'fileName' or 'parameters"
+        if type(key) == int:
+
+            # Gather the data from dataKeys into a list to use as input to func
+            funcInputs = [dataDict[key][dataKey] for dataKey in dataKeys]
+
+            dataDict[key][resKey] = func(*funcInputs, *funcArgs)
+
+        else:
+            pass
+
+    # Repickle the data
+    savePickle(dataDict)
+
+    return dataDict
+
+# Apply a function to a list of files
+def applyFunctionToPickles(fileNames : list,  func : Callable, resKey, dataKeys, *funcArgs):
+
+    for i in tqdm(range(len(fileNames))):
+
+        file = fileNames[i]
+        dataDict = loadPickle(file)
+        applyFunctionToData(dataDict, func, resKey, dataKeys, *funcArgs)
+
+# Apply a function to all of the .pickles in a directory
+def applyFunctionToDir(dirName : str, func : Callable, resKey, dataKeys, *funcArgs):
+
+    files = os.listdir(dirName)
+    fileNames = []
+    for file in files:
+        if file.endswith(".pickle"):
+            fileNames.append(os.path.join(dirName, file))
+
+    applyFunctionToPickles(fileNames, func, resKey, dataKeys, *funcArgs)
+
+# Assemble a '4D' dataDict of a multi scan experiment with the data at each coordinate / collection_index collected into an array
+#   NOTE: data is not going to be in load order, not time order. Time ordering can only be achieved by index matching to 'time_collected'
+#   NOTE: for long multi scans this could result in a very large file size
+#   This function is not implemented yet because it would probably use up all of my RA<
+# def assembleScanAcrossTime():
+#     return 0
 
 # apply function to keys
 
@@ -180,6 +237,25 @@ def loadPickle(fileName : str):
 
 # normalize data across pickles in directory
 #   need to specify name of t=0 pickle
+def normalizeDataToFirstScan(dirName, keysToNormalize):
+
+    # find the first scan
+
+    # iterate through dir
+
+        # iterate through collection_index
+
+        #   get first scan[i] and currentScan[i]
+
+        #   iterate through keysToNormalize
+
+        #       save currentScan[i][keyNormalized] = currentScan[i][key]/firstScan[i][key]
+
+        # save pickle
+
+    return 0
+
+# implement baseline correct as a function
 
 #
 # # pickle the dict
