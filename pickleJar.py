@@ -28,6 +28,8 @@ import sqlite3
 import sqliteUtils as squ
 from typing import Callable
 from tqdm import tqdm
+from matplotlib import pyplot as plt
+from matplotlib import colormaps as cmp
 import time
 import numpy as np
 import os
@@ -39,11 +41,8 @@ import os
 #   compromise: fileName is always a top level key of the pickle/dataDict
 #       this isn't great - what if the pickle moves? should it be rewritten every time it is loaded?
 #   __init__() creates an empty dict?
-# sqlite_to_pickle
-# save_pickle
-# load_pickle
-# before doing all of this - need to make sure this is actually faster
-#   write sqlite_to_pickle for a simple case and test saving / loading
+# pickleToSqlite - save analysis in human readable format
+# plotting functions
 
 tstFile = "C://Users//shams//Drexel University//Chang Lab - General//Individual//Sam Amsterdam//acoustic scan data//sa-1-2b wetting scan//sa_1_2b_1MLiDFOB_wetting_1.sqlite3"
 pickleFile = "C://Users//shams//Drexel University//Chang Lab - General//Individual//Sam Amsterdam//acoustic scan data//sa-1-2b wetting scan//sa_1_2b_1MLiDFOB_wetting_1.pickle"
@@ -53,7 +52,6 @@ pickleFile = "C://Users//shams//Drexel University//Chang Lab - General//Individu
 # Inputs a filename with .sqlite3 extension
 # Creates a data dict and saves it as the same filename .pickle
 # Returns the dataDict
-# TODO: this is not handling the parameter table yet
 def sqliteToPickle(file : str):
 
     # Open db connection
@@ -114,6 +112,7 @@ def sqliteToPickle(file : str):
         pickle.dump(dataDict, f)
 
     con.close()
+    f.close()
 
     return dataDict
 
@@ -127,13 +126,9 @@ def multiSqliteToPickle(files : list):
 
 # Convert all sqlite DBs in a directory to pickles
 # Returns None
-def directorySqliteToPickle(dir : str):
+def directorySqliteToPickle(dirName : str):
 
-    files = os.listdir(dir)
-    fileNames = []
-    for file in files:
-        if file.endswith(".sqlite3"):
-            fileNames.append(os.path.join(dir, file))
+    fileNames = listPicklesInDirectory(dirName)
 
     multiSqliteToPickle(fileNames)
 
@@ -149,6 +144,7 @@ def savePickle(dataDict : dict):
         fileName = dataDict['fileName']
         with open(fileName, 'wb') as f:
             pickle.dump(dataDict, f)
+        f.close()
         return 0
 
 # Load a pickle specified in a filename
@@ -173,6 +169,7 @@ def loadPickle(fileName : str):
         print('loadPickle Warning: dataDict[\'fileName\'] does not match input fileName. Value of dataDict key has been updated to match new file location.')
         dataDict['fileName'] = fileName
 
+    f.close()
     return dataDict
 
 # apply function to key
@@ -214,11 +211,7 @@ def applyFunctionToPickles(fileNames : list,  func : Callable, resKey, dataKeys,
 # Apply a function to all of the .pickles in a directory
 def applyFunctionToDir(dirName : str, func : Callable, resKey, dataKeys, *funcArgs):
 
-    files = os.listdir(dirName)
-    fileNames = []
-    for file in files:
-        if file.endswith(".pickle"):
-            fileNames.append(os.path.join(dirName, file))
+    fileNames = listPicklesInDirectory(dirName)
 
     applyFunctionToPickles(fileNames, func, resKey, dataKeys, *funcArgs)
 
@@ -235,35 +228,393 @@ def applyFunctionToDir(dirName : str, func : Callable, resKey, dataKeys, *funcAr
 
 # apply function to pickles in directory
 
-# normalize data across pickles in directory
-#   need to specify name of t=0 pickle
-def normalizeDataToFirstScan(dirName, keysToNormalize):
+# normalize data across pickles in directory to the value at the first scan
+# inputs a directory with pickles in it (the first scan will be identified automatically)
+# and a list of keys that should be normalized
+# the results of normalized values will be stored in a dataDict[index]['keyName_normalized'] = value_normalized
+def normalizeDataToFirstScan(dirName, keysToNormalize : list):
 
     # find the first scan
+    print("Finding first scan...")
+    firstScan = findFirstScan(dirName)
+
+    # Check that the keysToNormalize are in firstScan
+    for key in keysToNormalize:
+        if key not in firstScan[0].keys():
+            print("Error: key " + str(key) + " not found in " + firstScan['fileName'] + ". Normalization aborted. Check the spelling of the keys and whether their value has been calculated yet.")
+            return -1
+
+    # gather file names in directory
+    fileNames = listPicklesInDirectory(dirName)
 
     # iterate through dir
+    print("\nNormalizing scans...")
+    for i in tqdm(range(len(fileNames))):
 
-        # iterate through collection_index
+        # load the pickle
+        currentScan = loadPickle(fileNames[i])
 
-        #   get first scan[i] and currentScan[i]
+        # iterate through collection_index / coordinates
+        for index in currentScan.keys():
 
-        #   iterate through keysToNormalize
+            # verify the key is a collection_index, not 'parameters' or 'fileName'
+            if type(index) != int:
+                pass
 
-        #       save currentScan[i][keyNormalized] = currentScan[i][key]/firstScan[i][key]
+            else:
+
+                #  iterate through keysToNormalize, divide by the corresponding value at firstScan
+                # values are saved as 'keyName_normalized'
+                for key in keysToNormalize:
+                    normKey = key + '_normalized'
+                    currentScan[index][normKey] = currentScan[index][key] / firstScan[index][key]
 
         # save pickle
+        savePickle(currentScan)
+        # clear memory of currentScan
+        del currentScan
 
     return 0
 
+# takes in a directory with multiscan data
+# creates a new voltage_baseline_corrected key and saves the data
+#
+def baselineCorrectScans(dirName):
+    return 0
+
+# Helper function to find the first scan in a directory
+#   This is done based on the 'time_started' key in the 'parameters' dict
+#
+def findFirstScan(dirName):
+
+    fileNames = listPicklesInDirectory(dirName)
+
+    # initialize a list of times started
+    timesStarted = []
+
+    # iterate through the list
+    for i in tqdm(range(len(fileNames))):
+
+        # load the file and gather the time_started
+        data = loadPickle(fileNames[i])
+        timeStarted = data['parameters']['time_started']
+        timesStarted.append(timeStarted)
+
+    # find the index of the minimum of time started
+    minIndex = timesStarted.index(min(timesStarted))
+
+    # find the file name that corresponds to that minimum start time
+    minFile = fileNames[minIndex]
+
+    # load the pickle and return the result
+    return loadPickle(minFile)
+
+# Helper function to list the files ending in .pickle within a given directory
+# Inputs a directory name
+# Outputs a list of file names
+def listPicklesInDirectory(dirName):
+
+    files = os.listdir(dirName)
+    fileNames = []
+    for file in files:
+        if file.endswith(".pickle"):
+            fileNames.append(os.path.join(dirName, file))
+
+    return fileNames
+
 # implement baseline correct as a function
 
-#
-# # pickle the dict
-# start = time.time()
-# with open(pickleFile, 'rb') as f:
-#     # pickle.dump(dataDict, f)
-#     dataDict = pickle.load(f)
-#
-# print("pickle time: " + str(time.time() - start))
-#
-# print(np.mean(dataDict[100]['voltage']))
+# Determines the collection_index of each input coordinate for a given scan dataDict
+#   this is needed to efficiently retrieve the data for a given coordinate without searching through all of a dict's keys.
+#   (this converts searching for a coordinate from O(n) to O(1)
+# Functionality is copied from the corresponding function in sqliteUtils.py
+# Essentially, we are doing a bunch of algebra to calculate the collection_index the corresponds to a
+# given coordinate. This is possible if we know the collection_index and coordinates of the last and second-to-last points
+# For an (x,z) scan, let xs, zs be the coordinate step that the map was collected at
+#           Let (xf, zf) be the final coordinates at the last collection_index kf
+#           Let (x0, z0) be the coordinates of the second to last collection_index k0 = kf - 1
+#                Looking up both of these coordinates takes O(1) time since we start from collection_index
+#           Let (m, n) be the number of rows and columns of a given map
+#           Our system of equations is then:
+#               1)  kf = nm - 1
+#               2)  xf = (n - 1) xs
+#               3)  zf = (m - 1) zs
+#               4)  kf = n (zf / zs) + xf/xs
+#               5)  k0 = n (z0 / zs) + x0/xs
+#               6) either xs = xf - x0 OR zs = zf - z0
+#           We can directly solve (6) by checking which coordinate changes between kf and k0
+#           The other unknowns (n, m, the remaining of xs or zs) can then be solved straighforwardly
+# NOTE: the speed of this function relies on the number of coordinates in a scan being equal to len(dataDict.keys()) - 2 -
+#       a dataDict contains keys for each point + 'fileName' + 'parameters'. This assumption is key to this algorithm working fast
+#       if we need to sort keys to find the final coordinates the algorithm becomes O(nlogn) and we lose the speedup
+
+def coordinatesToCollectionIndex(dataDict, coordinates):
+
+    # this assumes that the dataDict contains a key for each point + 'fileName' + 'parameters'
+    # Need to subtract an additional 1 because len is 1-indexed but collection_index is 0-indexed
+    kf = len(dataDict.keys()) - 3
+    # Do some quick error checking - make sure kf > 0 or else the rest will fail
+    if kf <= 1:
+        print("coordinatesToCollectionIndex: input table only has one row. Check that the table and data are correct")
+        return None
+
+    # determine which axes are used in dataDict (2 out of 'X', 'Y', and 'Z')
+    axes = ['X', 'Y', 'Z']
+    axisKeys = [axis for axis in axes if axis in dataDict[0].keys()]
+
+    # Collect coordinates of final point
+    xf = dataDict[kf][axisKeys[0]]
+    zf = dataDict[kf][axisKeys[1]]
+
+    # Collect coordinates of second-to-last point
+    k0 = kf - 1
+    x0 = dataDict[k0][axisKeys[0]]
+    z0 = dataDict[k0][axisKeys[1]]
+
+    # Check which coordinate changed and use that to solve the equations
+    # First handle case where x coordinate changed
+    if zf == z0:
+        xs = xf - x0
+        n = (xf / xs) + 1
+        m = (kf + 1) / n
+        zs = zf / (m - 1)
+    elif xf == x0:
+        zs = zf - z0
+        m = (zf / zs) + 1
+        n = (kf + 1) / m
+        xs = xf / (n - 1)
+    # We should not enter the final branch, but just in case lets put a panicked error message
+    else:
+        print(
+            "coordinatesToCollectionIndex: unable to identify coordinate step. Unclear what went wrong, but its probably related to floating point rounding. Your data is probably cursed, contact Sam for an exorcism (or debugging).")
+        return None
+
+    # Now iterate through the input coordinates and convert to indices
+    # using equation k = n(z/zs) + (x/xs)
+    collectionIndices = []
+
+    for i in range(len(coordinates)):
+        x = coordinates[i][0]
+        # Raise warnings if rounding
+        if (x % xs != 0):
+            print('coordinatesToCollectionIndex: primary coordinate ' + str(
+                x) + 'is not a multiple of the primary step. Rounding coordinate.')
+
+        z = coordinates[i][1]
+        if (z % zs != 0):
+            print('coordinatesToCollectionIndex: secondary coordinate ' + str(
+                z) + 'is not a multiple of the secondary step. Rounding coordinate.')
+
+        index = (n * (z / zs)) + (x / xs)
+
+        # handle out of bounds indices as None
+        if index < 0 or index > kf:
+            print('coordinatesToCollectionIndex: input coordinate ' + str(coordinates[i]) + ' is out of bounds of the scan.' +
+                    'Check the coordinate list and scan parameters and try again.')
+            collectionIndices.append(None)
+        else:
+            collectionIndices.append(int(index))
+
+    return collectionIndices
+
+# Collect specified data from specified coordinates in a scan dataDict
+# Inputs the dataDict, dataKeys as a list of strings, and coordinates a list of 2-tuples
+# Outputs a dict with keys being coordinates and values being dicts with keys being the dataKeys and values being the corresponding value at that point
+#               (x0, y0) : {dataKeys0 : val, dataKeys1 : val,...}
+# resultDict = {(x1, y1) : {dataKeys0 : val, dataKeys1 : val,...}}
+#                   ...
+def scanDataAtPixels(dataDict: dict, dataKeys: list, coordinates: list):
+
+    # convert coordinates into collection_indices
+    coordinateIndices = coordinatesToCollectionIndex(dataDict, coordinates)
+
+    resultDict = {}
+    # iterate through collection_indices
+    for i in range(len(coordinateIndices)):
+
+        if coordinateIndices[i] != None:
+            coorData = dataDict[coordinateIndices[i]]
+
+            # iterate through dataKeys, adding values
+            resultDict[coordinates[i]] = {key : coorData[key] for key in dataKeys}
+
+        else:
+            print("scanDataAtPixels: Cannot extract data. Coordinate " + str(coordinates[i]) + " is out of the scan bounds." +
+                  "Check the coordinate list, scan parameters, and the signs of coordinates and try again.")
+            return -1
+
+    return resultDict
+
+# Collect specific data from multiple scans at a given list of coordinates
+# scans are specified as a list of fileNames, dataKeys as a list of strings, and coordinates as a list of (x,y) or [x,y]
+# returns a dict of dicts. The top level dict has keys = coordinates. Each coordinate key has a value of a dict, with the keys
+#   being the dataKeys and the values being an array of the values of that data at each scan. All values are index matched to each
+#   other, so the values at the same index will be from the same scan across all coordinates
+#   NOTE: the data will be in the order of fileNames, not necessarily in time order. They will be index-matched, so they can still
+#       be time ordered by including time_collected in the dataKeys list
+# format of output dict:
+#               (x0, y0) : {dataKeys0 : [val0, val1,...], dataKeys1 : [val0, val1, ...],...}
+# resultDict = {(x1, y1) : {dataKeys0 : [val0, val1,...], dataKeys1 : [val0, val1, ...],...}}
+#                   ...
+def multiScanDataAtPixels(fileNames : list, dataKeys : list, coordinates : list):
+
+    dataDictList = []
+
+    # iterate through files, loading the pickle and running scanDataAtPixels on each scan, saving the result in the list
+    print("Gathering scan data...\n")
+    for i in tqdm(range(len(fileNames))):
+
+        fileData = loadPickle(fileNames[i])
+        dataDictList.append(scanDataAtPixels(fileData, dataKeys, coordinates))
+
+    print("\nMerging data...")
+    # Merge data. storage list is a list of dicts of dicts. This got ugly...
+    # First make a copy of dataDictList[0] but with the values as numpy arrays
+    masterDict = {}
+
+    for coordinate, coordinateData in dataDictList[0].items():
+        masterDict[coordinate] = {dataColumn: np.array(value) for dataColumn, value in coordinateData.items()}
+
+    # Now iterate through the rest of dataDictList, merging the values into the arrays of masterDict
+    for scan in dataDictList[1:]:
+
+        # for each scan in list, iterate through the keys (coordinates) and values (values == innerDict of data columns)
+        for coor, coordinateData in scan.items():
+
+            # set the value of masterDict[coordinate/key][data column / inn
+            for dataColumn, value in coordinateData.items():
+                if type(value) == float:
+                    masterDict[coor][dataColumn] = np.append(masterDict[coor][dataColumn], value)
+                elif type(value) == np.ndarray:
+                    masterDict[coor][dataColumn] = np.vstack((masterDict[coor][dataColumn], value))
+
+    return masterDict
+
+# Runs multiScanDataAtPixels on all pickle files in a directory
+# NOTE: data will be returned in load order, not time order. It will be index matched to time, if that is imported
+def directoryScanDataAtPixels(dirName : str, dataKeys : list, coordinates : list):
+
+    files = listPicklesInDirectory(dirName)
+    return multiScanDataAtPixels(files, dataKeys, coordinates)
+
+
+############################################################
+###### Plotting Functions###################################
+###########################################################
+
+# Plots a 2D scan as a scatter plot. XY data is the scan coordinate, colorKey determines parameters used to color the map
+# Optional inputs: the range for the coloring parameter (values outside the range will be set to the max/min of the range)
+# save = True will save the file, with the optional fileName string used to name it.
+#       file name will be automatically generated based as dataDict['fileName'] + '_colorKey' + saveFormat
+# show = True will show the plot when the function is run. This is useful for single uses, but slows down mass plot saving
+def plotScan(dataDict, colorKey, colorRange = [None, None], save = False, fileName = '', saveFormat = '.png', show = True):
+
+    # determine which axes are used in dataDict (2 out of 'X', 'Y', and 'Z')
+    axes = ['X', 'Y', 'Z']
+    axisKeys = [axis for axis in axes if axis in dataDict[0].keys()]
+
+    # check that exactly 2 axis keys were found, otherwise throw an error
+    if len(axisKeys) != 2:
+        print("plotScan Error: identified " + str(len(axisKeys)) + " scan axes in data. This number should be 2. Check that the input data is for a scan experiment.")
+        return -1
+
+    # gather coordinate and color data by iterating through the dataDict keys
+    xDat = np.array([])
+    yDat = np.array([])
+    cDat = np.array([])
+    for index in dataDict.keys():
+        if type(index) == int:
+            xDat = np.append(xDat, dataDict[index][axisKeys[0]])
+            yDat = np.append(yDat, dataDict[index][axisKeys[1]])
+            cDat = np.append(cDat, dataDict[index][colorKey])
+
+    # plot
+    plt.scatter(xDat, yDat, c = cDat, vmin = colorRange[0], vmax = colorRange[1])
+    plt.colorbar()
+
+    if show == True:
+        plt.show()
+
+    # save. generate a filename if it isn't specified
+    if save == True:
+
+        # generate a save file name if not provided
+        if fileName == '':
+            dataFile = dataDict['fileName']
+            saveFile = os.path.splitext(dataFile)[0] + '_' + str(colorKey) + saveFormat
+        else:
+            saveFile = fileName
+        plt.savefig(saveFile)
+        plt.close()
+
+    return 0
+
+# runs plotScan on a list of filenames with show = False and save = True, for use in mass figure generation.
+#  Saves the figures in a subfolder named colorKey with the name dataDict['fileName'] + _colorKey + format
+def generateScanPlots(fileNames : list, colorKey, colorRange = [None, None], saveFormat = '.png'):
+
+    # switch tk backend to avoid Runtime main thread errors when generating large numbers of figures
+    # NOTE: this will prevent displaying the figures, which isn't a problem for the generate function
+    plt.switch_backend('agg')
+
+    # iterate through fileNames
+    for i in tqdm(range(len(fileNames))):
+
+        file = fileNames[i]
+
+        # generate save file name
+        saveDir = os.path.dirname(file) + '//' + str(colorKey) + '//'
+
+        # make saveDir if it doesn't exist
+        if not os.path.exists(saveDir):
+            os.makedirs(saveDir)
+
+        # load dataDict
+        data = loadPickle(file)
+
+        # generate save file name
+        saveName = os.path.basename(os.path.splitext(file)[0]) + '_' + str(colorKey) + saveFormat
+        saveFile = saveDir + saveName
+
+        plotScan(data, colorKey, colorRange, save = True, fileName = saveFile, show = False)
+
+# generate scan images for all pickles in a directory. Used to mass produce scan images from multi scan experiments
+def generateScanPlotsInDirectory(dirName : str, colorKey, colorRange = [None, None], saveFormat = '.png'):
+
+   fileNames = listPicklesInDirectory(dirName)
+
+   generateScanPlots(fileNames, colorKey, colorRange, saveFormat)
+
+# Plot the evolution of the value of dataKey vs time at a given list of coordinates
+# If normalized = True, the data will be divided by the corresponding value in the first coordinate
+def plotScanDataAtCoorsVsTime(dirName : str, dataKey : str, coors : list, normalized = False):
+
+    # gather the data
+    dataDict = directoryScanDataAtPixels(dirName, ['time_collected', dataKey], coors)
+
+    # Convert time axis to a common zero
+    minTimes = []
+    for coor in dataDict:
+        times = dataDict[coor]['time_collected']
+        # Collect the minimum time
+        minTimes.append(min(times))
+
+    # Find the experiment start time by taking the min of the mins
+    t0 = min(minTimes)
+
+    if normalized == True:
+        # grab values from first coordinate
+        normValue = dataDict[coors[0]][dataKey]
+        # iterate through all coors and divide by first coordinate
+        for coor in dataDict.keys():
+            # be wary of issues with copy and references here - may need to revise
+            dataDict[coor][dataKey] = dataDict[coor][dataKey]/normValue
+
+    for coor in dataDict.keys():
+        # Convert to common 0 by subtracting start time. Divide by 3600 to display in hours instead of seconds
+        plt.scatter((dataDict[coor]['time_collected'] - t0)/3600, dataDict[coor][dataKey], label = str(coor))
+
+    plt.legend()
+    plt.show()
+
+    return 0
