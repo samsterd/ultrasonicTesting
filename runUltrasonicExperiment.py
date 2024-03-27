@@ -58,6 +58,8 @@ experimentParams = {
     'experimentName' : 'testdb01',                 # File name for single scan and repeat pulse experiment. Will be appended with .json
     'experimentBaseName' : 'test_multiscan_data',   # Base filename for multi scan experiment, which will have the scan # appended to it
     'saveFormat' : 'sqlite',                        # Format to save data. Options are sqlite or json. Sqlite is recommended
+    'pickleData' : True,                            # An alternate saving format which saves the data as a python dict. Adds ~10s overhead per scan
+                                                    # This is only possible currently when the saveFormat = 'sqlite' and is in addition (not replacing) the sqlite file
 
     ################################################################################
     ####################### Scan Parameters ########################################
