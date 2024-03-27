@@ -33,6 +33,7 @@ from matplotlib import colormaps as cmp
 import time
 import numpy as np
 import os
+import bottleneck as bn
 
 # Functions needed:
 # implement as a class!
@@ -278,9 +279,69 @@ def normalizeDataToFirstScan(dirName, keysToNormalize : list):
 
 # takes in a directory with multiscan data
 # creates a new voltage_baseline_corrected key and saves the data
-#
+# This assumes that for each point in the scan at time tn, in reference to the point at t=0, there is a
+# multiplicative change to the intensity An that operates on the span of the wave (its maximum amplitude minus minimum amplitude)
+# as well as an additive baseline change due to electronics drift (Bn)
+# Our governing equations are then
+# (0) An(Max(0) - Min(0)) = Max(n) - Min(n) (definition of multiplicative An)
+# (0a) An = (Max(n) - Min(n)) / (Max(0) - Min(0))
+# (1) Max(n) = An * Max(0) + Bn
+# (2) Min(n) = An * Min(0) + Bn
+# Rearranging and solving for Bn gives:
+# Bn = Max(n) - Max(0) * An
+# This function finds the t=0 reference scan, then for every subsequent scan calculates and saves An, Bn, and voltage_baseline
+# This assumes that B0 = 0
 def baselineCorrectScans(dirName):
-    return 0
+
+    # find the first scan
+    print("Finding first scan...")
+    firstScan = findFirstScan(dirName)
+
+    print("\nChecking that max and max minus min are calculated for first scan...")
+    # check that max and max - min is calculated for the first scan. if not, calculate it
+    if 'max' not in firstScan[0].keys():
+        firstScan = applyFunctionToData(firstScan, bn.nanmax, 'max', ['voltage'])
+
+    if 'maxMinusMin' not in firstScan[0].keys():
+        firstScan = applyFunctionToData(firstScan, maxMinusMin, 'maxMinusMin', ['voltage'])
+
+    # gather file names
+    files = listPicklesInDirectory(dirName)
+
+    print("\nCalculating attenuation coefficient (An) and baseline correction (Bn)...")
+    # iterate through scans
+    for i in tqdm(range(len(files))):
+
+        fileData = loadPickle(files[i])
+
+        # check that the max has been calculated. If not, calculate it
+        if 'max' not in fileData[0].keys():
+            fileData = applyFunctionToData(fileData, bn.nanmax, 'max', ['voltage'])
+
+        # check that max - min has been calculated. If not, calculate it
+        if 'maxMinusMin' not in fileData[0].keys():
+            fileData = applyFunctionToData(fileData, maxMinusMin, 'maxMinusMin', ['voltage'])
+
+        # iterate through coordinates and calculate An and Bn at every point
+        for index in fileData.keys():
+
+            if type(index) == int:
+                fileData[index]['An'] = fileData[index]['maxMinusMin'] / firstScan[index]['maxMinusMin']
+                fileData[index]['Bn'] = fileData[index]['max'] - (firstScan[index]['max'] * fileData[index]['An'])
+
+        # finally create the baseline-corrected voltage wave by subtracting voltages and Bn
+        applyFunctionToData(fileData, baselineCorrectVoltage, 'voltage_baseline', ['voltage', 'Bn'])
+
+# function for use in applyFunctionToData that calculates the maximum minus minimum value
+def maxMinusMin(voltages):
+
+    return bn.nanmax(voltages) - bn.nanmin(voltages)
+
+def baselineCorrectVoltage(voltage, baseline):
+
+    return voltage - baseline
+
+# helper function to apply baseline correction to data
 
 # Helper function to find the first scan in a directory
 #   This is done based on the 'time_started' key in the 'parameters' dict
@@ -501,6 +562,38 @@ def directoryScanDataAtPixels(dirName : str, dataKeys : list, coordinates : list
 ############################################################
 ###### Plotting Functions###################################
 ###########################################################
+
+# plot the waveform at specified coordinates
+def plotScanWaveforms(dataDict : dict, coors : list, yDat = 'voltage'):
+
+    # gather waveform data
+    waveDat = scanDataAtPixels(dataDict, ['time', yDat], coors)
+
+    # plot
+    for coor in coors:
+        plt.plot(waveDat[coor]['time'], waveDat[coor][yDat])
+
+    plt.show()
+
+# plots waveform change over time from multiscan data
+def plotWaveformOverTimeAtCoor(dirName : str, coor : tuple, yDat = 'voltage'):
+
+    # gather a dict of the data. Since we are only gathering at one coordinate, we use that to collect the data dict from that key
+    dataDict = directoryScanDataAtPixels(dirName, ['time', yDat, 'time_collected'], [coor])[coor]
+
+    # convert time_collected to a common zero, then normalize it to [0,1] for the colormap
+    timesCollected = dataDict['time_collected']
+    minTime = min(timesCollected)
+    timesCollectZeroRef = timesCollected - minTime
+    maxTime = max(timesCollectZeroRef)
+    normTime = timesCollectZeroRef / maxTime
+
+    for wave in range(len(dataDict['time_collected'])):
+        plt.plot(dataDict['time'][wave], dataDict[yDat][wave], c = cmp['viridis'](normTime[wave]),
+                 label = round(timesCollectZeroRef[wave]/3600, 2))
+    plt.legend()
+    plt.show()
+
 
 # Plots a 2D scan as a scatter plot. XY data is the scan coordinate, colorKey determines parameters used to color the map
 # Optional inputs: the range for the coloring parameter (values outside the range will be set to the max/min of the range)
