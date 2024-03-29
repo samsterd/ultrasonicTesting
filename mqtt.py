@@ -31,7 +31,7 @@ def mqtt_connect(clientid):
 # Run this alongside mqtt_connect and pass as an argument to mqtt_quick_pub
 def create_publish_properties():
     publish_properties = props.Properties(PacketTypes.PUBLISH)
-    props.MaximumPacketSize = 20
+    props.MaximumPacketSize = 500
     return publish_properties
 
 
@@ -45,10 +45,18 @@ def create_publish_properties():
 def mqtt_quick_pub(client, publish_properties, data, key, file, topic):
     publish_properties.UserProperty = [
         ('File-Name', file),
-        ('File-Size', str(len(data))),
+        ('File-Size', "0"),
         ('Key', key)]
     client.publish(topic, data, 0, False, properties=publish_properties)
     publish_properties.UserProperty.clear()
+
+
+def mqtt_handle_params(client, params):
+    keys = ", ".join(key for key in params)
+    data = ", ".join(str(params[key]) for key in params)
+    publish_properties = create_publish_properties()
+    publish_properties.UserProperty = [('Keys', keys)]
+    client.publish("Params", data, properties=publish_properties)
 
 
 # Stops the loop and disconnects client from broker

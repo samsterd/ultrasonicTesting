@@ -51,6 +51,8 @@ def repeatPulse(params):
     # initialize progress bar
     pbar = tqdm.tqdm(total=experimentTime)
 
+    mqtt_handle_params(mqtt_client, params)
+
     #start pulse collection loop. Run until end of experiment
     while time.time() < endTime:
 
@@ -69,8 +71,8 @@ def repeatPulse(params):
         waveData['time_collected'] = time.time()
         waveData['collection_index'] = collectionIndex
 
-        keys = ":".join(key for key in waveData)
-        data = ":".join(f'"{str(val)}"' if isinstance(val, list) else str(val) for val in waveData.values())
+        keys = ", ".join(key for key in waveData)
+        data = ", ".join(f'"{str(val)}"' if isinstance(val, list) else str(val) for val in waveData.values())
 
         collectionIndex += 1
 
