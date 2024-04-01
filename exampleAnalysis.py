@@ -4,6 +4,7 @@
 import pickleJar as pj
 import sqliteUtils as squ
 import numpy as np
+from numpy import fft
 import os.path
 import matplotlib.pyplot as plt
 
@@ -14,6 +15,7 @@ import matplotlib.pyplot as plt
 # 2. Plotting a scan
 # 3. Plotting a repeat pulse
 # 4. Loading, analyzing, and plotting a multi scan
+# 5. Example workflow
 # Appendix : Analysis functions and usage
 
 ##############################################################
@@ -23,9 +25,10 @@ import matplotlib.pyplot as plt
 
 # First we load the data from the file we want to analyze
 # The experiment should always output sqlite3 files, so let's convert them to a more usable pickle form first
-sqliteFile = 'C//file//you//want//to//analyze.sqlite3'
+sqliteFile = "C://Users//shams//Drexel University//Chang Lab - General//Individual//Sam Amsterdam//ultrasonic example data//sa_1_2b_1MLiDFOB_wetting_1.sqlite3"
 
 # Convert the sqlite3 to a .pickle
+# This takes a few seconds. A progress bar will display in your terminal
 pj.sqliteToPickle(sqliteFile)
 
 # Load the pickle
@@ -62,14 +65,34 @@ data = pj.applyFunctionToData(data, np.max, 'max', ['voltage'])
 data = pj.applyFunctionToData(data, pj.staltaFirstBreak, 'STA/LTA_fb', ['voltage', 'time'], 5, 30, 0.75)
 
 # If you have several scans you want to analyze at once, use the function pj.applyFunctionToPickles using a list of filenames
-# Other than inputting a list of filenames rather than a single dict, this function follows the same input patter
-fileToAnalyze0 = 'C//file//you//want//to//analyze0.sqlite3'
-fileToAnalyze1 = 'C//file//you//want//to//analyze1.sqlite3'
-pj.applyFunctionToPickles([fileToAnalyze0, fileToAnalyze1], np.max, 'max', ['voltage'])
+# Other than inputting a list of filenames rather than a single dict, this function follows the same input pattern
+fileToAnalyze0 = "C://Users//shams//Drexel University//Chang Lab - General//Individual//Sam Amsterdam//ultrasonic example data//sa_1_2b_1MLiDFOB_wetting_1.sqlite3"
+fileToAnalyze1 = "C://Users//shams//Drexel University//Chang Lab - General//Individual//Sam Amsterdam//ultrasonic example data//sa_1_2b_1MLiDFOB_wetting_2.sqlite3"
+# convert sqlite3 to pickle. Note that if the pickle already exists, the conversion will not occur
+pj.multiSqliteToPickle([fileToAnalyze0, fileToAnalyze1])
+# Note that applyFunctionToPickles will overwrite the result key if it already exists
+# In this example, os.path.splitext()[0] + '.pickle' is used to remove the .sqlite3 from the filename and add the .pickle extension
+pj.applyFunctionToPickles([os.path.splitext(fileToAnalyze0)[0] + '.pickle', os.path.splitext(fileToAnalyze1)[0] + '.pickle'], np.max, 'max', ['voltage'])
 # Note that applyFunctionToPickles saves the results in the corresponding files but does not return the updated dict. If
-# you want to work with it further, you need to manually load it
-otherData = pj.loadPickle(fileToAnalyze0)
+# you want to work with it further, you need to manually load it using pj.loadPickle(pickleFile)
 
+# Here's a more complicated example. Let's calculate the real parts of the fft of the waveform
+# we can do this using the numpy function np.fft.rfft()
+data = pj.applyFunctionToData(data, np.fft.rfft, 'fft', ['voltage'])
+
+# To make a nice plot, we want the magnitude of the rfft by applying abs() to the result
+data = pj.applyFunctionToData(data, abs, 'abs_fft', ['fft'])
+
+# Next we calculate the fft frequencies using np.fft.rfftfreq(). This is handled a little differently since it is a constant array for all scans
+# rfftfreq requires two inputs: the number of samples (= len('time') ), and the time step
+# Since every scan should have the same 'time' values, we only need to calculate this once and set it for all data
+timeStep = (data[0]['time'][1] - data[0]['time'][0]) / 1000000000
+numSamples = len(data[0]['time'])
+fft_freq = np.fft.rfftfreq(numSamples, timeStep)
+# the function pj.writeDataToDict can be used to write a constant value for every collection_index
+data = pj.writeDataToDict(data, fft_freq, 'fft_freq')
+# Now we have the fft and its corresponding frequencies saved in the data under the keys 'abs_fft' and 'fft_freq'
+# This data is also saved - any time we load the pickle in the future, it will be accessible
 
 # There are several helper functions written in pickleJar.py for analysis in this format. A list is provided at the end
 # with an explanation of the calculation and what is needed for their input
@@ -105,23 +128,8 @@ pj.plotScanWaveforms(data, coordinatesToPlot)
 
 # Also note that plotScanWaveforms has an optional arguments xDat and yDat which specify the key used to gather the x- and y- data
 # This flexibility allows you to plot any transforms you may have made as well
-# To show this, here's a more complicated example. We will first define an fft function, use it with applyFunctionToData,
-# and then plot the fft at the specified coordinates
-
-#TODO: test this. also move up to the analysis section
-# First calculate the  fft using numpy's builtin function
-data = pj.applyFunctionToData(data, np.fft.rfft, 'fft_y', ['voltage'])
-
-# Then calculate the magnitude of the fft by applying abs() to the result
-data = pj.applyFunctionToData(data, abs, 'abs_fft_y', ['fft_y'])
-
-# Next we calculate the fft frequencies. First we calculate the time step in seconds
-timeStep = (data[0]['time'][1] - data[0]['time'][0]) / 1000000000
-# Then apply the rfftfreq function using timestep as an extra parameter
-data = pj.applyFunctionToData(data, np.rfftfreq(len), 'fft_x', timeStep)
-
-# finally, let's plot the results for the coordinates we were interested in before
-pj.plotScanWaveforms(data, coordinatesToPlot, xDat = 'fft_x', yDat = 'abs_fft_y')
+# for example, we can plot the fft we calculated in the last section
+pj.plotScanWaveforms(data, coordinatesToPlot, xDat = 'fft_freq', yDat = 'abs_fft')
 
 ##############################################################################
 #####################        3          ######################################
@@ -143,7 +151,7 @@ pj.plotScanWaveforms(data, coordinatesToPlot, xDat = 'fft_x', yDat = 'abs_fft_y'
 # data sets of hundreds of scans
 
 # Now let's get started. First specify the directory the multi scan data is stored in
-dirName = "C://directory//where//scan//data//is//"
+dirName = "C://Users//shams//Drexel University//Chang Lab - General//Individual//Sam Amsterdam//ultrasonic example data//"
 
 # For faster processing, let's convert the scan data from .sqlite3 to .pickle if that hasn't already been done
 # NOTE: this can take several seconds per scan

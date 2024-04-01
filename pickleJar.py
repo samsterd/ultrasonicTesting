@@ -28,6 +28,7 @@ import sqlite3
 import sqliteUtils as squ
 from typing import Callable
 from tqdm import tqdm
+from matplotlib import get_backend
 from matplotlib import pyplot as plt
 from matplotlib import colormaps as cmp
 import time
@@ -65,6 +66,15 @@ def sqliteToPickle(file : str):
     indexPosition = colNames.index('collection_index')
 
     dataDict = {}
+
+    # Generate the filename by removing .sqlite3 extension and .pickle extension
+    pickleFile = os.path.splitext(file)[0] + '.pickle'
+    dataDict['fileName'] = pickleFile
+
+    # check if the pickle file already exists. If it does, print an error message and exit early
+    if os.path.isfile(pickleFile):
+        print("sqliteToPickle Warning: pickle file " + pickleFile + " already exists. Conversion aborted.")
+        return -1
 
     # Gather the number of rows in the db
     numRows = squ.numberOfRows(cur, 'acoustics')
@@ -104,11 +114,7 @@ def sqliteToPickle(file : str):
         else:
             pass
 
-    # remove .sqlite3 extension and .pickle extension
-    pickleFile = os.path.splitext(file)[0] + '.pickle'
-    dataDict['fileName'] = pickleFile
-
-    # save the dataDict as a pickle
+    # save the dataDict as a pickle. We checked if the file exists earlier, so this operation is safe
     with open(pickleFile, 'wb') as f:
         pickle.dump(dataDict, f)
 
@@ -129,9 +135,13 @@ def multiSqliteToPickle(files : list):
 # Returns None
 def directorySqliteToPickle(dirName : str):
 
-    fileNames = listPicklesInDirectory(dirName)
+    fileNames = listFilesInDirectory(dirName, '.sqlite3')
 
     multiSqliteToPickle(fileNames)
+
+# TODO: this should be written
+def pickleToSqlite(dataDict):
+    return 0
 
 # Saves a dataDict as a pickle. If the 'fileName' key is not informed, a warning message is printed
 def savePickle(dataDict : dict):
@@ -173,6 +183,41 @@ def loadPickle(fileName : str):
     f.close()
     return dataDict
 
+# function to write values into the dataDict. Saves the dataDict as a pickle then returns the dict
+# The indexMatched option determines how the data is added
+# For default behavior (==False):
+#   dataDict[collection_index][key] = dat
+# For indexMatched data, dat must be an iterable of length == len(dataDict.keys())-2
+#   If not, an error is thrown
+#   otherwise, dataDict[collection_index][key] = dat[collection_index]
+def writeDataToDict(dataDict : dict, dat, key, indexMatched = False):
+
+    if indexMatched:
+
+        # check that dat matches the index matching requirement
+        if type(dat) == list and len(dat) == len(dataDict.keys()) - 2:
+
+            # iterate through collection_indices and assign appropriate values
+            for index in dataDict.keys():
+                if type(index) == int:
+                    dataDict[index][key] = dat[index]
+
+            savePickle(dataDict)
+            return dataDict
+
+        # index matching condition failed. throw an error and return -1
+        else:
+            print("writeDataToDict: Error, indexMatched is set to True but dat is not of the correct length. Check inputs and length of dataDict.keys().")
+            return dataDict
+
+    # data is not index matched, set key to a constant value
+    else:
+        for index in dataDict.keys():
+            if type(index) == int:
+                dataDict[index][key] = dat
+        savePickle(dataDict)
+        return dataDict
+
 # apply function to key
 # takes a dataDict, a function, the key to store the result in, a list of keys to use as the function arguments, and a list of additional arguments if needed
 # NOTE: if dataDict[collection_index][resKey] already exists, it will be overwritten
@@ -212,7 +257,7 @@ def applyFunctionToPickles(fileNames : list,  func : Callable, resKey, dataKeys,
 # Apply a function to all of the .pickles in a directory
 def applyFunctionToDir(dirName : str, func : Callable, resKey, dataKeys, *funcArgs):
 
-    fileNames = listPicklesInDirectory(dirName)
+    fileNames = listFilesInDirectory(dirName)
 
     applyFunctionToPickles(fileNames, func, resKey, dataKeys, *funcArgs)
 
@@ -246,7 +291,7 @@ def normalizeDataToFirstScan(dirName, keysToNormalize : list):
             return -1
 
     # gather file names in directory
-    fileNames = listPicklesInDirectory(dirName)
+    fileNames = listFilesInDirectory(dirName)
 
     # iterate through dir
     print("\nNormalizing scans...")
@@ -277,6 +322,37 @@ def normalizeDataToFirstScan(dirName, keysToNormalize : list):
 
     return 0
 
+# Calculate the time of the first break using STA/LTA algorithm
+# Inputs the voltage and time arrays, the length (in number of elements, NOT time) of the short and long averaging window,
+#   and tresholdRatio, a number in (0,1) that determines what fraction of the maximum STA/LTA counts as the first break
+def staltaFirstBreak(voltageData, timeData, shortWindow : int, longWindow : int, thresholdRatio = 0.75):
+
+    staltaArray = stalta(voltageData, shortWindow, longWindow)
+
+    threshold = thresholdRatio * bn.nanmax(staltaArray)
+
+    # Return time where first value in staltaArray is above threshold
+    for i in range(len(staltaArray)):
+        if staltaArray[i] > threshold:
+            return timeData[i]
+
+    # No value was found above threshold. Return -1
+    return -1
+
+# Calculate STA/LTA for a given short and long window
+# Windows are specified in number of elements (not time)
+# Returns an array of the same length as input. Values within longWindow-1 of the start of the array will be converted to NaNs
+# NOTE: windows are left-handed in this implementation
+def stalta(array, shortWindow, longWindow):
+    # Calculate square of array values
+    arrSquared = array ** 2
+
+    # Calculate moving averages with optimized code from bottleneck package
+    sta = bn.move_mean(arrSquared, shortWindow)
+    lta = bn.move_mean(arrSquared, longWindow)
+
+    return sta / lta
+
 # takes in a directory with multiscan data
 # creates a new voltage_baseline_corrected key and saves the data
 # This assumes that for each point in the scan at time tn, in reference to the point at t=0, there is a
@@ -306,7 +382,7 @@ def baselineCorrectScans(dirName):
         firstScan = applyFunctionToData(firstScan, maxMinusMin, 'maxMinusMin', ['voltage'])
 
     # gather file names
-    files = listPicklesInDirectory(dirName)
+    files = listFilesInDirectory(dirName)
 
     print("\nCalculating attenuation coefficient (An) and baseline correction (Bn)...")
     # iterate through scans
@@ -348,7 +424,7 @@ def baselineCorrectVoltage(voltage, baseline):
 #
 def findFirstScan(dirName):
 
-    fileNames = listPicklesInDirectory(dirName)
+    fileNames = listFilesInDirectory(dirName)
 
     # initialize a list of times started
     timesStarted = []
@@ -373,12 +449,12 @@ def findFirstScan(dirName):
 # Helper function to list the files ending in .pickle within a given directory
 # Inputs a directory name
 # Outputs a list of file names
-def listPicklesInDirectory(dirName):
+def listFilesInDirectory(dirName, ext = '.pickle'):
 
     files = os.listdir(dirName)
     fileNames = []
     for file in files:
-        if file.endswith(".pickle"):
+        if file.endswith(ext):
             fileNames.append(os.path.join(dirName, file))
 
     return fileNames
@@ -542,12 +618,13 @@ def multiScanDataAtPixels(fileNames : list, dataKeys : list, coordinates : list)
         # for each scan in list, iterate through the keys (coordinates) and values (values == innerDict of data columns)
         for coor, coordinateData in scan.items():
 
-            # set the value of masterDict[coordinate/key][data column / inn
+            # append the data values for the scan to the masterdict
             for dataColumn, value in coordinateData.items():
-                if type(value) == float:
-                    masterDict[coor][dataColumn] = np.append(masterDict[coor][dataColumn], value)
-                elif type(value) == np.ndarray:
+                # Arrays must be handles differently from individual values - they should be 'stacked' rather than appended
+                if type(value) == np.ndarray:
                     masterDict[coor][dataColumn] = np.vstack((masterDict[coor][dataColumn], value))
+                else:
+                    masterDict[coor][dataColumn] = np.append(masterDict[coor][dataColumn], value)
 
     return masterDict
 
@@ -555,7 +632,7 @@ def multiScanDataAtPixels(fileNames : list, dataKeys : list, coordinates : list)
 # NOTE: data will be returned in load order, not time order. It will be index matched to time, if that is imported
 def directoryScanDataAtPixels(dirName : str, dataKeys : list, coordinates : list):
 
-    files = listPicklesInDirectory(dirName)
+    files = listFilesInDirectory(dirName)
     return multiScanDataAtPixels(files, dataKeys, coordinates)
 
 
@@ -563,23 +640,25 @@ def directoryScanDataAtPixels(dirName : str, dataKeys : list, coordinates : list
 ###### Plotting Functions###################################
 ###########################################################
 
+# TODO: ADD plot vs time for repeat pulse
+
 # plot the waveform at specified coordinates
-def plotScanWaveforms(dataDict : dict, coors : list, yDat = 'voltage'):
+def plotScanWaveforms(dataDict : dict, coors : list, xDat = 'time', yDat = 'voltage'):
 
     # gather waveform data
-    waveDat = scanDataAtPixels(dataDict, ['time', yDat], coors)
+    waveDat = scanDataAtPixels(dataDict, [xDat, yDat], coors)
 
     # plot
     for coor in coors:
-        plt.plot(waveDat[coor]['time'], waveDat[coor][yDat])
+        plt.plot(waveDat[coor][xDat], waveDat[coor][yDat])
 
     plt.show()
 
 # plots waveform change over time from multiscan data
-def plotWaveformOverTimeAtCoor(dirName : str, coor : tuple, yDat = 'voltage'):
+def plotWaveformOverTimeAtCoor(dirName : str, coor : tuple, xDat = 'time', yDat = 'voltage'):
 
     # gather a dict of the data. Since we are only gathering at one coordinate, we use that to collect the data dict from that key
-    dataDict = directoryScanDataAtPixels(dirName, ['time', yDat, 'time_collected'], [coor])[coor]
+    dataDict = directoryScanDataAtPixels(dirName, [xDat, yDat, 'time_collected'], [coor])[coor]
 
     # convert time_collected to a common zero, then normalize it to [0,1] for the colormap
     timesCollected = dataDict['time_collected']
@@ -589,8 +668,8 @@ def plotWaveformOverTimeAtCoor(dirName : str, coor : tuple, yDat = 'voltage'):
     normTime = timesCollectZeroRef / maxTime
 
     for wave in range(len(dataDict['time_collected'])):
-        plt.plot(dataDict['time'][wave], dataDict[yDat][wave], c = cmp['viridis'](normTime[wave]),
-                 label = round(timesCollectZeroRef[wave]/3600, 2))
+        plt.plot(dataDict[xDat][wave], dataDict[yDat][wave], c = cmp['viridis'](normTime[wave]), label = round(timesCollectZeroRef[wave]/3600, 2))
+
     plt.legend()
     plt.show()
 
@@ -640,14 +719,14 @@ def plotScan(dataDict, colorKey, colorRange = [None, None], save = False, fileNa
         plt.savefig(saveFile)
         plt.close()
 
-    return 0
-
 # runs plotScan on a list of filenames with show = False and save = True, for use in mass figure generation.
 #  Saves the figures in a subfolder named colorKey with the name dataDict['fileName'] + _colorKey + format
 def generateScanPlots(fileNames : list, colorKey, colorRange = [None, None], saveFormat = '.png'):
 
     # switch tk backend to avoid Runtime main thread errors when generating large numbers of figures
     # NOTE: this will prevent displaying the figures, which isn't a problem for the generate function
+    # The previous backend is saved and restored at the end of the function
+    backend = get_backend()
     plt.switch_backend('agg')
 
     # iterate through fileNames
@@ -671,10 +750,13 @@ def generateScanPlots(fileNames : list, colorKey, colorRange = [None, None], sav
 
         plotScan(data, colorKey, colorRange, save = True, fileName = saveFile, show = False)
 
+    # return to previous backend
+    plt.switch_backend(backend)
+
 # generate scan images for all pickles in a directory. Used to mass produce scan images from multi scan experiments
 def generateScanPlotsInDirectory(dirName : str, colorKey, colorRange = [None, None], saveFormat = '.png'):
 
-   fileNames = listPicklesInDirectory(dirName)
+   fileNames = listFilesInDirectory(dirName)
 
    generateScanPlots(fileNames, colorKey, colorRange, saveFormat)
 
@@ -705,9 +787,8 @@ def plotScanDataAtCoorsVsTime(dirName : str, dataKey : str, coors : list, normal
 
     for coor in dataDict.keys():
         # Convert to common 0 by subtracting start time. Divide by 3600 to display in hours instead of seconds
-        plt.scatter((dataDict[coor]['time_collected'] - t0)/3600, dataDict[coor][dataKey], label = str(coor))
+        timeDat = (dataDict[coor]['time_collected'] - t0) / 3600
+        plt.scatter(timeDat, dataDict[coor][dataKey], label = str(coor))
 
     plt.legend()
     plt.show()
-
-    return 0
