@@ -5,10 +5,10 @@ import ultratekPulser as utp
 import enderControl as ender
 import math
 import time
-import matplotlib.pyplot as plt
 import json
 from tqdm import tqdm
 from database import Database
+import pickleJar as pj
 
 
 # Runs a 2D scan, taking ultrasonic pulse data at every point, and saves to the specified folder
@@ -119,3 +119,6 @@ def runScan(params):
     pulser.closePulser()
     ender.closeEnder(enderConnection)
     pico.closePicoscope(picoConnection)
+
+    if params['saveFormat'] == 'sqlite' and params['pickleData']:
+        pj.sqliteToPickle(params['fileName'] + '.sqlite3')

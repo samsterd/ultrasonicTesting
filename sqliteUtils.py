@@ -12,18 +12,7 @@ from matplotlib import pyplot as plt
 from matplotlib import colormaps as cmp
 
 #Roadmap:
-#xmulti column update
-#xmulti function analysis
-#xselect pixel range
-#xplot pixel range
-#xgrab pixel data
-#xgrab pixel data over time
-#xsave plots without show()
-#xanalyze multiple files
-#xanalyze folder
-#speed up multiscan by consolidating into one file?
-# - speed benchmark pixel selection
-#fft
+
 #change over to ? from string formatting
 
 ###############################################################
