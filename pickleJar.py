@@ -413,6 +413,12 @@ def maxMinusMin(voltages):
 
     return bn.nanmax(voltages) - bn.nanmin(voltages)
 
+# returns the sum of the absolute value of an input array. This value is directly proportional to the integral of the signal
+def absoluteSum(voltages):
+
+    return np.sum(abs(voltages))
+
+
 def baselineCorrectVoltage(voltage, baseline):
 
     return voltage - baseline

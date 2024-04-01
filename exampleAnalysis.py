@@ -199,4 +199,39 @@ pj.plotScanDataAtCoorsVsTime(dirName, 'max', coordinatesToPlot, normalized = Tru
 #######################   Appendix  ###########################################
 # ###############Analysis Functions and Usage #########################################
 #####################################################################################
+# Function name
+# Description of operation and context for its use
+# Inputs/outputs
+# Example usage in applyFunctionToData
+
+
+# np.max
+# Returns the maximum value of an array
+# Inputs an array, outputs a single value
+# applyFunctionToData(data, np.max, 'max', ['voltage'])
+
+# bn.nanmax
+# Returns the maximum value of an array, using the bottleneck module. Faster than np.max
+# Inputs an array, outputs a single value
+# applyFunctionToData(data, bn.nanmax, 'max', ['voltage'])
+
+# pj.maxMinusMin
+# Returns the maximum of an array minus its minimum. Useful as a measure of signal intensity when the baseline is drifting
+# Inputs an array, outputs a single value
+# applyFunctionToData(data, pj.maxMinusMin, 'maxMinusMin', ['voltage'])
+
+# pj.staltaFirstBreak
+# Returns the first break time of a waveform using the STA/LTA (short term average / long term average) algorithm
+# Inputs voltage data array, time data array, an int for the length (in time steps, NOT time) of the short window, and int
+#       for the length of the long window, and a number in (0,1) for the fraction of the maximum value that is the threshold
+#       for signal arrival. Outputs a single value
+# In the example the values for short window, long window, and threshold are 5, 30, and 0.75 respectively
+#   Since the values of these auxiliary parameters are not saved anywhere, it is good practice to include them in the result key name
+# applyFunctionToData(data, pj.staltaFirstBreak, 'staltaFirstBreak_5_30_0d75', ['voltage', 'time'], 5, 30, 0.75)
+
+# pj.absoluteSum
+# Returns the sum of the absolute values of an array. This value is directly proportional to the integral of the signal so
+#       it is a useful and fast to calculate metric for the intensity of a given signal
+# Inputs an array (voltage), outputs a single value
+# applyFunctionToData(data, pj.absoluteSum, 'absoluteSum', ['voltage'])
 
