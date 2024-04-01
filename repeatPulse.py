@@ -7,6 +7,7 @@ import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from database import Database
+import pickleJar as pj
 
 
 def repeatPulse(params):
@@ -103,4 +104,4 @@ def repeatPulse(params):
     pico.closePicoscope(picoConnection)
 
     if params['saveFormat'] == 'sqlite' and params['pickleData']:
-        pj.sqliteToPickle(params['fileName'] + '.sqlite3')
+        pj.sqliteToPickle(scanFileName + '.sqlite3')
