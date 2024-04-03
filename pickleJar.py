@@ -35,6 +35,7 @@ import time
 import numpy as np
 import os
 import bottleneck as bn
+import scipy.signal
 
 # Functions needed:
 # implement as a class!
@@ -321,6 +322,52 @@ def normalizeDataToFirstScan(dirName, keysToNormalize : list):
         del currentScan
 
     return 0
+
+# Applies a Savitzky-Golay filter to the data and optionally takes its first or second derivative
+# Inputs the y-data ('voltage'), x-data ('time') along with 3 auxiliary parameters: the window length of filtering (defaults to 9),
+#       the order of polynomials used to fit (defaults to 3), and the derivative order (default to 0, must be less than polynomial order)
+# outputs the filtered data or its requested derivative. The output has the same shape as the input
+def savgolFilter(yDat, xDat, windowLength = 9, polyOrder = 3, derivOrder = 0):
+
+    # calculate the spacing of the xData
+    xDelta = xDat[1] - xDat[0]
+
+    return scipy.signal.savgol_filter(yDat, windowLength, polyOrder, derivOrder)
+
+# Finds the x-coordinates where a function changes sign (crosses zero)
+# This is useful for e.g. finding maxima by zero-crossings of the first derivative
+# Inputs the y- and x- data, as well as an optional input linearInterp, which determines the nature of the returned values
+#       if linearInterp = False, the function returns the values of the xData at the coordinate before the zero crossing occurs
+#       if linearInterp = True, the function performs a linear interpolation of the two coordinates surrounding the zero-crossing
+#           i.e. (x0, y0 > 0), (x1, y1 < 0), and returns the x-value where the interpolation equals 0
+# Returns an array of the x-coordinates where the y values crossed zero
+def zeroCrossings(yDat, xDat, linearInterp = False):
+
+    # find the indices where zero crossing occurs
+    # implementation taken from https://stackoverflow.com/questions/3843017/efficiently-detect-sign-changes-in-python
+    zeroCrossingIndices = np.where(np.diff(np.signbit(yDat)))[0]
+
+    if linearInterp:
+
+        xIntercepts = []
+
+        # iterate through indices, calculate x-intercept, and append to result list
+        for i in zeroCrossingIndices:
+
+            # gather data points surrounding the zero crossing and calculate x-intercept
+            # note that the index-finding algorithm does not count sign changes in the last data point, so we do not need to check
+            # for edge cases (that is, i < len(yDat) so we do not need to check that i + 1 is an acceptable list index)
+            x0 = xDat[i]
+            x1 = xDat[i+1]
+            y0 = yDat[i]
+            y1 = yDat[i+1]
+            xIntercept = (-1 * (y0 * (x0 - x1))/(y0-y1)) + x0
+            xIntercepts.append(xIntercept)
+
+        return np.array(xIntercepts)
+
+    else:
+        return np.array([xDat[i] for i in zeroCrossingIndices])
 
 # Calculate the time of the first break using STA/LTA algorithm
 # Inputs the voltage and time arrays, the length (in number of elements, NOT time) of the short and long averaging window,

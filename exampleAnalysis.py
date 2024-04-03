@@ -208,17 +208,17 @@ pj.plotScanDataAtCoorsVsTime(dirName, 'max', coordinatesToPlot, normalized = Tru
 # np.max
 # Returns the maximum value of an array
 # Inputs an array, outputs a single value
-# applyFunctionToData(data, np.max, 'max', ['voltage'])
+# pj.applyFunctionToData(data, np.max, 'max', ['voltage'])
 
 # bn.nanmax
 # Returns the maximum value of an array, using the bottleneck module. Faster than np.max
 # Inputs an array, outputs a single value
-# applyFunctionToData(data, bn.nanmax, 'max', ['voltage'])
+# pj.applyFunctionToData(data, bn.nanmax, 'max', ['voltage'])
 
 # pj.maxMinusMin
 # Returns the maximum of an array minus its minimum. Useful as a measure of signal intensity when the baseline is drifting
 # Inputs an array, outputs a single value
-# applyFunctionToData(data, pj.maxMinusMin, 'maxMinusMin', ['voltage'])
+# pj.applyFunctionToData(data, pj.maxMinusMin, 'maxMinusMin', ['voltage'])
 
 # pj.staltaFirstBreak
 # Returns the first break time of a waveform using the STA/LTA (short term average / long term average) algorithm
@@ -227,11 +227,33 @@ pj.plotScanDataAtCoorsVsTime(dirName, 'max', coordinatesToPlot, normalized = Tru
 #       for signal arrival. Outputs a single value
 # In the example the values for short window, long window, and threshold are 5, 30, and 0.75 respectively
 #   Since the values of these auxiliary parameters are not saved anywhere, it is good practice to include them in the result key name
-# applyFunctionToData(data, pj.staltaFirstBreak, 'staltaFirstBreak_5_30_0d75', ['voltage', 'time'], 5, 30, 0.75)
+# pj.applyFunctionToData(data, pj.staltaFirstBreak, 'staltaFirstBreak_5_30_0d75', ['voltage', 'time'], 5, 30, 0.75)
 
 # pj.absoluteSum
 # Returns the sum of the absolute values of an array. This value is directly proportional to the integral of the signal so
 #       it is a useful and fast to calculate metric for the intensity of a given signal
 # Inputs an array (voltage), outputs a single value
-# applyFunctionToData(data, pj.absoluteSum, 'absoluteSum', ['voltage'])
+# pj.applyFunctionToData(data, pj.absoluteSum, 'absoluteSum', ['voltage'])
 
+# pj.savgolFilter
+# Returns the result of applying a Savitzky-Golay filter to the data and optionally calculating a derivative
+# This is useful for smoothing noisy data and calculating derivatives for e.g. finding extrema
+# Inputs two arrays - y-data to be smoothed (i.e. 'voltage'), and x-data (used for calculating the derivative)
+#   Also has three optional auxiliary inputs - the window length (number of points used in each fitting process - higher numbers
+#       can give smoother signals with better S/N but can distort the signal), the polynomial order used for fitting (defaults to 3),
+#       and the order of derivative to calculate (must be less than polynomial order. Using derivOrder = 0 only applies smoothing)
+# Outputs an array of the same shape as the y-data containing the smoothed data or its derivatives
+# Example 1: smooth an input signal with window = 11, polyOrder = 3, and derivOder = 0
+# pj.applyFunctionToData(data, pj.savgolFilter, 'savgol_11_3_0', ['voltage', 'time'], 11, 3, 0)
+# Example 2: calculates the first derivative of the signal with window = 31 and polyOrder = 5
+# pj.applyFunctionToData(data, pj.savgolFilter, 'savgol_31_5_1', ['voltage', 'time'], 31, 5, 1)
+
+# pj.zeroCrossings
+# Returns the x-coordinates where a given set of y-coordinates cross zero (change sign)
+# This can be used to find the positions of extrema or inflection points in data in combination with the first or second derivative
+#       Has an optional auxiliary input linearInterp. If false, zeroCrossings returns the x-values before the y-value changes sign
+#       If linearInterp is set to True, zeroCrossings returns the x-values where a linear interpolation of the two points
+#           surrounding the sign change cross zero
+# Inputs two arrays - y-data and x-data and an auxiliary Boolean (defaults to False) for linearInterp
+# Example finds the extrema using the first derivative calculated from the example above using pj.savgolFilter
+# pj.applyFunctionToData(data, pj.zeroCrossings, 'extrema', ['savgol_31_5_1', 'time'], True)
