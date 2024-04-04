@@ -246,6 +246,38 @@ def applyFunctionToData(dataDict : dict, func : Callable, resKey, dataKeys, *fun
 
     return dataDict
 
+# Applies multiple functions to a data set. This can be faster than calling applyFunctionToData multiple times because data only needs to be loaded once
+# takes a dataDict as well as an input called the funcDict, which is a list of dicts with information on the funcs to be applied
+#   funcDictList = [{'func': funcName, 'dataKeys' : ['list of data keys to input'], 'resKey' : 'name of key to store func result', 'funcArgs' : [optional key with additional arguments in order]},...]
+#   As an example here's a funcDictList to apply absoluteSum and staltaFirstBreak:
+#   [{'func' : pj.absoluteSum, 'dataKeys' : ['voltage'], 'resKey' : 'absSum'}, {'func': pj.staltaFirstBreak, 'dataKeys' : ['voltage', 'time'], 'resKey' : 'stalta_5_30_0d75', 'funcArgs' : [5,30,0.75]}]
+# Applies the functions to the data and then returns the new dataDict
+def applyFunctionsToData(dataDict : dict, funcDictList : list):
+
+    # iterate through keys in datadict
+    for key in dataDict:
+
+        # check that the key is a data set, not parameters or fileName
+        if type(key) == int:
+
+            # iterate through functions in funcDictList
+            for funcDict in funcDictList:
+
+                # format the dataKeys to an iterable input
+                funcInputs = [dataDict[key][dataKey] for dataKey in funcDict['dataKeys']]
+
+                # calculate the value of func. Split depending on whether additional inputs are needed
+                if 'funcArgs' in funcDict.keys():
+                    dataDict[key][funcDict['resKey']] = funcDict['func'](*funcInputs, *funcDict['funcArgs'])
+
+                else:
+                    dataDict[key][funcDict['resKey']] = funcDict['func'](*funcInputs)
+
+    #repickle data
+    savePickle(dataDict)
+
+    return dataDict
+
 # Apply a function to a list of files
 def applyFunctionToPickles(fileNames : list,  func : Callable, resKey, dataKeys, *funcArgs):
 
@@ -255,6 +287,15 @@ def applyFunctionToPickles(fileNames : list,  func : Callable, resKey, dataKeys,
         dataDict = loadPickle(file)
         applyFunctionToData(dataDict, func, resKey, dataKeys, *funcArgs)
 
+# same as above, but uses applyFunctionsToData and takes a funcDictList as input
+def applyFunctionsToPickles(fileNames : list, funcDictList : list):
+
+    for i in tqdm(range(len(fileNames))):
+
+        file = fileNames[i]
+        dataDict = loadPickle(file)
+        applyFunctionsToData(dataDict, funcDictList)
+
 # Apply a function to all of the .pickles in a directory
 def applyFunctionToDir(dirName : str, func : Callable, resKey, dataKeys, *funcArgs):
 
@@ -262,18 +303,12 @@ def applyFunctionToDir(dirName : str, func : Callable, resKey, dataKeys, *funcAr
 
     applyFunctionToPickles(fileNames, func, resKey, dataKeys, *funcArgs)
 
-# Assemble a '4D' dataDict of a multi scan experiment with the data at each coordinate / collection_index collected into an array
-#   NOTE: data is not going to be in load order, not time order. Time ordering can only be achieved by index matching to 'time_collected'
-#   NOTE: for long multi scans this could result in a very large file size
-#   This function is not implemented yet because it would probably use up all of my RA<
-# def assembleScanAcrossTime():
-#     return 0
+# same as above, but for multiple functions using the funcDictList format
+def applyFunctionsToDir(dirName : str, funcDictList : list):
 
-# apply function to keys
+    fileNames = listFilesInDirectory(dirName)
 
-# apply function to pickles
-
-# apply function to pickles in directory
+    applyFunctionsToPickles(fileNames, funcDictList)
 
 # normalize data across pickles in directory to the value at the first scan
 # inputs a directory with pickles in it (the first scan will be identified automatically)
@@ -368,6 +403,57 @@ def zeroCrossings(yDat, xDat, linearInterp = False):
 
     else:
         return np.array([xDat[i] for i in zeroCrossingIndices])
+
+# Similar to zeroCrossings, listExtrema takes y-values of a function, y-values of its derivative, and the x-values and returns
+# an 2 x number of extrema array that correspond to the extrema of the function (i.e. the (x, y) values where the derivative crosses zero)
+# inputs the yData array (i.e. 'voltage'), derivative of yData (i.e. 'savgol_1'), and the x-data ('time')
+# returns an array of coordinates
+def listExtrema(yDat, deriv, xDat):
+
+    # find the indices where zero crossing occurs
+    # implementation taken from https://stackoverflow.com/questions/3843017/efficiently-detect-sign-changes-in-python
+    zeroCrossingIndices = np.where(np.diff(np.signbit(deriv)))[0]
+
+    extremaList = []
+    for i in zeroCrossingIndices:
+        extremaList.append([xDat[i], yDat[i]])
+
+    return np.array(extremaList)
+
+# Calculate the time of flight for a signal by calculating the Hilbert envelope and returning the time value where it reaches
+# a certain fraction of its max value
+# Inputs y-data of the signal ('voltage'), x-data ('time') and the fraction of maximum for the threshold (number in (0,1))
+# Returns the time of flight
+def envelopeThresholdTOF(yDat, xDat, threshold = 0.5):
+
+    if len(yDat) != len(xDat):
+        print("envelopeThresholdTOF Error: x- and y- data must be the same length. Check that the correct keys are being used.")
+        return -1
+
+    if threshold <=0 or threshold >=1:
+        print("envelopeThresholdTOF Error: input threshold is out of bounds. Threshold must be >0 and <1.")
+        return -1
+
+    envelope = hilbertEnvelope(yDat)
+
+    # Calculate the actual value of the threshold
+    thresholdValue = threshold * bn.nanmax(envelope)
+
+    firstBreakIndex = firstIndexAboveThreshold(envelope, thresholdValue)
+
+    return xDat[firstBreakIndex]
+
+# Calculates the hilbert envelope of an input signal by taking the absolute value of the hilbert transform
+def hilbertEnvelope(array):
+
+    return np.abs(scipy.signal.hilbert(array))
+
+# helper function that returns the index of the first value in the input array that exceeds a given threshold
+# Used to pick first break data
+def firstIndexAboveThreshold(array, threshold):
+
+    # array > threshold converts array to booleans, argmax then returns index of first True
+    return np.argmax(array > threshold)
 
 # Calculate the time of the first break using STA/LTA algorithm
 # Inputs the voltage and time arrays, the length (in number of elements, NOT time) of the short and long averaging window,
@@ -844,4 +930,49 @@ def plotScanDataAtCoorsVsTime(dirName : str, dataKey : str, coors : list, normal
         plt.scatter(timeDat, dataDict[coor][dataKey], label = str(coor))
 
     plt.legend()
+    plt.show()
+
+# Plot a data key that contains a list of coordinates and plot it vs another data key
+#   Plots will be color-mapped scatters, with the x-coordinate being the single data key, y-coorindates being the x-coors of the list
+#   and colormapping is the y-coors in the list
+# Used to plot the evolution of waveform extrema over time. Not sure this is actually valuable, but it will at least look cool
+# Inputs: str directory of the multiscan data, a 2-tuple coordinate to take the data from, the key of the coordinate data, and the key of the single value
+#   Also takes an optional input for the colormap normalization scal. Defaults to linear but log or symlog may also be useful
+# Most common usage would be coorKey = 'extrema_coors' (from listExtrema)and dataKey = 'time_collected'
+def plotXYListVsTimeAtCoor(dir, coor, coorKey, dataKey, mapNorm = 'linear'):
+
+    # implementing this manually rather than using dataFromCoor functions because coorList could be a ragged array that doesn't stack
+    files = listFilesInDirectory(dir)
+
+    # goal is to gather the three pieces of data (coorListx, coorListy, data) into 3 index matched arrays to be plot all at once
+    xdat = np.array([])
+    ydat = np.array([])
+    cdat = np.array([])
+
+    # iterate through files
+    for i in tqdm(range(len(files))):
+
+        # load pickle
+        dataDict = loadPickle(files[i])
+
+        # find index of coordinate
+        coorIndex = coordinatesToCollectionIndex(dataDict, [coor])[0]
+
+        # grab coorList and dataKey
+        coorList = dataDict[coorIndex][coorKey]
+        dataPoint = dataDict[coorIndex][dataKey]
+
+        # append data to the appropriate places. dataKey must be expanded using np.fill to index match to the coordinate data
+        xdat = np.concatenate((xdat, np.full(len(coorList), dataPoint)), axis = None)
+        ydat = np.concatenate((ydat, np.transpose(coorList)[0]), axis = None)
+        cdat = np.concatenate((cdat, np.transpose(coorList)[1]), axis = None)
+
+    # if the dataKey is 'time_collected', turn the time to a common baseline and convert to hours
+    if dataKey == 'time_collected':
+        minTime = np.min(xdat)
+        xdat = (xdat - minTime) / 3600
+
+    # now we have three long index matched arrays that can be directly plotted
+    plt.scatter(xdat, ydat, c = cdat, norm = mapNorm, cmap = 'viridis')
+    plt.colorbar()
     plt.show()

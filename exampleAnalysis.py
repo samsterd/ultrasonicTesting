@@ -257,3 +257,11 @@ pj.plotScanDataAtCoorsVsTime(dirName, 'max', coordinatesToPlot, normalized = Tru
 # Inputs two arrays - y-data and x-data and an auxiliary Boolean (defaults to False) for linearInterp
 # Example finds the extrema using the first derivative calculated from the example above using pj.savgolFilter
 # pj.applyFunctionToData(data, pj.zeroCrossings, 'extrema', ['savgol_31_5_1', 'time'], True)
+
+# pj.listExtrema
+# Returns a list of the (x,y) coordinates of the extrema of an input function
+# Inputs three arrays : y-data of the function, the derivative of the function, and the x-data for both
+# The example below outputs the extrema of a waveform using the Savitzky-Golay derivative calculated in a previous example
+# pj.applyFunctionToData(data, pj.listExtrema, 'extrema_coors', ['voltage', 'savgol_31_5_1', 'time'])
+# A further note on listExtrema: the change of these coordinates over time can be plotted using the function plotXYListVsTimeAtCoor
+# pj.plotXYListVsTimeAtCoor(multiScanDirectory, (0,0), 'extrema_coors', 'time_collected')
