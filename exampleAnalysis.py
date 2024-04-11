@@ -62,13 +62,14 @@ data = pj.applyFunctionToData(data, np.max, 'max', ['voltage'])
 #   to determine what counts as the wave breaking)
 # In the example below, we apply the STA/LTA algorithm using a short window of 5, a long window of 30, and a threshold of 0.75
 #   NOTE: the order that dataKeys and extra *funcargs are input matters! They must follow the input specified where the function is defined
-data = pj.applyFunctionToData(data, pj.staltaFirstBreak, 'STA/LTA_fb', ['voltage', 'time'], 5, 30, 0.75)
+#   NOTE: the extra parameters are not saved anywhere. It is good practice to include them in the resKey for record keeping
+data = pj.applyFunctionToData(data, pj.staltaFirstBreak, 'STA/LTA_5_30_0d75', ['voltage', 'time'], 5, 30, 0.75)
 
 # If you have several scans you want to analyze at once, use the function pj.applyFunctionToPickles using a list of filenames
 # Other than inputting a list of filenames rather than a single dict, this function follows the same input pattern
 fileToAnalyze0 = "C://Users//shams//Drexel University//Chang Lab - General//Individual//Sam Amsterdam//ultrasonic example data//sa_1_2b_1MLiDFOB_wetting_1.sqlite3"
 fileToAnalyze1 = "C://Users//shams//Drexel University//Chang Lab - General//Individual//Sam Amsterdam//ultrasonic example data//sa_1_2b_1MLiDFOB_wetting_2.sqlite3"
-# convert sqlite3 to pickle. Note that if the pickle already exists, the conversion will not occur
+# convert sqlite3 to pickle. Note that if the pickle already exists, a warning message is printed and the conversion will not occur
 pj.multiSqliteToPickle([fileToAnalyze0, fileToAnalyze1])
 # Note that applyFunctionToPickles will overwrite the result key if it already exists
 # In this example, os.path.splitext()[0] + '.pickle' is used to remove the .sqlite3 from the filename and add the .pickle extension
@@ -116,7 +117,7 @@ pj.plotScan(data, 'max', colorRange = [None, 100])
 # plotScan also has optional arguments to skip showing the plot and save the figure
 # these arguments are: save (True or False), fileName (if this is not provided, a reasonable default is assigned)
 # saveFormat (format to save the file, if fileName is not specified. defaults to .png), and show (True or False)
-# The example below creates the same figure as above, but instead of showing it saves it as the default filename:
+# The example below creates the same figure as above, but instead of showing, the plot is saved as the default filename:
 # data['fileName']_max.png . The figure will not be shown but the file will be saved in the directory of the data
 pj.plotScan(data, 'max', colorRange = [None, 100], save = True, show = False)
 
@@ -127,7 +128,7 @@ coordinatesToPlot = [(0,0), (5, -10), (3, -1.5)]
 pj.plotScanWaveforms(data, coordinatesToPlot)
 
 # Also note that plotScanWaveforms has an optional arguments xDat and yDat which specify the key used to gather the x- and y- data
-# This flexibility allows you to plot any transforms you may have made as well
+# This flexibility allows you to plot any transforms you may have made
 # for example, we can plot the fft we calculated in the last section
 pj.plotScanWaveforms(data, coordinatesToPlot, xDat = 'fft_freq', yDat = 'abs_fft')
 

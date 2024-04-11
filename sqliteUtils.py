@@ -711,6 +711,7 @@ def plotRepeatPulseData(cursor, xCol : str, yCol : str, table = 'acoustics'):
 #     plt.show()
 
 
+
 # Plots the waveform at a specific single pixel
 def plotPixelWaveform(cursor, primaryCoor, secondaryCoor, primaryAxis = 'X', secondaryAxis = 'Z', xCol = 'time', yCol = 'voltage', table = 'acoustics'):
 
@@ -761,6 +762,25 @@ def plotPixelsWaveform(cursor, primaryCoors : list, secondaryCoors : list, prima
         plt.ylabel("Voltage (V)")
 
     plt.legend()
+    plt.show()
+
+# Plots waveforms from repeatPulse experiments a single colormapped stack
+def plotRepeatWaveforms(cursor, xCol='time', yCol='voltage', colorCol = 'time_collected', table='acoustics'):
+
+    # gather the data
+    xData = fetchData(cursor, xCol, table)
+    yData = fetchData(cursor, yCol, table)
+    cData = fetchData(cursor, colorCol, table)
+
+    # shift the color data so it is zero-referenced and then normalize it for color mapping
+    minTime = np.min(cData)
+    cDatZero = (cData - minTime) / 3600
+    maxTime = np.max(cDatZero)
+    normDat = cDatZero/maxTime
+
+    for i in range(len(cData)):
+        plt.plot(xData[i], yData[i], c = cmp['viridis'](normDat[i]))
+
     plt.show()
 
 # Plots the waveform at a specific single pixel
