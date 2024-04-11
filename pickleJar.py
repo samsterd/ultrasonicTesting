@@ -36,6 +36,7 @@ import numpy as np
 import os
 import bottleneck as bn
 import scipy.signal
+import math
 
 # Functions needed:
 # implement as a class!
@@ -130,6 +131,7 @@ def sqliteToPickle(file : str):
 def multiSqliteToPickle(files : list):
 
     for file in files:
+        print("\nConverting " + file + "\n")
         sqliteToPickle(file)
 
 # Convert all sqlite DBs in a directory to pickles
@@ -674,12 +676,12 @@ def coordinatesToCollectionIndex(dataDict, coordinates):
         # Raise warnings if rounding
         if (x % xs != 0):
             print('coordinatesToCollectionIndex: primary coordinate ' + str(
-                x) + 'is not a multiple of the primary step. Rounding coordinate.')
+                x) + ' is not a multiple of the primary step. Rounding coordinate.')
 
         z = coordinates[i][1]
         if (z % zs != 0):
             print('coordinatesToCollectionIndex: secondary coordinate ' + str(
-                z) + 'is not a multiple of the secondary step. Rounding coordinate.')
+                z) + ' is not a multiple of the secondary step. Rounding coordinate.')
 
         index = (n * (z / zs)) + (x / xs)
 
@@ -767,12 +769,93 @@ def multiScanDataAtPixels(fileNames : list, dataKeys : list, coordinates : list)
 
     return masterDict
 
+
 # Runs multiScanDataAtPixels on all pickle files in a directory
 # NOTE: data will be returned in load order, not time order. It will be index matched to time, if that is imported
 def directoryScanDataAtPixels(dirName : str, dataKeys : list, coordinates : list):
 
     files = listFilesInDirectory(dirName)
     return multiScanDataAtPixels(files, dataKeys, coordinates)
+
+# function to fetch all of the data within a defined rectangle and calculate the mean, sum, and standard deviation of its values.
+# returns a dict of the values and the sum, mean, and standard deviation of the values of datakeys
+# returns as a dict of dicts: {dataKey0 : {data : all values, mean : val, sum : val, std : val}, dataKey1 : {array :..., mean :...},...}
+# Useful to get the overall behavior of ultrasound parameters in the area of a battery
+# takes the datadict from loading the pickle, a list of data keys to analyze, the coordinates of the two corners defining the
+# box as 2-tuples, and the steps / intervals in both coordinates
+# returns the dict of dataKeys analyzed within the box
+def scanAverageDataInBox(dataDict: str, dataKeys : list, topLeft, bottomRight, steps):
+
+    # generate a list of coordinates
+    # First calculate the number of coordinates in the box on each axis, i.e. the number of steps
+    # Add 1 to make the edges inclusive. Use math.floor to ensure the result is an int, not a float
+    xSteps = math.floor(((bottomRight[0] - topLeft[0]) / steps[0]) + 1)
+    ySteps = math.floor(((bottomRight[1] - topLeft[1]) / steps[1]) + 1)
+
+    if xSteps <= 0:
+        print('scanAverageDataInBox: xSteps <= 0. Ensure that your coordinates and steps have the correct sign and alignment.')
+    if ySteps <= 0:
+        print('scanAverageDataInBox: ySteps <= 0. Ensure that your coordinates and steps have the correct sign and alignment.')
+
+    # generate a flat list of the X- and Y- vals that will be used
+    xVals = [topLeft[0] + (i * steps[0]) for i in range(xSteps)]
+    yVals = [topLeft[1] + (i * steps[1]) for i in range(ySteps)]
+
+    # Now generate a list of all possible coordinates from this list as 2-tuples
+    boxCoors = [(x, y) for x in xVals for y in yVals]
+
+    # pass the list of coordinates into scanDataAtPixels
+    pixelData = scanDataAtPixels(dataDict, dataKeys, boxCoors)
+
+    # initialize result dict
+    resultDict = {}
+
+    # iterate through dataKeys and results of scanDataAtPixels, calculate values and save
+    for dataKey in dataKeys:
+
+        resultDict[dataKey] = {}
+        data = []
+        # pixelData dict keys are the coordinates. Need to iterate through all coordinates and gather the values of dataKey
+        for key in pixelData:
+            data.append(pixelData[key][dataKey])
+        resultDict[dataKey]['data'] = np.array(data)
+        resultDict[dataKey]['mean'] = np.mean(data)
+        resultDict[dataKey]['sum'] = np.sum(data)
+        resultDict[dataKey]['std'] = np.std(data)
+
+    return resultDict
+
+# Same as above, but operating on multiple scans in a directory
+# Returns a dict of dicts with dataKeys as keys, with values as dicts with keys 'mean', 'sum', and 'std', and those values being
+#   index-matched arrays. The data will not always be in time order, but all data is index matched, so the same position in different dataKeys correspond
+#   to the same scan
+# result = { dataKey0 : {mean : [mean_dataKey0_scan0, mean_dataKey0_scan1,...], sum : [...], std : [...]}, dataKey1 : {mean : [...],...},... }
+# It is highly recommended to include 'time_collected' as one of the input data keys
+def multiScanAverageDataInBox(dir, dataKeys : list, topLeft, bottomRight, steps):
+
+    files = listFilesInDirectory(dir)
+
+    # initialize resultDict
+    resultDict = {}
+    for dataKey in dataKeys:
+        resultDict[dataKey] = {'mean' : [], 'sum' : [], 'std' : []}
+
+    # iterate through files
+    for i in tqdm(range(len(files))):
+
+        # load file
+        dataDict = loadPickle(files[i])
+
+        # gather data in box
+        dataInBox = scanAverageDataInBox(dataDict, dataKeys, topLeft, bottomRight, steps)
+
+        # append data into resultDict
+        for dataKey in dataKeys:
+            resultDict[dataKey]['mean'].append(dataInBox[dataKey]['mean'])
+            resultDict[dataKey]['sum'].append(dataInBox[dataKey]['sum'])
+            resultDict[dataKey]['std'].append(dataInBox[dataKey]['std'])
+
+    return resultDict
 
 
 ############################################################
@@ -975,4 +1058,38 @@ def plotXYListVsTimeAtCoor(dir, coor, coorKey, dataKey, mapNorm = 'linear'):
     # now we have three long index matched arrays that can be directly plotted
     plt.scatter(xdat, ydat, c = cdat, norm = mapNorm, cmap = 'viridis')
     plt.colorbar()
+    plt.show()
+
+# plots data returned by multiScanAverageDataInBox. Scatter plots the mean of the first dataKey as X and mean of second dataKey as Y
+# Booleans xErr and yErr will include the standard deviation in those parameters as error bars
+def plotDataInBox(dir, dataKeys, topLeft, bottomRight, steps, xErr = False, yErr = False):
+
+    dataInBox = multiScanAverageDataInBox(dir, dataKeys, topLeft, bottomRight, steps)
+
+    if xErr or yErr:
+        xErrList = dataInBox[dataKeys[0]]['std'] if xErr else None
+        yErrList = dataInBox[dataKeys[1]]['std'] if yErr else None
+        plt.errorbar(dataInBox[dataKeys[0]]['mean'], dataInBox[dataKeys[1]]['mean'], yerr = yErrList, xerr = xErrList, fmt = "o")
+
+    else:
+        plt.scatter(dataInBox[dataKeys[0]]['mean'], dataInBox[dataKeys[1]]['mean'])
+
+    plt.show()
+
+# same as plotDataInBox, but the x-axis is 'time_collected'. The x-axis is then formatted to be 0-referenced and converted to hours
+def plotDataInBoxVsTime(dir, dataKey, topLeft, bottomRight, steps, yErr = False):
+
+    dataInBox = multiScanAverageDataInBox(dir, ['time_collected', dataKey], topLeft, bottomRight, steps)
+
+    timeDat = np.array(dataInBox['time_collected']['mean'])
+    minTime = np.min(timeDat)
+    formattedTime = (timeDat - minTime) / 3600
+
+    if yErr:
+        yErrList = dataInBox[dataKey]['std']
+        plt.errorbar(formattedTime, dataInBox[dataKey]['mean'], yerr = yErrList, fmt = "o")
+
+    else:
+        plt.scatter(formattedTime, dataInBox[dataKey]['mean'])
+
     plt.show()
