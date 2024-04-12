@@ -38,20 +38,11 @@ import bottleneck as bn
 import scipy.signal
 import math
 
-# Functions needed:
-# implement as a class!
-#   no b/c we want to apply to functions across multiple dicts
-#   yes b/c we want to keep the filename as a property of the dict?
-#   compromise: fileName is always a top level key of the pickle/dataDict
-#       this isn't great - what if the pickle moves? should it be rewritten every time it is loaded?
-#   __init__() creates an empty dict?
-# pickleToSqlite - save analysis in human readable format
-# plotting functions
 
-tstFile = "C://Users//shams//Drexel University//Chang Lab - General//Individual//Sam Amsterdam//acoustic scan data//sa-1-2b wetting scan//sa_1_2b_1MLiDFOB_wetting_1.sqlite3"
-pickleFile = "C://Users//shams//Drexel University//Chang Lab - General//Individual//Sam Amsterdam//acoustic scan data//sa-1-2b wetting scan//sa_1_2b_1MLiDFOB_wetting_1.pickle"
+###########################################################################
+############## Saving, Loading, Manipulating Data##########################
+############################################################################
 
-#
 # Convert sqlite database
 # Inputs a filename with .sqlite3 extension
 # Creates a data dict and saves it as the same filename .pickle
@@ -360,205 +351,6 @@ def normalizeDataToFirstScan(dirName, keysToNormalize : list):
 
     return 0
 
-# Applies a Savitzky-Golay filter to the data and optionally takes its first or second derivative
-# Inputs the y-data ('voltage'), x-data ('time') along with 3 auxiliary parameters: the window length of filtering (defaults to 9),
-#       the order of polynomials used to fit (defaults to 3), and the derivative order (default to 0, must be less than polynomial order)
-# outputs the filtered data or its requested derivative. The output has the same shape as the input
-def savgolFilter(yDat, xDat, windowLength = 9, polyOrder = 3, derivOrder = 0):
-
-    # calculate the spacing of the xData
-    xDelta = xDat[1] - xDat[0]
-
-    return scipy.signal.savgol_filter(yDat, windowLength, polyOrder, derivOrder)
-
-# Finds the x-coordinates where a function changes sign (crosses zero)
-# This is useful for e.g. finding maxima by zero-crossings of the first derivative
-# Inputs the y- and x- data, as well as an optional input linearInterp, which determines the nature of the returned values
-#       if linearInterp = False, the function returns the values of the xData at the coordinate before the zero crossing occurs
-#       if linearInterp = True, the function performs a linear interpolation of the two coordinates surrounding the zero-crossing
-#           i.e. (x0, y0 > 0), (x1, y1 < 0), and returns the x-value where the interpolation equals 0
-# Returns an array of the x-coordinates where the y values crossed zero
-def zeroCrossings(yDat, xDat, linearInterp = False):
-
-    # find the indices where zero crossing occurs
-    # implementation taken from https://stackoverflow.com/questions/3843017/efficiently-detect-sign-changes-in-python
-    zeroCrossingIndices = np.where(np.diff(np.signbit(yDat)))[0]
-
-    if linearInterp:
-
-        xIntercepts = []
-
-        # iterate through indices, calculate x-intercept, and append to result list
-        for i in zeroCrossingIndices:
-
-            # gather data points surrounding the zero crossing and calculate x-intercept
-            # note that the index-finding algorithm does not count sign changes in the last data point, so we do not need to check
-            # for edge cases (that is, i < len(yDat) so we do not need to check that i + 1 is an acceptable list index)
-            x0 = xDat[i]
-            x1 = xDat[i+1]
-            y0 = yDat[i]
-            y1 = yDat[i+1]
-            xIntercept = (-1 * (y0 * (x0 - x1))/(y0-y1)) + x0
-            xIntercepts.append(xIntercept)
-
-        return np.array(xIntercepts)
-
-    else:
-        return np.array([xDat[i] for i in zeroCrossingIndices])
-
-# Similar to zeroCrossings, listExtrema takes y-values of a function, y-values of its derivative, and the x-values and returns
-# an 2 x number of extrema array that correspond to the extrema of the function (i.e. the (x, y) values where the derivative crosses zero)
-# inputs the yData array (i.e. 'voltage'), derivative of yData (i.e. 'savgol_1'), and the x-data ('time')
-# returns an array of coordinates
-def listExtrema(yDat, deriv, xDat):
-
-    # find the indices where zero crossing occurs
-    # implementation taken from https://stackoverflow.com/questions/3843017/efficiently-detect-sign-changes-in-python
-    zeroCrossingIndices = np.where(np.diff(np.signbit(deriv)))[0]
-
-    extremaList = []
-    for i in zeroCrossingIndices:
-        extremaList.append([xDat[i], yDat[i]])
-
-    return np.array(extremaList)
-
-# Calculate the time of flight for a signal by calculating the Hilbert envelope and returning the time value where it reaches
-# a certain fraction of its max value
-# Inputs y-data of the signal ('voltage'), x-data ('time') and the fraction of maximum for the threshold (number in (0,1))
-# Returns the time of flight
-def envelopeThresholdTOF(yDat, xDat, threshold = 0.5):
-
-    if len(yDat) != len(xDat):
-        print("envelopeThresholdTOF Error: x- and y- data must be the same length. Check that the correct keys are being used.")
-        return -1
-
-    if threshold <=0 or threshold >=1:
-        print("envelopeThresholdTOF Error: input threshold is out of bounds. Threshold must be >0 and <1.")
-        return -1
-
-    envelope = hilbertEnvelope(yDat)
-
-    # Calculate the actual value of the threshold
-    thresholdValue = threshold * bn.nanmax(envelope)
-
-    firstBreakIndex = firstIndexAboveThreshold(envelope, thresholdValue)
-
-    return xDat[firstBreakIndex]
-
-# Calculates the hilbert envelope of an input signal by taking the absolute value of the hilbert transform
-def hilbertEnvelope(array):
-
-    return np.abs(scipy.signal.hilbert(array))
-
-# helper function that returns the index of the first value in the input array that exceeds a given threshold
-# Used to pick first break data
-def firstIndexAboveThreshold(array, threshold):
-
-    # array > threshold converts array to booleans, argmax then returns index of first True
-    return np.argmax(array > threshold)
-
-# Calculate the time of the first break using STA/LTA algorithm
-# Inputs the voltage and time arrays, the length (in number of elements, NOT time) of the short and long averaging window,
-#   and tresholdRatio, a number in (0,1) that determines what fraction of the maximum STA/LTA counts as the first break
-def staltaFirstBreak(voltageData, timeData, shortWindow : int, longWindow : int, thresholdRatio = 0.75):
-
-    staltaArray = stalta(voltageData, shortWindow, longWindow)
-
-    threshold = thresholdRatio * bn.nanmax(staltaArray)
-
-    # Return time where first value in staltaArray is above threshold
-    for i in range(len(staltaArray)):
-        if staltaArray[i] > threshold:
-            return timeData[i]
-
-    # No value was found above threshold. Return -1
-    return -1
-
-# Calculate STA/LTA for a given short and long window
-# Windows are specified in number of elements (not time)
-# Returns an array of the same length as input. Values within longWindow-1 of the start of the array will be converted to NaNs
-# NOTE: windows are left-handed in this implementation
-def stalta(array, shortWindow, longWindow):
-    # Calculate square of array values
-    arrSquared = array ** 2
-
-    # Calculate moving averages with optimized code from bottleneck package
-    sta = bn.move_mean(arrSquared, shortWindow)
-    lta = bn.move_mean(arrSquared, longWindow)
-
-    return sta / lta
-
-# takes in a directory with multiscan data
-# creates a new voltage_baseline_corrected key and saves the data
-# This assumes that for each point in the scan at time tn, in reference to the point at t=0, there is a
-# multiplicative change to the intensity An that operates on the span of the wave (its maximum amplitude minus minimum amplitude)
-# as well as an additive baseline change due to electronics drift (Bn)
-# Our governing equations are then
-# (0) An(Max(0) - Min(0)) = Max(n) - Min(n) (definition of multiplicative An)
-# (0a) An = (Max(n) - Min(n)) / (Max(0) - Min(0))
-# (1) Max(n) = An * Max(0) + Bn
-# (2) Min(n) = An * Min(0) + Bn
-# Rearranging and solving for Bn gives:
-# Bn = Max(n) - Max(0) * An
-# This function finds the t=0 reference scan, then for every subsequent scan calculates and saves An, Bn, and voltage_baseline
-# This assumes that B0 = 0
-def baselineCorrectScans(dirName):
-
-    # find the first scan
-    print("Finding first scan...")
-    firstScan = findFirstScan(dirName)
-
-    print("\nChecking that max and max minus min are calculated for first scan...")
-    # check that max and max - min is calculated for the first scan. if not, calculate it
-    if 'max' not in firstScan[0].keys():
-        firstScan = applyFunctionToData(firstScan, bn.nanmax, 'max', ['voltage'])
-
-    if 'maxMinusMin' not in firstScan[0].keys():
-        firstScan = applyFunctionToData(firstScan, maxMinusMin, 'maxMinusMin', ['voltage'])
-
-    # gather file names
-    files = listFilesInDirectory(dirName)
-
-    print("\nCalculating attenuation coefficient (An) and baseline correction (Bn)...")
-    # iterate through scans
-    for i in tqdm(range(len(files))):
-
-        fileData = loadPickle(files[i])
-
-        # check that the max has been calculated. If not, calculate it
-        if 'max' not in fileData[0].keys():
-            fileData = applyFunctionToData(fileData, bn.nanmax, 'max', ['voltage'])
-
-        # check that max - min has been calculated. If not, calculate it
-        if 'maxMinusMin' not in fileData[0].keys():
-            fileData = applyFunctionToData(fileData, maxMinusMin, 'maxMinusMin', ['voltage'])
-
-        # iterate through coordinates and calculate An and Bn at every point
-        for index in fileData.keys():
-
-            if type(index) == int:
-                fileData[index]['An'] = fileData[index]['maxMinusMin'] / firstScan[index]['maxMinusMin']
-                fileData[index]['Bn'] = fileData[index]['max'] - (firstScan[index]['max'] * fileData[index]['An'])
-
-        # finally create the baseline-corrected voltage wave by subtracting voltages and Bn
-        applyFunctionToData(fileData, baselineCorrectVoltage, 'voltage_baseline', ['voltage', 'Bn'])
-
-# function for use in applyFunctionToData that calculates the maximum minus minimum value
-def maxMinusMin(voltages):
-
-    return bn.nanmax(voltages) - bn.nanmin(voltages)
-
-# returns the sum of the absolute value of an input array. This value is directly proportional to the integral of the signal
-def absoluteSum(voltages):
-
-    return np.sum(abs(voltages))
-
-
-def baselineCorrectVoltage(voltage, baseline):
-
-    return voltage - baseline
-
-# helper function to apply baseline correction to data
 
 # Helper function to find the first scan in a directory
 #   This is done based on the 'time_started' key in the 'parameters' dict
@@ -600,7 +392,6 @@ def listFilesInDirectory(dirName, ext = '.pickle'):
 
     return fileNames
 
-# implement baseline correct as a function
 
 # Determines the collection_index of each input coordinate for a given scan dataDict
 #   this is needed to efficiently retrieve the data for a given coordinate without searching through all of a dict's keys.
@@ -625,7 +416,6 @@ def listFilesInDirectory(dirName, ext = '.pickle'):
 # NOTE: the speed of this function relies on the number of coordinates in a scan being equal to len(dataDict.keys()) - 2 -
 #       a dataDict contains keys for each point + 'fileName' + 'parameters'. This assumption is key to this algorithm working fast
 #       if we need to sort keys to find the final coordinates the algorithm becomes O(nlogn) and we lose the speedup
-
 def coordinatesToCollectionIndex(dataDict, coordinates):
 
     # this assumes that the dataDict contains a key for each point + 'fileName' + 'parameters'
@@ -1093,3 +883,225 @@ def plotDataInBoxVsTime(dir, dataKey, topLeft, bottomRight, steps, yErr = False)
         plt.scatter(formattedTime, dataInBox[dataKey]['mean'])
 
     plt.show()
+
+
+##############################################################################3
+############ Analysis and Data Correction Functions ############################33
+################################################################################
+
+# function for use in applyFunctionToData that calculates the maximum minus minimum value
+def maxMinusMin(voltages):
+
+    return bn.nanmax(voltages) - bn.nanmin(voltages)
+
+# returns the sum of the absolute value of an input array. This value is directly proportional to the integral of the signal
+def absoluteSum(voltages):
+
+    return np.sum(abs(voltages))
+
+
+def baselineCorrectVoltage(voltage, baseline):
+
+    return voltage - baseline
+
+# Applies a Savitzky-Golay filter to the data and optionally takes its first or second derivative
+# Inputs the y-data ('voltage'), x-data ('time') along with 3 auxiliary parameters: the window length of filtering (defaults to 9),
+#       the order of polynomials used to fit (defaults to 3), and the derivative order (default to 0, must be less than polynomial order)
+# outputs the filtered data or its requested derivative. The output has the same shape as the input
+def savgolFilter(yDat, xDat, windowLength = 9, polyOrder = 3, derivOrder = 0):
+
+    # calculate the spacing of the xData
+    xDelta = xDat[1] - xDat[0]
+
+    return scipy.signal.savgol_filter(yDat, windowLength, polyOrder, derivOrder)
+
+# Finds the x-coordinates where a function changes sign (crosses zero)
+# This is useful for e.g. finding maxima by zero-crossings of the first derivative
+# Inputs the y- and x- data, as well as an optional input linearInterp, which determines the nature of the returned values
+#       if linearInterp = False, the function returns the values of the xData at the coordinate before the zero crossing occurs
+#       if linearInterp = True, the function performs a linear interpolation of the two coordinates surrounding the zero-crossing
+#           i.e. (x0, y0 > 0), (x1, y1 < 0), and returns the x-value where the interpolation equals 0
+# Returns an array of the x-coordinates where the y values crossed zero
+def zeroCrossings(yDat, xDat, linearInterp = False):
+
+    # find the indices where zero crossing occurs
+    # implementation taken from https://stackoverflow.com/questions/3843017/efficiently-detect-sign-changes-in-python
+    zeroCrossingIndices = np.where(np.diff(np.signbit(yDat)))[0]
+
+    if linearInterp:
+
+        xIntercepts = []
+
+        # iterate through indices, calculate x-intercept, and append to result list
+        for i in zeroCrossingIndices:
+
+            # gather data points surrounding the zero crossing and calculate x-intercept
+            # note that the index-finding algorithm does not count sign changes in the last data point, so we do not need to check
+            # for edge cases (that is, i < len(yDat) so we do not need to check that i + 1 is an acceptable list index)
+            x0 = xDat[i]
+            x1 = xDat[i+1]
+            y0 = yDat[i]
+            y1 = yDat[i+1]
+            xIntercept = (-1 * (y0 * (x0 - x1))/(y0-y1)) + x0
+            xIntercepts.append(xIntercept)
+
+        return np.array(xIntercepts)
+
+    else:
+        return np.array([xDat[i] for i in zeroCrossingIndices])
+
+# Similar to zeroCrossings, listExtrema takes y-values of a function, y-values of its derivative, and the x-values and returns
+# an 2 x number of extrema array that correspond to the extrema of the function (i.e. the (x, y) values where the derivative crosses zero)
+# inputs the yData array (i.e. 'voltage'), derivative of yData (i.e. 'savgol_1'), and the x-data ('time')
+# returns an array of coordinates
+def listExtrema(yDat, deriv, xDat):
+
+    # find the indices where zero crossing occurs
+    # implementation taken from https://stackoverflow.com/questions/3843017/efficiently-detect-sign-changes-in-python
+    zeroCrossingIndices = np.where(np.diff(np.signbit(deriv)))[0]
+
+    extremaList = []
+    for i in zeroCrossingIndices:
+        extremaList.append([xDat[i], yDat[i]])
+
+    return np.array(extremaList)
+
+# Calculate the time of flight for a signal by calculating the Hilbert envelope and returning the time value where it reaches
+# a certain fraction of its max value
+# Inputs y-data of the signal ('voltage'), x-data ('time') and the fraction of maximum for the threshold (number in (0,1))
+# Returns the time of flight
+def envelopeThresholdTOF(yDat, xDat, threshold = 0.5):
+
+    if len(yDat) != len(xDat):
+        print("envelopeThresholdTOF Error: x- and y- data must be the same length. Check that the correct keys are being used.")
+        return -1
+
+    if threshold <=0 or threshold >=1:
+        print("envelopeThresholdTOF Error: input threshold is out of bounds. Threshold must be >0 and <1.")
+        return -1
+
+    envelope = hilbertEnvelope(yDat)
+
+    # Calculate the actual value of the threshold
+    thresholdValue = threshold * bn.nanmax(envelope)
+
+    firstBreakIndex = firstIndexAboveThreshold(envelope, thresholdValue)
+
+    return xDat[firstBreakIndex]
+
+# Calculates the hilbert envelope of an input signal by taking the absolute value of the hilbert transform
+def hilbertEnvelope(array):
+
+    return np.abs(scipy.signal.hilbert(array))
+
+# helper function that returns the index of the first value in the input array that exceeds a given threshold
+# Used to pick first break data
+def firstIndexAboveThreshold(array, threshold):
+
+    # array > threshold converts array to booleans, argmax then returns index of first True
+    return np.argmax(array > threshold)
+
+# Calculate the time of the first break using STA/LTA algorithm
+# Inputs the voltage and time arrays, the length (in number of elements, NOT time) of the short and long averaging window,
+#   and tresholdRatio, a number in (0,1) that determines what fraction of the maximum STA/LTA counts as the first break
+def staltaFirstBreak(voltageData, timeData, shortWindow : int, longWindow : int, thresholdRatio = 0.75):
+
+    staltaArray = stalta(voltageData, shortWindow, longWindow)
+
+    threshold = thresholdRatio * bn.nanmax(staltaArray)
+
+    # Return time where first value in staltaArray is above threshold
+    for i in range(len(staltaArray)):
+        if staltaArray[i] > threshold:
+            return timeData[i]
+
+    # No value was found above threshold. Return -1
+    return -1
+
+# Calculate STA/LTA for a given short and long window
+# Windows are specified in number of elements (not time)
+# Returns an array of the same length as input. Values within longWindow-1 of the start of the array will be converted to NaNs
+# NOTE: windows are left-handed in this implementation
+def stalta(array, shortWindow, longWindow):
+    # Calculate square of array values
+    arrSquared = array ** 2
+
+    # Calculate moving averages with optimized code from bottleneck package
+    sta = bn.move_mean(arrSquared, shortWindow)
+    lta = bn.move_mean(arrSquared, longWindow)
+
+    return sta / lta
+
+# Simple baseline correction algorithm that assumes the start of the waveform should be zero
+#   NOTE: this is only correct if a conservative delay was chosen when running the experiment. If the signal wave starts
+#         quickly on waveforms, this algorithm will be very inaccurate
+# Inputs the voltage array to be baseline corrected as well as the number of data points in beginning to use for baseline correcting
+#  The algorithm takes the mean of the first startWindow number of voltages and then subtracts that number from all voltages
+#  making the voltage centered around 0V
+# Returns the baseline corrected voltages
+def baseLineCorrectByStartingValues(voltage, startWindow):
+
+    meanV = np.mean(voltage[0:startWindow])
+
+    return voltage - meanV
+
+########################################################################3
+############# Deprecated Code #########################################
+######################################################################
+
+# Old baseline correction algorithm that doesn't work well
+
+# takes in a directory with multiscan data
+# creates a new voltage_baseline_corrected key and saves the data
+# This assumes that for each point in the scan at time tn, in reference to the point at t=0, there is a
+# multiplicative change to the intensity An that operates on the span of the wave (its maximum amplitude minus minimum amplitude)
+# as well as an additive baseline change due to electronics drift (Bn)
+# Our governing equations are then
+# (0) An(Max(0) - Min(0)) = Max(n) - Min(n) (definition of multiplicative An)
+# (0a) An = (Max(n) - Min(n)) / (Max(0) - Min(0))
+# (1) Max(n) = An * Max(0) + Bn
+# (2) Min(n) = An * Min(0) + Bn
+# Rearranging and solving for Bn gives:
+# Bn = Max(n) - Max(0) * An
+# This function finds the t=0 reference scan, then for every subsequent scan calculates and saves An, Bn, and voltage_baseline
+# This assumes that B0 = 0
+# def baselineCorrectScans(dirName):
+#
+#     # find the first scan
+#     print("Finding first scan...")
+#     firstScan = findFirstScan(dirName)
+#
+#     print("\nChecking that max and max minus min are calculated for first scan...")
+#     # check that max and max - min is calculated for the first scan. if not, calculate it
+#     if 'max' not in firstScan[0].keys():
+#         firstScan = applyFunctionToData(firstScan, bn.nanmax, 'max', ['voltage'])
+#
+#     if 'maxMinusMin' not in firstScan[0].keys():
+#         firstScan = applyFunctionToData(firstScan, maxMinusMin, 'maxMinusMin', ['voltage'])
+#
+#     # gather file names
+#     files = listFilesInDirectory(dirName)
+#
+#     print("\nCalculating attenuation coefficient (An) and baseline correction (Bn)...")
+#     # iterate through scans
+#     for i in tqdm(range(len(files))):
+#
+#         fileData = loadPickle(files[i])
+#
+#         # check that the max has been calculated. If not, calculate it
+#         if 'max' not in fileData[0].keys():
+#             fileData = applyFunctionToData(fileData, bn.nanmax, 'max', ['voltage'])
+#
+#         # check that max - min has been calculated. If not, calculate it
+#         if 'maxMinusMin' not in fileData[0].keys():
+#             fileData = applyFunctionToData(fileData, maxMinusMin, 'maxMinusMin', ['voltage'])
+#
+#         # iterate through coordinates and calculate An and Bn at every point
+#         for index in fileData.keys():
+#
+#             if type(index) == int:
+#                 fileData[index]['An'] = fileData[index]['maxMinusMin'] / firstScan[index]['maxMinusMin']
+#                 fileData[index]['Bn'] = fileData[index]['max'] - (firstScan[index]['max'] * fileData[index]['An'])
+#
+#         # finally create the baseline-corrected voltage wave by subtracting voltages and Bn
+#         applyFunctionToData(fileData, baselineCorrectVoltage, 'voltage_baseline', ['voltage', 'Bn'])
