@@ -45,6 +45,9 @@ experimentParams = {
     'measureDelay' : 13.5,                           # Approx delay after trigger to start measuring, in us
     'voltageRange' : 0.1,                            # Picoscope voltage range in V. Note this is the total : 1 V = [-0.5 V, 0.5 V]
                                                      # Allowed voltages = (0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20
+    'voltageAutoRange' : False,                      # Set the oscilloscope to rerun measurements where the voltage range of the wave has significantly changed
+                                                     # This enables the tightest possible voltageRange to be used, increasing the accuracy of low intensity signals without cutting off high intensity ones
+                                                     # NOTE: this can add significant overhead (2-3x increase in collection time) for each waveform where the range changes
     'waves' : 1000,                                  # Number of waves to collect and average
     'samples': 500,                                  # Number of data points per wave
     'halfCycles' : 16,                               # Tone burst pulser only. Number of half-cycles in a tone burst pulse

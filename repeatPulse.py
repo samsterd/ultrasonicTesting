@@ -1,6 +1,7 @@
 import json
 import picosdkRapidblockPulse as pico
 import ultratekPulser as utp
+from scanSetupFunctions import voltageRangeFinder
 import time
 import tqdm
 import matplotlib
@@ -57,7 +58,10 @@ def repeatPulse(params):
         pulseStartTime = time.time()
 
         # collect data
-        waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
+        if params['voltageAutoRange']:
+            waveform, params = voltageRangeFinder(picoConnection, params)
+        else:
+            waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
 
         # Make a data dict for saving
         waveData = {}
@@ -68,6 +72,8 @@ def repeatPulse(params):
         waveData['time_collected'] = time.time()
         waveData['collection_index'] = collectionIndex
         collectionIndex += 1
+        if params['voltageAutoRange']:
+            waveData['voltageRange'] = params['voltageRange']
 
         # save data as sqlite database
         if params['saveFormat'] == 'sqlite':
