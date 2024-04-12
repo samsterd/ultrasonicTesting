@@ -18,7 +18,7 @@ experimentParams = {
     # What do you want to do?
     #'move' = move the transducers
     #'single pulse' = perform a single test pulse
-    #'repeat pulse' = repeat a pulse at a single location for a certain time at a certain frequency
+    #'repeat pulse' = repeat a pulse at a single location for a given time and frequency
     #'single scan' = perform a single 2D scan
     #'multi scan' = repeat a 2D scan with a set frequency
     #Once you have selected, fill out the values in the parameter list in the correct section
@@ -38,13 +38,13 @@ experimentParams = {
     #### Applies to 'single pulse', 'single scan', and 'multi scan' experiments #####
     #################################################################################
 
-    'transducerFrequency' : 2.25,                    # Central frequency of the ultrasonic transducer, in MHz
+    'transducerFrequency' : 2.25,                    # Central frequency of the ultrasonic transducer, in MHz. Current options are 2.25 or 50
     'pulserType' : 'standard',                       # Type of pulser. 'standard' is the single wave CompactPulser. 'tone burst' uses the USBUT350 tone burst pulser
     'measureTime' : 1,                               # Approx measurement time, in us. Note this can be changed by the picoscope time interval based on samples
                                                      #      Changes to the measureTime will be printed in the console when the script is run
     'measureDelay' : 13.5,                           # Approx delay after trigger to start measuring, in us
-    'voltageRange' : 0.1,                            # Picoscope voltage range in V. Note this is the total : 1 V = [-0.5 V, 0.5 V]
-                                                     # Allowed voltages = (0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20
+    'voltageRange' : 0.1,                            # Picoscope voltage range in V. Note this is the total range: 1 V = [-0.5 V, 0.5 V]
+                                                     # Allowed voltages = (0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20)
     'voltageAutoRange' : False,                      # Set the oscilloscope to rerun measurements where the voltage range of the wave has significantly changed
                                                      # This enables the tightest possible voltageRange to be used, increasing the accuracy of low intensity signals without cutting off high intensity ones
                                                      # NOTE: this can add significant overhead (2-3x increase in collection time) for each waveform where the range changes
@@ -58,11 +58,11 @@ experimentParams = {
     ################################################################################
 
     'experimentFolder': 'data',                     # Name of folder to dump data
-    'experimentName' : 'testdb01',                 # File name for single scan and repeat pulse experiment. Will be appended with .json
+    'experimentName' : 'testdb01',                  # File name for single scan and repeat pulse experiment. Will be appended with .json or .sqlite3
     'experimentBaseName' : 'test_multiscan_data',   # Base filename for multi scan experiment, which will have the scan # appended to it
-    'saveFormat' : 'sqlite',                        # Format to save data. Options are sqlite or json. Sqlite is recommended
-    'pickleData' : True,                            # An alternate saving format which saves the data as a python dict. Adds ~10s overhead per scan
-                                                    # This is only possible currently when the saveFormat = 'sqlite' and is in addition (not replacing) the sqlite file
+    'saveFormat' : 'sqlite',                        # Format to save data. Options are sqlite or json. Sqlite is highly recommended
+    'pickleData' : True,                            # An alternate saving format which saves the data as a python dict. Adds ~5 ms overhead per waveform, or ~10 s per scan
+                                                    # Note: This is only supported for saveFormat = 'sqlite' and is in addition to (not replacing) the sqlite file
 
     ################################################################################
     ####################### Scan Parameters ########################################
@@ -102,6 +102,7 @@ experimentParams = {
 ##########################################################################################
 ##########################################################################################
 ####################### END OF USER INPUT ################################################
+################# DO NOT CHANGE BELOW THIS LINE ##########################################
 ##########################################################################################
 ##########################################################################################
 
