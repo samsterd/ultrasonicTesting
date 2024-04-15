@@ -59,6 +59,7 @@ def singlePulseMeasure(params):
     plt.xlabel('Time (us)')
     plt.ylabel('Voltage (mV)')
     plt.show()
+    print("I made some changes")
 
 # Helper function to connect and move the Ender
 # Inputs: instrumentPorts dict, the axis to move, and the distance
