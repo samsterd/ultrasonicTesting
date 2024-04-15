@@ -83,9 +83,8 @@ def voltageRangeFinder(picoConnection, params):
     # hardcoded voltage limits
     voltageLimits = np.array([0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20])
 
-    # hardcoded tolerance limit - change limit if max is within 25% of a limit
-    # NOTE: this weirdly high tolerance is due to an oscilloscope bug - at voltageRange = 0.5, it cuts off signals at +/- 0.2, not 0.25
-    tolerance = 0.75
+    # hardcoded tolerance limit - change limit if max is within 5%
+    tolerance = 0.95
     voltageTolerances = tolerance * voltageLimits
 
     currentLimit = params['voltageRange']
@@ -94,11 +93,8 @@ def voltageRangeFinder(picoConnection, params):
     # collect initial waveform
     waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
 
-    # find max of the waveform
-    # multiply by 2 to make it directly comparable to the ranges
-    # NOTE that the actual limits are +/- 0.5*voltageRange (i.e. range of 1V is -0.5V to 0.5 V)
-    # also divided by 1000 to convert from mV to V
-    maxV = (2 * np.max(abs(waveform[0])))/1000
+    # find max of the waveform, divide by 1000 to convert to V
+    maxV = np.max(abs(waveform[0]))/1000
 
     # base case 1 : currentLimit == lowest limit and max < current limit. return waveform
     if currentLimit == voltageLimits[0] and maxV < currentLimit:

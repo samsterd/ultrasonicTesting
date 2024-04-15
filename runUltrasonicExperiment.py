@@ -23,7 +23,7 @@ experimentParams = {
     #'multi scan' = repeat a 2D scan with a set frequency
     #Once you have selected, fill out the values in the parameter list in the correct section
     #NOTE: ONLY CHANGE THE VALUES AFTER THE COLON ON EACH LINE
-    'experiment' : 'repeat pulse',
+    'experiment' : 'move',
 
     #####################################################################
     ################# 'move' parameters #################################
