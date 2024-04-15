@@ -15,10 +15,10 @@ def repeatPulse(params):
 
     # Connect to picoscope, ender, pulser
     picoConnection = pico.openPicoscope()
-    pulser = utp.Pulser(params['pulserType'], params['pulserPort'], params['dllFile'])
+    pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
 
     # generate filename for current scan
-    params['fileName'] =  params['experimentFolder'] + params['experimentName']
+    scanFileName = params['experimentFolder'] + params['experimentName']
 
     # if saveFormat is sqlite, initialize the database
     if params['saveFormat'] == 'sqlite':
@@ -72,9 +72,8 @@ def repeatPulse(params):
         waveData['time_collected'] = time.time()
         waveData['collection_index'] = collectionIndex
         collectionIndex += 1
-        # NOTE: not currently recording voltageRange because table is not properly initialized yet
-        # if params['voltageAutoRange']:
-        #     waveData['voltageRange'] = params['voltageRange']
+        if params['voltageAutoRange']:
+            waveData['voltageRange'] = params['voltageRange']
 
         # save data as sqlite database
         if params['saveFormat'] == 'sqlite':
@@ -111,4 +110,4 @@ def repeatPulse(params):
     pico.closePicoscope(picoConnection)
 
     if params['saveFormat'] == 'sqlite' and params['pickleData']:
-        pj.sqliteToPickle(params['fileName'] + '.sqlite3')
+        pj.sqliteToPickle(scanFileName + '.sqlite3')

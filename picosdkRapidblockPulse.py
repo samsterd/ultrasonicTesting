@@ -13,8 +13,6 @@
 import ctypes
 from picosdk.ps2000a import ps2000a as ps
 import numpy as np
-import matplotlib
-matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import time
 import math
