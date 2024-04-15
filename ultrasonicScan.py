@@ -90,8 +90,9 @@ def runScan(params):
             pixelData[jKey] = jLoc
 
             #if voltage auto range is on, record the voltage range for this pixel
-            if params['voltageAutoRange']:
-                pixelData['voltageRange'] = params['voltageRange']
+            #CURRENTLY NOT SUPPORTED
+            # if params['voltageAutoRange']:
+            #     pixelData['voltageRange'] = params['voltageRange']
 
             # save data as sqlite database
             if params['saveFormat'] == 'sqlite':

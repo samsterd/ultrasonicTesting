@@ -7,6 +7,8 @@
 import picosdkRapidblockPulse as pico
 import ultratekPulser as utp
 import enderControl as ender
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
 import time
@@ -81,17 +83,22 @@ def voltageRangeFinder(picoConnection, params):
     # hardcoded voltage limits
     voltageLimits = np.array([0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20])
 
-    # hardcoded tolerance limit - change limit if max is within 5% of a limit
-    voltageTolerances = 0.95 * voltageLimits
+    # hardcoded tolerance limit - change limit if max is within 25% of a limit
+    # NOTE: this weirdly high tolerance is due to an oscilloscope bug - at voltageRange = 0.5, it cuts off signals at +/- 0.2, not 0.25
+    tolerance = 0.75
+    voltageTolerances = tolerance * voltageLimits
 
     currentLimit = params['voltageRange']
-    currentTolerance = 0.95 * currentLimit
+    currentTolerance = tolerance * currentLimit
 
     # collect initial waveform
     waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
 
     # find max of the waveform
-    maxV = np.max(waveform[0])
+    # multiply by 2 to make it directly comparable to the ranges
+    # NOTE that the actual limits are +/- 0.5*voltageRange (i.e. range of 1V is -0.5V to 0.5 V)
+    # also divided by 1000 to convert from mV to V
+    maxV = (2 * np.max(abs(waveform[0])))/1000
 
     # base case 1 : currentLimit == lowest limit and max < current limit. return waveform
     if currentLimit == voltageLimits[0] and maxV < currentLimit:
@@ -138,4 +145,9 @@ def voltageRangeFinder(picoConnection, params):
         # move to the next higher voltage limit and try again
         else:
             params['voltageRange'] = voltageLimits[rangeIndex + 1]
+            picoConnection = pico.setupPicoMeasurement(picoConnection,
+                                                       params['measureDelay'],
+                                                       params['voltageRange'],
+                                                       params['samples'],
+                                                       params['measureTime'])
             return voltageRangeFinder(picoConnection, params)
