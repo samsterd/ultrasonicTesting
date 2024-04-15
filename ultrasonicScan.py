@@ -3,6 +3,7 @@
 import picosdkRapidblockPulse as pico
 import ultratekPulser as utp
 import enderControl as ender
+from scanSetupFunctions import voltageRangeFinder
 import math
 import time
 import json
@@ -58,8 +59,12 @@ def runScan(params):
 
         for j in range(primaryAxisSteps):
 
+
             #collect data
-            waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
+            if params['voltageAutoRange']:
+                waveform, params = voltageRangeFinder(picoConnection, params)
+            else:
+                waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
 
             #Make a data dict for saving
             pixelData = {}
@@ -83,6 +88,11 @@ def runScan(params):
             #add location to pixelData
             pixelData[iKey] = iLoc
             pixelData[jKey] = jLoc
+
+            #if voltage auto range is on, record the voltage range for this pixel
+            #CURRENTLY NOT SUPPORTED
+            # if params['voltageAutoRange']:
+            #     pixelData['voltageRange'] = params['voltageRange']
 
             # save data as sqlite database
             if params['saveFormat'] == 'sqlite':
