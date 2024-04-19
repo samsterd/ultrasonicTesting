@@ -30,7 +30,7 @@ def pickleIviumData(dir, saveName : str):
     # list csv files in dir
     files = pj.listFilesInDirectory(dir, '.csv')
 
-    dataDict = {'fileName' : dir + saveName}
+    dataDict = {'fileName' : dir + saveName + '.pickle'}
     eisCounter = 0
     ocpCounter = 0
     otherCounter = 0

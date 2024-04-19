@@ -1039,7 +1039,7 @@ def stalta(array, shortWindow, longWindow):
 #  The algorithm takes the mean of the first startWindow number of voltages and then subtracts that number from all voltages
 #  making the voltage centered around 0V
 # Returns the baseline corrected voltages
-def baseLineCorrectByStartingValues(voltage, startWindow):
+def baselineCorrectByStartingValues(voltage, startWindow):
 
     meanV = np.mean(voltage[0:startWindow])
 
