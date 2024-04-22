@@ -50,7 +50,7 @@ experimentParams = {
                                                      # NOTE: this can add significant overhead (2-3x increase in collection time) for each waveform where the range changes
     'waves' : 1000,                                  # Number of waves to collect and average
     'samples': 500,                                  # Number of data points per wave
-    'halfCycles' : 16,                               # Tone burst pulser only. Number of half-cycles in a tone burst pulse
+    'halfCycles' : 16,                               # Tone burst pulser only. Number of half-cycles in a tone burst pulse. Minimum 1, maximum 32
 
     ################################################################################
     ########################### Saving Names ##########################################
