@@ -47,6 +47,7 @@ import math
 # Inputs a filename with .sqlite3 extension
 # Creates a data dict and saves it as the same filename .pickle
 # Returns the dataDict
+#TODO: check if file exists before converting!
 def sqliteToPickle(file : str):
 
     # Open db connection
@@ -158,6 +159,7 @@ def savePickle(dataDict : dict):
 #   Checks if the 'fileName' key exists
 #   Checks if the 'fileName' value matches the input fileName.
 #       If either of the last two are not true, the 'fileName' key is updated
+# NOTE: the first warning message will be thrown for loading DataCubes. This should be fine
 def loadPickle(fileName : str):
 
     with open(fileName, 'rb') as f:
@@ -169,10 +171,12 @@ def loadPickle(fileName : str):
     elif 'fileName' not in dataDict.keys():
         print('loadPickle Warning: \'fileName\' not in list of dataDict keys. Updated dataDict[\'fileName\'] = ' + fileName)
         dataDict['fileName'] = fileName
+        savePickle(dataDict)
 
     elif dataDict['fileName'] != fileName:
         print('loadPickle Warning: dataDict[\'fileName\'] does not match input fileName. Value of dataDict key has been updated to match new file location.')
         dataDict['fileName'] = fileName
+        savePickle(dataDict)
 
     f.close()
     return dataDict
@@ -418,12 +422,73 @@ def listFilesInDirectory(dirName, ext = '.pickle'):
 #       if we need to sort keys to find the final coordinates the algorithm becomes O(nlogn) and we lose the speedup
 def coordinatesToCollectionIndex(dataDict, coordinates):
 
+    mappingParams = coordinateToIndexMap(dataDict)
+    # extract mapping parameters
+    m = mappingParams['m']
+    n = mappingParams['n']
+    xs = mappingParams['xs']
+    zs = mappingParams['zs']
+    kf = mappingParams['kf']
+
+    # Now iterate through the input coordinates and convert to indices
+    # using equation k = n(z/zs) + (x/xs)
+    collectionIndices = []
+
+    for i in range(len(coordinates)):
+        x = coordinates[i][0]
+        # Raise warnings if rounding
+        if (x % xs != 0):
+            print('coordinatesToCollectionIndex: primary coordinate ' + str(
+                x) + ' is not a multiple of the primary step. Rounding coordinate.')
+
+        z = coordinates[i][1]
+        if (z % zs != 0):
+            print('coordinatesToCollectionIndex: secondary coordinate ' + str(
+                z) + ' is not a multiple of the secondary step. Rounding coordinate.')
+
+        index = (n * (z / zs)) + (x / xs)
+
+        # handle out of bounds indices as None
+        if index < 0 or index > kf:
+            print('coordinatesToCollectionIndex: input coordinate ' + str(coordinates[i]) + ' is out of bounds of the scan.' +
+                    'Check the coordinate list and scan parameters and try again.')
+            collectionIndices.append(None)
+        else:
+            collectionIndices.append(int(index))
+
+    return collectionIndices
+
+# helper function following similar logic to above
+# converts a collection index into an array index coordinate i,j (where the index is from 0 to m or n)
+def collectionIndexToArrayIndex(dataDict : dict, collection_index):
+
+    # first find m and n, the number of rows and columns
+    mappingParams = coordinateToIndexMap(dataDict)
+    n = mappingParams['n']
+    m = mappingParams['m']
+    kf = mappingParams['kf']
+
+    if collection_index > kf:
+        print("collectionIndexToArrayIndex WARNING: input collection_index is greater than the final index of the data.")
+
+    # next calculate i and j - the array coordinates (column, row) along the m and n dimensions
+    i = collection_index % n
+    j = math.floor(collection_index / n)
+
+    return i, j
+
+# the logic described in the comment above coordinatesToCollectionIndex is abstracted here as it is used in many functions
+# coordinateToIndexMap takes in a dataDict and outputs the parameters needed to map between real spatial coordinates (x,y),
+# array coordinates (i,j), and the collection_index
+# the output is a dict with keys 'm', 'n', 'xs', 'zs', where 'm' and 'n' are the number of points in the x and z axis and
+# xs and zs are the distance steps between each coordinate in the physical scans, and kf is the last index in the scan
+def coordinateToIndexMap(dataDict):
     # this assumes that the dataDict contains a key for each point + 'fileName' + 'parameters'
     # Need to subtract an additional 1 because len is 1-indexed but collection_index is 0-indexed
     kf = len(dataDict.keys()) - 3
     # Do some quick error checking - make sure kf > 0 or else the rest will fail
     if kf <= 1:
-        print("coordinatesToCollectionIndex: input table only has one row. Check that the table and data are correct")
+        print("coordinateToIndexMap: input table only has one row. Check that the table and data are correct")
         return None
 
     # determine which axes are used in dataDict (2 out of 'X', 'Y', and 'Z')
@@ -454,36 +519,11 @@ def coordinatesToCollectionIndex(dataDict, coordinates):
     # We should not enter the final branch, but just in case lets put a panicked error message
     else:
         print(
-            "coordinatesToCollectionIndex: unable to identify coordinate step. Unclear what went wrong, but its probably related to floating point rounding. Your data is probably cursed, contact Sam for an exorcism (or debugging).")
+            "coordinateToIndexMap: unable to identify coordinate step. Unclear what went wrong, but its probably related to floating point rounding. Your data is probably cursed, contact Sam for an exorcism (or debugging).")
         return None
 
-    # Now iterate through the input coordinates and convert to indices
-    # using equation k = n(z/zs) + (x/xs)
-    collectionIndices = []
-
-    for i in range(len(coordinates)):
-        x = coordinates[i][0]
-        # Raise warnings if rounding
-        if (x % xs != 0):
-            print('coordinatesToCollectionIndex: primary coordinate ' + str(
-                x) + ' is not a multiple of the primary step. Rounding coordinate.')
-
-        z = coordinates[i][1]
-        if (z % zs != 0):
-            print('coordinatesToCollectionIndex: secondary coordinate ' + str(
-                z) + ' is not a multiple of the secondary step. Rounding coordinate.')
-
-        index = (n * (z / zs)) + (x / xs)
-
-        # handle out of bounds indices as None
-        if index < 0 or index > kf:
-            print('coordinatesToCollectionIndex: input coordinate ' + str(coordinates[i]) + ' is out of bounds of the scan.' +
-                    'Check the coordinate list and scan parameters and try again.')
-            collectionIndices.append(None)
-        else:
-            collectionIndices.append(int(index))
-
-    return collectionIndices
+    #Note: math.floor is used to ensure m and n are integers
+    return {'m' : math.floor(m), 'n' : math.floor(n), 'xs' : xs, 'zs' : zs, 'kf' : kf}
 
 # Collect specified data from specified coordinates in a scan dataDict
 # Inputs the dataDict, dataKeys as a list of strings, and coordinates a list of 2-tuples
@@ -512,6 +552,8 @@ def scanDataAtPixels(dataDict: dict, dataKeys: list, coordinates: list):
             return -1
 
     return resultDict
+
+
 
 # Collect specific data from multiple scans at a given list of coordinates
 # scans are specified as a list of fileNames, dataKeys as a list of strings, and coordinates as a list of (x,y) or [x,y]
@@ -647,6 +689,13 @@ def multiScanAverageDataInBox(dir, dataKeys : list, topLeft, bottomRight, steps)
 
     return resultDict
 
+# Function that gathers the data keys within a box and then fits their change over time to a given function
+# For example, fitting the change in max-min at each coordinate to a logistic function
+# Returns the data as a dict of coordinats with keys for each fitting parameter as well as fitting 'goodness' metrics
+# This data will be pickled in a subdirectory since this operation will take several minutes to run
+def multiScanFitDataInBox(dir, dataKeys : list, fitFunction, topLeft, bottomRight, steps):
+    return 0
+
 
 ############################################################
 ###### Plotting Functions###################################
@@ -774,6 +823,7 @@ def generateScanPlotsInDirectory(dirName : str, colorKey, colorRange = [None, No
 
 # Plot the evolution of the value of dataKey vs time at a given list of coordinates
 # If normalized = True, the data will be divided by the corresponding value in the first coordinate
+# TODO: add colormap to plot (esp for linecuts)
 def plotScanDataAtCoorsVsTime(dirName : str, dataKey : str, coors : list, normalized = False):
 
     # gather the data
@@ -1071,6 +1121,164 @@ def generateLineCoors(startCoor, length, axis, step):
     numberOfSteps = math.floor(length / step)
 
     return [(startCoor[0] + (axis[0] * step * i), startCoor[1] + (axis[1] * step *i)) for i in range(numberOfSteps)]
+
+
+###############################################################################################################
+########################## THE DATA CUBE ######################################################################
+################################################3##############################################################
+
+# Functions for creating, saving, editing, and manipulating 4D data pulled from multi-scans
+# This will enable faster analysis and plotting of data sets through time vs previous methods
+# An explanation:
+#   Multiscan data is a 4D tensor:
+#       2 spatial dimensions (X,Z)
+#       1 time dimension
+#       1 data dimension (data sets at each (X, Z, t) point))
+#   Condensing all of this info into one large pickled array will enable faster analysis
+#   The caveat: we need to drop all large data sets from the array - it can only carry the calculated single-number data (e.g. max-min)
+#       but not the raw data (e.g. time, voltage). The time, voltage data uses 99% of the memory of a data set, so including that
+#       means we wouldn't be able to load the whole array into memory
+#   A full workflow would then be:
+#       sqlite3 raw data -> pickled dictionary -> perform analysis -> save analysis results in -THE CUBE- -> perform further analysis on THE CUBE
+# THE CUBE is implemented as a class with variables 'fileName', 'dataKeys', 'sampleName', and 'data'
+#   'fileName' and 'sampleName' values are strings which disignate the filename the cube is pickled in, and a name of the sample being analyzed
+#   'dataKeys' is a dict with number of keys == len(data[i,j,k]. Each key is a string which is the name of a data point in the CUBE.
+#       The value is the integer index of that key within data[i,j,k]; that is, if dataCube['dataKeys']['maxMinusMin'] = 2, then
+#       data[i,j,k,2] is the value of 'maxMinusMin' for all coordinates and times
+#       This structure is sufficient for small (<100) numbers of keys. If the number of data points becomes large, this may become slow
+#       and the inverse dict may also be constructed for fast identification of data indices
+#   'fileTimes' is a dict that matches the time index to a fileName for the corresponding scan. This makes updating the DATACUBE significantly faster
+#   'data' contains the 4D numpy array:
+#       data[i,j,k] = np.array([data0, data1, data2,...])
+#       where i is an integer corresponding to the x-coordinates of the scan
+#       j is an integer corresponding to the z- or y- coordinates of the scan
+#       k is an integer corresponding to the start time of the scan
+#       The minimum cube must contain data[i,j,k] = [x-coordinate, z-coordinate, time_collected, collection_index]
+
+# functions needed: convert pickles to cube, load cube, save cube, add to cube, update cube
+# extract from cube: point, line in space, line in time, box in space, box in space-time, smaller cube
+#   need a helper function: quickly convert from actual coordinates (x, z, experiment time) to data indices
+#       Should be doable in O(1) by taking first and last point along axis and assuming it divides evenly. This is
+#       Always true for spatial coordinates and should be approximately true (good enough) for time coordinates
+# This should be implemented as a class
+
+class DataCube():
+
+    # DataCube must be given data to initialize
+    # inputs: the directory of the pickles to assimilate into the cube, plus a fileName to save the cube as
+    # the cube is saved in a directory below dirName with the name 'DATACUBE//'
+    def __init__(self, dirName, sampleName):
+
+        #TODO: check if the cube already exists before making a new one
+        self.sampleName = sampleName
+        self.picklesToCube(dirName)
+
+    def picklesToCube(self, dirName):
+
+        # gather all pickles in the directory
+        pickleFiles = listFilesInDirectory(dirName, '.pickle')
+
+        # gather the first time_collected from each file
+        timeStarted = []
+        print("\nOrdering files by time...\n")
+        for i in tqdm(range(len(pickleFiles))):
+
+            dat = loadPickle(pickleFiles[i])
+            timeStarted.append(dat[0]['time_collected'])
+
+        # order the pickleFiles by timeStarted by zipping and sorting
+        zippedTimesFiles = zip(timeStarted, pickleFiles)
+        orderedFiles = [x for _, x in sorted(zippedTimesFiles)]
+
+        # gather the data keys
+        print("\nGathering data keys...\n")
+        firstData = loadPickle(orderedFiles[0])
+
+        # we will use the keys from the first collection_index and assume that applies for all data
+        keyDict = {}
+        keyIndex = 0
+        for key in firstData[0].keys():
+
+            # need to gather all keys whose values are not a list or numpy array since those are too large to efficiently CUBE
+            if type(firstData[0][key]) != list and type(firstData[0][key]) != np.ndarray:
+                keyDict[key] = keyIndex
+                keyIndex += 1
+
+        self.dataKeys = keyDict
+
+        # initialize the DATACUBE array
+        # first determine the spatial axes and their length
+        spatialAxes = coordinateToIndexMap(firstData)
+        axis0len = spatialAxes['n']
+        axis1len = spatialAxes['m']
+        # the length of the time axis is number of scans (=number of files)
+        timelen = len(orderedFiles)
+        # the length of the data axis is the number of dataKeys
+        datalen = len(keyDict.keys())
+
+        dataCube = np.zeros((axis0len, axis1len, timelen, datalen))
+
+        #initialize fileTimes dict
+        fileTimes = {}
+
+        # iterate through scans, ASSIMILATE DATA INTO THE CUBE
+        # every data point has coordinate i,j,t,d, where i,j are the spatial coordinates, t is time, and d is data index
+        print("\nASSIMILATING DATA INTO THE CUBE...\n")
+        for t in tqdm(range(len(orderedFiles))):
+
+            # load the scan
+            scanData = loadPickle(orderedFiles[t])
+
+            # populate the fileTimes dict
+            fileTimes[t] = orderedFiles[t]
+
+            # iterate through collection_indices of the data
+            for collection_index in scanData.keys():
+
+                # verify that the dataPoint is indeed a collection_index, not 'parameters' or 'fileName'
+                if type(collection_index) == int:
+
+                    # convert collection_index to array indices
+                    i, j = collectionIndexToArrayIndex(scanData, collection_index)
+
+                    # iterate through dataKeys, fill in corresponding data
+                    for dataKey in keyDict.keys():
+
+                        # get the index to save the data in
+                        d = keyDict[dataKey]
+
+                        # write the data in the coordinate
+                        dataCube[i,j,t,d] = scanData[collection_index][dataKey]
+
+        self.data = dataCube
+        self.fileTimes = fileTimes
+
+        print("\nSaving the DATACUBE...\n")
+        # create fileName to save under
+        self.fileName = dirName + 'DATACUBE//' + self.sampleName + '.pickle'
+
+        # create the directory if it doesn't exist
+        os.makedirs(dirName + 'DATACUBE//', exist_ok = True)
+
+        # save the cube
+        self.saveCube()
+
+    def saveCube(self):
+
+        fileName = self.fileName
+        # extract directory from fileName
+
+        with open(self.fileName, 'wb') as f:
+            pickle.dump(self, f)
+
+        f.close()
+
+    #NOTE: cannot define loadCube() as a class method - loadPickle should work instead
+
+    def updateCube(self, dirName, sampleName):
+
+        return 0
+
 
 ########################################################################3
 ############# Deprecated Code #########################################
