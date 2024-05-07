@@ -166,11 +166,11 @@ def loadPickle(fileName : str):
     if type(dataDict) != dict:
         print('loadPickle Warning: loading ' + fileName + ' does not result in a dict. Data manipulation functions and scripts will likely fail.')
 
-    if 'fileName' not in dataDict.keys():
+    elif 'fileName' not in dataDict.keys():
         print('loadPickle Warning: \'fileName\' not in list of dataDict keys. Updated dataDict[\'fileName\'] = ' + fileName)
         dataDict['fileName'] = fileName
 
-    if dataDict['fileName'] != fileName:
+    elif dataDict['fileName'] != fileName:
         print('loadPickle Warning: dataDict[\'fileName\'] does not match input fileName. Value of dataDict key has been updated to match new file location.')
         dataDict['fileName'] = fileName
 
@@ -884,6 +884,17 @@ def plotDataInBoxVsTime(dir, dataKey, topLeft, bottomRight, steps, yErr = False)
 
     plt.show()
 
+# helper function that takes an array of unix times and zero-references them (shift so that minimum time is 0) and converts to hours
+# used when plotting a data point vs 'time_collected'
+def timeCollectedToExperimentHours(timeCollected):
+
+    # make sure timeCollected is an array
+    timeArr = np.array(timeCollected)
+
+    minTime = np.min(timeArr)
+    zeroRefArr = timeArr - minTime
+
+    return zeroRefArr/3600
 
 ##############################################################################3
 ############ Analysis and Data Correction Functions ############################33
@@ -928,7 +939,12 @@ def zeroCrossings(yDat, xDat, linearInterp = False):
     # implementation taken from https://stackoverflow.com/questions/3843017/efficiently-detect-sign-changes-in-python
     zeroCrossingIndices = np.where(np.diff(np.signbit(yDat)))[0]
 
-    if linearInterp:
+    # handle case where there are no zero crossings
+    # Currently returns -1 which isn't ideal, but returning None makes further analysis and plotting difficult
+    if len(zeroCrossingIndices) == 0:
+        return np.array([-1])
+
+    elif linearInterp:
 
         xIntercepts = []
 
@@ -1044,6 +1060,17 @@ def baselineCorrectByStartingValues(voltage, startWindow):
     meanV = np.mean(voltage[0:startWindow])
 
     return voltage - meanV
+
+# A helper function to generate a list of coordinates on a line
+# used to feed into plotScanDataAtCoors to look at linecuts of data
+# Inputs: startCoor 2-tuple, length of the line, axis 2-tuple i.e. (1, 0) for X-line, (0, 1) for Y-line or (1,1) for diagonal,
+# and step size on line
+def generateLineCoors(startCoor, length, axis, step):
+
+    # floor is used to round and convert to an int
+    numberOfSteps = math.floor(length / step)
+
+    return [(startCoor[0] + (axis[0] * step * i), startCoor[1] + (axis[1] * step *i)) for i in range(numberOfSteps)]
 
 ########################################################################3
 ############# Deprecated Code #########################################
