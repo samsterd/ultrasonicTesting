@@ -4,10 +4,12 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import colormaps as cmp
 import pickleJar as pj
+import pandas as pd
+import math
 import sqliteUtils as squ
 import copy
 
-# Helper functions for loading, analyzing, and plotting electrochemistry data from Ivium potentiostat
+# Helper functions for loading, analyzing, and plotting electrochemistry data from Ivium and Squidstat potentiostats
 
 # Plan: load files, store data in dict
 # get creation time (ctime), record original filename, decide whether it is OCP or EIS, rename file accordingly
@@ -100,6 +102,95 @@ def iviumDataType(data):
     else:
         return 'other'
 
+
+# Strategy for Squidstat data is similar to Ivium but uses Pandas dataframes for easier importing
+# Data is read as a pandas data frame and saved into a dict containing the data type ('eis' or 'ocp') as well as the original filename and time created
+# The overall data is a dict of dicts containing the saved data for each experiment, all consolidated into one larger file
+# Note that extra keys are added to the scan dicts to match the formatting of the Ivium data. This information is redundant
+# (it is already in the 'data' dataframe) but it makes all other Ivium - related functions compatible with the Squidstat data
+#               { 'fileName' : original file name
+# single scan =   'time_collected' : time file created
+#                 'dataType' : 'eis' or 'ocp'
+#                 're_z' ... or 'voltage' ... : data from pandas dataframe as top-level key for Ivium compatibility
+#                 'data' : pandas dataframe}
+#                   { 'fileName' : file name of dict pickle
+# experiment dict =   'eis0' : eis scan dict
+#                     'ocp0' : ocp scan dict
+#                     'eis1' : ... }
+# Also includes an optional parameter stepToIgnore. This checks the 'Step number' in the imported data and does not import
+#   if the step = 0 % stepToIgnore. This functionality is useful for ignoring 'filler' experiments like a 30 minute OCP measurement
+def loadSquidstatCSV(file, stepToIgnore = None):
+
+    dataDict = {}
+
+    # gather the original filename from the input file
+    dataDict['originalFileName'] = os.path.basename(file)
+
+    # gather the time. mtime should be safe to use on windows and linux
+    # NOTE: we are using m (modified) time, not c (created) time because the ctime is changed when the data is moved from its original computer
+    #       while the mtime does not change from its original creation date (assuming the data hasn't been modified, which it should be!
+    timeCreated = os.path.getmtime(file)
+    dataDict['time_collected'] = timeCreated
+
+    # load data into pandas dataframe
+    csvdf = pd.read_csv(file)
+    dataDict['data'] = csvdf
+
+    # check if the data should be ignored
+    if stepToIgnore != None and type(stepToIgnore) == int and csvdf['Step number'][0] % stepToIgnore == 0:
+        return -1
+
+    # extract the data type from the 'Step name' of the data
+    # also adds top level keys to match the structure of the Ivium data
+    stepName = csvdf['Step name'][0]
+    if stepName == 'Potentiostatic EIS':
+        dataDict['dataType'] = 'eis'
+        dataDict['re_z'] = np.array(csvdf['Z\' (Ohms)'])
+        dataDict['im_z'] = -1 * np.array(csvdf['-Z" (Ohms)'])
+        dataDict['freq'] = np.array(csvdf['Frequency (Hz)'])
+    elif stepName == 'Open Circuit Potential':
+        dataDict['dataType'] = 'ocp'
+        dataDict['time'] = np.array(csvdf['Elapsed Time (s)'])
+        dataDict['voltage'] = np.array(csvdf['Working Electrode (V)'])
+
+    return dataDict
+
+# Inputs the directory where the squidstat scans are stored and a name for the output pickle file
+# Outputs the data in the directory, sorted by type (OCP or EIS), with timestamps
+# stepsToIgnore is passed to the loadSquidstatCSV function
+def pickleSquidstatData(dir, saveName : str, stepsToIgnore = None):
+
+    # list csv files in dir
+    files = pj.listFilesInDirectory(dir, '.csv')
+
+    dataDict = {'fileName' : dir + saveName + '.pickle'}
+    eisCounter = 0
+    ocpCounter = 0
+
+    # iterate through files
+    for file in files:
+
+        # load csv file into a dict
+        fileDat = loadSquidstatCSV(file, stepsToIgnore)
+
+        # if import was ignored (i.e. it was an ignored step), pass this iteration
+        if fileDat == -1:
+            pass
+
+        # generate a keyname for the data, add it to the master dict
+        elif fileDat['dataType'] == 'eis':
+            keyString = 'eis' + str(eisCounter)
+            eisCounter += 1
+            dataDict[keyString] = fileDat
+        elif fileDat['dataType'] == 'ocp':
+            keyString = 'ocp' + str(ocpCounter)
+            ocpCounter += 1
+            dataDict[keyString] = fileDat
+
+    # pickle the master dict, return dict
+    pj.savePickle(dataDict)
+    return dataDict
+
 # Apply an input function to all of a certain dataType, using the data in argKeys as the function arguments and saving the result as resKey
 # Repickles the data when finished
 def applyFunctionToData(dataDict, dataType, func, argKeys, resKey, *funcArgs):
@@ -149,6 +240,27 @@ def plotKeyVsTime(dataDict, dataType, yKey):
     # plot results
     plt.scatter(formattedTime, np.array(yList))
     plt.show()
+
+# Gather a piece of data over time. Same as the data that gets plotted in plotKeyVsTime, but returns the arrays
+# instead of plotting. Useful for setting up other plots (i.e. plotting e-chem vs ultrasound data)
+def gatherDataVsTime(dataDict, dataType, dataKey):
+    # initialize result list
+    timeList = []
+    dataList = []
+
+    # iterate through keys
+    for key in dataDict:
+
+        # check that data is correct type
+        if key != 'fileName' and dataDict[key]['dataType'] == dataType:
+            # gather time_collected and yKey
+            timeList.append(dataDict[key]['time_collected'])
+            dataList.append(dataDict[key][dataKey])
+
+    # format the time list so it is 0-referenced and in hours, not seconds
+    timeArr = pj.timeCollectedToExperimentHours(timeList)
+
+    return timeArr, np.array(dataList)
 
 # Plot scans with the data points colormapped to time_collected
 def plotDataVsTime(dataDict, dataType, xKey, yKey, plotType = 'scatter'):
@@ -201,7 +313,10 @@ def logabs(re, im):
 # Returns the real impedance at a given target frequency
 def resAtFreq(re_z, freq, targetFreq):
 
-    index = np.nonzero(freq == targetFreq)
+    # math.isclose is used for the comparison since the freq may be a float
+    # returns indices where freq is within 1% of targetFreq
+    nearlyEqualBools = np.array([math.isclose(f, targetFreq, rel_tol = 0.01) for f in freq])
+    index = np.nonzero(nearlyEqualBools)
 
     try:
         return re_z[index[0][0]]
