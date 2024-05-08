@@ -165,18 +165,28 @@ def loadPickle(fileName : str):
     with open(fileName, 'rb') as f:
         dataDict = pickle.load(f)
 
-    if type(dataDict) != dict:
+    pickleType = type(dataDict)
+
+    if pickleType != dict and pickleType != DataCube:
         print('loadPickle Warning: loading ' + fileName + ' does not result in a dict. Data manipulation functions and scripts will likely fail.')
 
-    elif 'fileName' not in dataDict.keys():
+    # handle problems with dataDict fileName field
+    elif pickleType == dict and 'fileName' not in dataDict.keys():
         print('loadPickle Warning: \'fileName\' not in list of dataDict keys. Updated dataDict[\'fileName\'] = ' + fileName)
         dataDict['fileName'] = fileName
         savePickle(dataDict)
 
-    elif dataDict['fileName'] != fileName:
+    elif pickleType == dict and dataDict['fileName'] != fileName:
         print('loadPickle Warning: dataDict[\'fileName\'] does not match input fileName. Value of dataDict key has been updated to match new file location.')
         dataDict['fileName'] = fileName
         savePickle(dataDict)
+
+    # handle problems with DataCube fileName field
+    elif pickleType == DataCube and dataDict.fileName != fileName:
+        print('loadPickle Warning: dataCube.fileName does not match input fileName. Value of DataCube.fileName has been updated to match new file location.'
+              '\nNOTE: if the source multi scan data has also moved, run DataCube.updateCube(\'new//data//location//\')')
+        dataDict.fileName = fileName
+        dataDict.saveCube()
 
     f.close()
     return dataDict
@@ -382,6 +392,25 @@ def findFirstScan(dirName):
 
     # load the pickle and return the result
     return loadPickle(minFile)
+
+# helper function to order the pickles in a directory by their experiment start times
+# inputs a directory with .pickle files in it
+# outputs a list of the pickle filenames in order of their first time_collected
+def orderPickles(dirName):
+
+    # gather all pickles in the directory
+    pickleFiles = listFilesInDirectory(dirName, '.pickle')
+
+    # gather the first time_collected from each file
+    timeStarted = []
+
+    for i in tqdm(range(len(pickleFiles))):
+        dat = loadPickle(pickleFiles[i])
+        timeStarted.append(dat[0]['time_collected'])
+
+    # order the pickleFiles by timeStarted by zipping and sorting
+    zippedTimesFiles = zip(timeStarted, pickleFiles)
+    return [x for _, x in sorted(zippedTimesFiles)]
 
 # Helper function to list the files ending in .pickle within a given directory
 # Inputs a directory name
@@ -1142,7 +1171,7 @@ def generateLineCoors(startCoor, length, axis, step):
 #       sqlite3 raw data -> pickled dictionary -> perform analysis -> save analysis results in -THE CUBE- -> perform further analysis on THE CUBE
 # THE CUBE is implemented as a class with variables 'fileName', 'dataKeys', 'sampleName', and 'data'
 #   'fileName' and 'sampleName' values are strings which disignate the filename the cube is pickled in, and a name of the sample being analyzed
-#   'dataKeys' is a dict with number of keys == len(data[i,j,k]. Each key is a string which is the name of a data point in the CUBE.
+#   'dataKeys' is a dict with number of keys == length of 4th array dimension. Each key is a string which is the name of a data point in the CUBE.
 #       The value is the integer index of that key within data[i,j,k]; that is, if dataCube['dataKeys']['maxMinusMin'] = 2, then
 #       data[i,j,k,2] is the value of 'maxMinusMin' for all coordinates and times
 #       This structure is sufficient for small (<100) numbers of keys. If the number of data points becomes large, this may become slow
@@ -1175,20 +1204,8 @@ class DataCube():
 
     def picklesToCube(self, dirName):
 
-        # gather all pickles in the directory
-        pickleFiles = listFilesInDirectory(dirName, '.pickle')
-
-        # gather the first time_collected from each file
-        timeStarted = []
         print("\nOrdering files by time...\n")
-        for i in tqdm(range(len(pickleFiles))):
-
-            dat = loadPickle(pickleFiles[i])
-            timeStarted.append(dat[0]['time_collected'])
-
-        # order the pickleFiles by timeStarted by zipping and sorting
-        zippedTimesFiles = zip(timeStarted, pickleFiles)
-        orderedFiles = [x for _, x in sorted(zippedTimesFiles)]
+        orderedFiles = orderPickles(dirName)
 
         # gather the data keys
         print("\nGathering data keys...\n")
@@ -1223,7 +1240,7 @@ class DataCube():
 
         # iterate through scans, ASSIMILATE DATA INTO THE CUBE
         # every data point has coordinate i,j,t,d, where i,j are the spatial coordinates, t is time, and d is data index
-        print("\nASSIMILATING DATA INTO THE CUBE...\n")
+        print("\n---ASSIMILATING DATA INTO THE CUBE---\n")
         for t in tqdm(range(len(orderedFiles))):
 
             # load the scan
@@ -1275,9 +1292,100 @@ class DataCube():
 
     #NOTE: cannot define loadCube() as a class method - loadPickle should work instead
 
-    def updateCube(self, dirName, sampleName):
+    # update cube adds newly calculated data from the multi-scan pickles to the cube
+    # if no dirName is provided, updateCube will use self.fileTimes to find the files
+    #   the dirName argument shoud ONLY be used if the files have been moved. If that is the case, the files will need to be re-ordered
+    # updateCube will also only check the first scan for changes. dataKeys must be added to all pickles in the multi-scan -
+    #       missing dataKeys in later scans will cause failures
+    def updateCube(self, dir = 'default'):
 
-        return 0
+        # if the directory is not default, need to remake the self.fileTimes dict
+        if dir != 'default':
+
+            print("updateCube: non-default directory input. Updating fileTimes dict...")
+            orderedFiles = orderPickles(dir)
+
+            # check that the number of files in the input directory match the number of files in fileTimes
+            # if they do not match, print an error message and fail
+            if len(orderedFiles) != len(self.fileTimes.keys()):
+                print("updateCube ERROR: number of files in input directory does not match the number of files in current DATACUBE.\n"
+                      "Consider initializing a new cube in the target directory rather than updating the existing cube.")
+                return -1
+
+            # update the fileTimes dict by iterating through the orderedFiles
+            for i in range(len(orderedFiles)):
+                self.fileTimes[i] = orderedFiles[i]
+
+        # load first scan and determine if any keys are updated
+        firstScan = loadPickle(self.fileTimes[0])
+
+        # count the number of single data-point dataKeys in firstScan[0]
+        dataKeys = []
+        for key in firstScan[0].keys():
+
+            # need to gather all keys whose values are not a list or numpy array since those are too large to efficiently CUBE
+            if type(firstScan[0][key]) != list and type(firstScan[0][key]) != np.ndarray:
+                dataKeys.append(key)
+
+        # test whether any new dataKeys were added by doing a set difference
+        newKeySet = set(dataKeys)
+        oldKeySet = set(self.dataKeys.keys())
+        addedKeys = newKeySet - oldKeySet
+
+        # if there are no added keys, print a message and return
+        if len(addedKeys) == 0:
+            print("updateCube: no new data keys to add. Update finished")
+            return 0
+
+        # add the new keys to self.dataKeys, making sure to add on to the end of the existing indices
+        # first make sure all of dataKeys.values() are integers before taking their maximum
+        for val in self.dataKeys.values():
+            if type(val) != int:
+                print("updateCube ERROR: cube.dataKeys.values() must be integers but it contains " + str(val) +
+                      "\n. updateCube aborted, consider remaking the dataCube using DataCube(dir, sample)")
+                return -1
+
+        newIndex = max(self.dataKeys.values()) + 1
+
+        for newKey in addedKeys:
+            self.dataKeys[newKey] = newIndex
+            newIndex += 1
+
+        # # resize the datacube by increasing the d-dimension by the number of new keys
+        # oldShape = np.shape(self.data)
+        # # newSize is the same as oldSize but expanded in the 4th (data) dimension
+        # # newIndex is 1 greater than the final index, (+=1 at end of loop), which works here because sizes are 1-indexed while indices are 0-indexed
+        # newShape = (oldShape[0], oldShape[1], oldShape[2], newIndex)
+        padLength = len(addedKeys)
+        # the new cube must be made by padding the 4th axis. Using np.resize causes values to shift in ways that do not preserve ordering
+        newCube = np.pad(self.data, ((0,0),(0,0),(0,0),(0,padLength)))
+
+        # iterate through files, add in new data
+        print("\n---ASSIMILATING NEW DATA INTO THE CUBE---\n")
+        for t in tqdm(self.fileTimes.keys()):
+
+            scanData = loadPickle(self.fileTimes[t])
+
+            # iterate through collection_indices of the data
+            for collection_index in scanData.keys():
+
+                # verify that the dataPoint is indeed a collection_index, not 'parameters' or 'fileName'
+                if type(collection_index) == int:
+
+                    # convert collection_index to array indices
+                    i, j = collectionIndexToArrayIndex(scanData, collection_index)
+
+                    # iterate through dataKeys, fill in corresponding data
+                    for dataKey in addedKeys:
+
+                        # get the index to save the data in
+                        d = self.dataKeys[dataKey]
+
+                        # write the data in the coordinate
+                        newCube[i, j, t, d] = scanData[collection_index][dataKey]
+
+        self.data = newCube
+        self.saveCube()
 
 
 ########################################################################3
