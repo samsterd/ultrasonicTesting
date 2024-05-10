@@ -36,6 +36,7 @@ import numpy as np
 import os
 import bottleneck as bn
 import scipy.signal
+from scipy.optimize import curve_fit
 import math
 
 
@@ -1151,6 +1152,119 @@ def generateLineCoors(startCoor, length, axis, step):
 
     return [(startCoor[0] + (axis[0] * step * i), startCoor[1] + (axis[1] * step *i)) for i in range(numberOfSteps)]
 
+# define a logistic function for curve fitting
+# x is the independent variable, A is the amplitude, x0 is the x-axis shift, k is the midpoint slope, and c is the y-axis shift
+def logisticFunction(x, A, x0, k, c):
+    return A / (1 + np.exp(-k * (x - x0))) + c
+
+# helper function for logistic fitting that provides initial guesses for the fitting parameters
+def logisticFunctionPreFit(xDat, yDat):
+
+    # offset c is the initial value before the fast rise. Take first y-value for c
+    c = yDat[0]
+
+    # x0 is the location where the derivative is maximized and k is the value of the derivative at that maximum
+    # we calculate that derivative using a Savitzy-Golay filter
+    deriv = savgolFilter(yDat, xDat, derivOrder = 1)
+    k = max(deriv)
+    kIndex = np.argmax(deriv)
+    x0 = xDat[kIndex]
+
+    # A is the increase in size before and after. take the value 2 indices after x0 minus the c-guess as a starting value
+    #   NOTE: previously this used max minus min, but because lots of data has a linear growth after the exponential section
+    #         this will more accurately reflect the logistic portion of the data
+    # NOTE: we need to also check for the edge case where kIndex + 2 is out of the list bounds
+    aIndex = min(kIndex + 2, len(yDat) - 1)
+    A = yDat[aIndex] - c
+
+    return np.array([A, x0, k, c])
+
+# A function for fitting data to a logistic function that generates smart guesses for the fitting parameters
+# and sets the parameter bounds to be within an input fraction of those generated guesses
+def smartLogisticFit(xDat, yDat, boundFactor = 0.1, maxfev = 10000):
+
+    # generate guesses for fitting parameters
+    guesses = logisticFunctionPreFit(xDat, yDat)
+
+    # generate bounds for the fitting parameters
+    boundFraction = boundFactor * guesses
+    upperBound = guesses + boundFraction
+    lowerBound = guesses - boundFraction
+
+    # do an error check to prevent lowerBound[i] > upperBound[i], which can happen when the bounds are negative
+    # this should not occur in normal data, but can happen when the data is non logistic and decreasing
+    for i in range(len(upperBound)):
+        #swap bounds if they are switched
+        if lowerBound[i] > upperBound[i]:
+            lower = lowerBound[i]
+            upper = upperBound[i]
+            upperBound[i] = lower
+            lowerBound[i] = upper
+
+    return curve_fit(logisticFunction, xDat, yDat, guesses, bounds = (lowerBound, upperBound), maxfev = maxfev)
+
+# same as above, but including a linearly increasing tail instead of a constant offset
+def logisticFunctionLinearTail(x, A, x0, k, c):
+    return A / (1 + np.exp(-k * (x - x0))) + (c * x)
+
+# a smarter version of the above: a piecewise function that is logistic below x0+1 and linear at the point
+# (x0+1, A + c) with slope m. The equation for this line is then y = m (x - x0 - 1) + A + c
+def logisticLinearPiecewise(x, A, x0, k, c, m):
+
+    return np.piecewise(x, [x < x0 + 1, x >= x0 + 1],
+                 [lambda x: logisticFunction(x, A, x0, k, c),
+                  lambda x: (m * (x - x0 - 1)) + A + c])
+
+# helper function for logistic-linear fitting that provides initial guesses for the fitting parameters
+def logisticLinearFunctionPreFit(xDat, yDat):
+
+    # offset c is the initial value before the fast rise. Take first y-value for c
+    c = yDat[0]
+
+    # x0 is the location where the derivative is maximized and k is the value of the derivative at that maximum
+    # we calculate that derivative using a Savitzy-Golay filter
+    deriv = savgolFilter(yDat, xDat, derivOrder=1)
+    k = max(deriv)
+    kIndex = np.argmax(deriv)
+    x0 = xDat[kIndex]
+
+    # A is the increase in size before and after. take the value 2 indices after x0 minus the c-guess as a starting value
+    # NOTE: we need to also check for the edge case where kIndex + 2 is out of the list bounds
+    aIndex = min(kIndex + 2, len(yDat) - 1)
+    A = yDat[aIndex] - c
+
+    # m is guessed by taking the average of the derivative from the aIndex to the end of the data (i.e. the section after logitstic growth)
+    m = np.mean(deriv[aIndex:])
+
+    return np.array([A, x0, k, c, m])
+
+# A function for fitting data to a logistic-linear piecewise function that generates smart guesses for the fitting parameters
+# and sets the parameter bounds to be within an input fraction of those generated guesses
+def smartLogisticLinearPiecewiseFit(xDat, yDat, boundFactor = 0.1, maxfev = 10000):
+
+    # generate guesses for fitting parameters
+    guesses = logisticLinearFunctionPreFit(xDat, yDat)
+
+    # generate bounds for the fitting parameters
+    boundFraction = boundFactor * guesses
+    upperBound = guesses + boundFraction
+    lowerBound = guesses - boundFraction
+
+    # do an error check to prevent lowerBound[i] > upperBound[i], which can happen when the bounds are negative
+    # this should not occur in normal data, but can happen when the data is non logistic and decreasing
+    for i in range(len(upperBound)):
+        #swap bounds if they are switched
+        if lowerBound[i] > upperBound[i]:
+            lower = lowerBound[i]
+            upper = upperBound[i]
+            upperBound[i] = lower
+            lowerBound[i] = upper
+        elif upperBound[i] == 0:
+            upperBound[i] = 1
+
+    return curve_fit(logisticLinearPiecewise, xDat, yDat, guesses, bounds = (lowerBound, upperBound), maxfev = maxfev)
+
+
 
 ###############################################################################################################
 ########################## THE DATA CUBE ######################################################################
@@ -1351,13 +1465,8 @@ class DataCube():
             self.dataKeys[newKey] = newIndex
             newIndex += 1
 
-        # # resize the datacube by increasing the d-dimension by the number of new keys
-        # oldShape = np.shape(self.data)
-        # # newSize is the same as oldSize but expanded in the 4th (data) dimension
-        # # newIndex is 1 greater than the final index, (+=1 at end of loop), which works here because sizes are 1-indexed while indices are 0-indexed
-        # newShape = (oldShape[0], oldShape[1], oldShape[2], newIndex)
-        padLength = len(addedKeys)
         # the new cube must be made by padding the 4th axis. Using np.resize causes values to shift in ways that do not preserve ordering
+        padLength = len(addedKeys)
         newCube = np.pad(self.data, ((0,0),(0,0),(0,0),(0,padLength)))
 
         # iterate through files, add in new data
@@ -1386,6 +1495,48 @@ class DataCube():
 
         self.data = newCube
         self.saveCube()
+
+    # function for converting linux time to experiment time (hours since first point)
+    # adds 'experiment_time' as a new point along the data dimension
+    def calculateExperimentTime(self):
+
+        # find the index for 'time_collected'. raise an error if it isn't present
+        if 'time_collected' in self.dataKeys.keys():
+            timeIndex = self.dataKeys['time_collected']
+        else:
+            print("adjustCubeTime ERROR: 'time_collected' is not a data point in the cube. Check the raw data and then re-make the DATACUBE")
+
+        # grab minimum time. since cube slices are in order, this is cube[0,0,0,time_collected]
+        minTime = self.data[0,0,0,timeIndex]
+
+        # add experiment_time to datakeys
+         # first make sure all of dataKeys.values() are integers before taking their maximum
+        for val in self.dataKeys.values():
+            if type(val) != int:
+                print("updateCube ERROR: cube.dataKeys.values() must be integers but it contains " + str(val) +
+                      "\n. updateCube aborted, consider remaking the dataCube using DataCube(dir, sample)")
+                return -1
+
+        newIndex = max(self.dataKeys.values()) + 1
+        self.dataKeys['experiment_time'] = newIndex
+
+        # add padding to the cube
+        newCube = np.pad(self.data, ((0, 0), (0, 0), (0, 0), (0, 1)))
+
+        # iterate through all points and calculate experiment time
+        cubeSize = np.shape(newCube)
+        for i in tqdm(range(cubeSize[0])):
+            for j in range(cubeSize[1]):
+                for t in range(cubeSize[2]):
+                    newCube[i,j,t,newIndex] = (newCube[i,j,t,timeIndex] - minTime) / 3600
+
+        # save the cube
+        self.data = newCube
+        self.saveCube()
+
+    # curve fitting over time
+
+    # function for checking fits
 
 
 ########################################################################3
