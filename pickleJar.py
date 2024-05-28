@@ -1240,7 +1240,7 @@ def logisticLinearFunctionPreFit(xDat, yDat):
 
 # A function for fitting data to a logistic-linear piecewise function that generates smart guesses for the fitting parameters
 # and sets the parameter bounds to be within an input fraction of those generated guesses
-def smartLogisticLinearPiecewiseFit(xDat, yDat, boundFactor = 0.1, maxfev = 10000):
+def smartLogisticLinearPiecewiseFit(xDat, yDat, boundFactor = 0.1, maxfev = 2000):
 
     # generate guesses for fitting parameters
     guesses = logisticLinearFunctionPreFit(xDat, yDat)
@@ -1262,8 +1262,14 @@ def smartLogisticLinearPiecewiseFit(xDat, yDat, boundFactor = 0.1, maxfev = 1000
         elif upperBound[i] == 0:
             upperBound[i] = 1
 
-    return curve_fit(logisticLinearPiecewise, xDat, yDat, guesses, bounds = (lowerBound, upperBound), maxfev = maxfev)
+    # need to catch RuntimeErrors when curve_fit doesn't converge. For some reason this doesn't work in the wrapper
+    # fitCubeTimeData() so it must be done here
+    try:
+        fit, cov = curve_fit(logisticLinearPiecewise, xDat, yDat, guesses, bounds = (lowerBound, upperBound), maxfev = maxfev)
+    except RuntimeError:
+        fit, cov = np.array([np.nan,np.nan,np.nan,np.nan,np.nan]), np.array([np.nan])
 
+    return fit, cov
 
 
 ###############################################################################################################
@@ -1312,7 +1318,7 @@ class DataCube():
     # the cube is saved in a directory below dirName with the name 'DATACUBE//'
     def __init__(self, dirName, sampleName):
 
-        #TODO: check if the cube already exists before making a new one
+        #TODO: check if the cube already exists before making a new one. If the cube already exists, run updateCube instead
         self.sampleName = sampleName
         self.picklesToCube(dirName)
 
@@ -1378,8 +1384,11 @@ class DataCube():
                         # get the index to save the data in
                         d = keyDict[dataKey]
 
-                        # write the data in the coordinate
-                        dataCube[i,j,t,d] = scanData[collection_index][dataKey]
+                        # write the data in the coordinate. Use try/except to put in NaN when a KeyError occurs (i.e. applyFunctionToData halted before finishing on a data set)
+                        try:
+                            dataCube[i,j,t,d] = scanData[collection_index][dataKey]
+                        except KeyError:
+                            dataCube[i,j,t,d] = np.nan
 
         self.data = dataCube
         self.fileTimes = fileTimes
@@ -1490,8 +1499,11 @@ class DataCube():
                         # get the index to save the data in
                         d = self.dataKeys[dataKey]
 
-                        # write the data in the coordinate
-                        newCube[i, j, t, d] = scanData[collection_index][dataKey]
+                        # write the data in the coordinate. Use try/except to put in NaN when a KeyError occurs (i.e. applyFunctionToData halted before finishing on a data set)
+                        try:
+                            newCube[i, j, t, d] = scanData[collection_index][dataKey]
+                        except KeyError:
+                            newCube[i, j, t, d] = np.nan
 
         self.data = newCube
         self.saveCube()
@@ -1535,8 +1547,126 @@ class DataCube():
         self.saveCube()
 
     # curve fitting over time
+    # inputs a fitFunc (a wrapped version of e.g. scipy.optimize.curve_fit() like in smartLogisticFit
+    # also inputs a list of ordered datakeys to input to the fitting function, a 2-tuple range of time indices to fit over
+    #   (with range (0, None) indicating to use the whole time range), and finally any additional arguments to be passed to
+    #   the fitFunc. Also contains optional save and saveName parameters, which will pickle the output array in the directory of the DATACUBE
+    #   if the saveName input is left as an empty string '' then the pickle will be named by combining self.sampleName and fitFunc
+    # the output is an array of fit parameters for each i,j spatial coordinate, along with the absolute coordinates
+    def fitCubeTimeData(self, fitFunc, fitKeys : list, timeRange = (0, None), save = False, saveName = '', *fitargs):
+
+        # gather data indices. First check that all input fitKeys are in self.dataKeys
+        for key in fitKeys:
+            if key not in self.dataKeys.keys():
+                print("fitCubeTimeData ERROR: input data key " + str(key) + " is not in self.dataKeys. Check the spelling of the keys and that the desired datapoint has been added to the CUBE.\n"
+                                                                            "Here is a list of keys in self.dataKeys for reference: " + str(self.dataKeys.keys()))
+                return -1
+
+        dataIndices = [self.dataKeys[key] for key in fitKeys]
+
+        # also need to determine the coordinate keys and indices.
+        # first determine which axes were used for the scan
+        # NOTE: the assumption of order in the for loop means that scans with unexpected primary/secondary axes (i.e. Z/X instead of X/Z) will be rotated in the output array
+        coorKeys = []
+        for axis in ['X', 'Y', 'Z']:
+            if axis in self.dataKeys.keys():
+                coorKeys.append(axis)
+
+        # next gather the axis indices
+        axisIndices = [self.dataKeys[key] for key in coorKeys]
+
+        # determine the length of the output fit parameters by performing a test fit on the first point
+        # for normal datacube data sets of ~4000 points, this will add ~<1% extra time depending on the fitness of the first data point
+        tstData = []
+        for d in dataIndices:
+            tstData.append(self.data[0, 0, timeRange[0]:timeRange[1], d])
+        tstFit, tstCov = fitFunc(*tstData, *fitargs)
+        fitLen = len(tstFit)
+
+        # initialize the result array. It should be 3 dimensional, with 2 axes corresponding to the spatial axis of the DATACUBE
+        # and one axis of length = fit parameters + number of spatial axes (2)
+        dataShape = np.shape(self.data)
+        fittingArray = np.zeros((dataShape[0], dataShape[1], fitLen + 2))
+
+        # iterate through spatial coordinates, gather data and perform fit at every coordinate and save the result in the corresponding array position
+        print("Fitting DATACUBE...\n")
+        for i in tqdm(range(dataShape[0])):
+            for j in range(dataShape[1]):
+
+                # gather data at coordinate
+                fittingData = []
+                for d in dataIndices:
+                    fittingData.append(self.data[i, j, timeRange[0]:timeRange[1], d])
+
+                # fit the data. Use try/except to catch RuntimeErrors where fit does not converge. Use nan for results there
+                try:
+                    fit, cov = fitFunc(*fittingData, *fitargs)
+                except RuntimeError:
+                    print("fitCubeTimeData Warning: fitting at coordinate index (" + str(i) + ", " + str(j) + ") did not converge")
+                    fit = [np.nan for x in range(fitLen)]
+
+                # add the data to the fittingArray
+                # first add the fitting parameters
+                for k in range(0, fitLen):
+                    fittingArray[i, j, k] = fit[k]
+
+                # next add the spatial coordinates. Because the fittingArray was allocated to have len(fitLen) + 2, these operations are safe
+                fittingArray[i, j, fitLen] = self.data[i, j, 0, axisIndices[0]]
+                fittingArray[i, j, fitLen + 1] = self.data[i, j, 0, axisIndices[1]]
+
+        # if saving, determine the directory of the DATACUBE and then pickle the result array there
+        if save:
+
+            # find the directory of the DATACUBE
+            cubeDir = os.path.dirname(self.fileName) + '//'
+
+            # if saveName is informed, add it to the directory and append '.pickle'
+            if type(saveName) == str and saveName != '':
+                saveFile = cubeDir + saveName + '.pickle'
+
+            # if saveName is not informed or isn't a string, generate a saveName from self.sampleName and fitFunc
+            else:
+                saveFile = cubeDir + self.sampleName + '_' + fitFunc.__name__ + '.pickle'
+
+            # pickle the file
+            print("fitCubeTimeData: saving fitting parameter array as " + saveFile)
+            with open(saveFile, 'wb') as f:
+                pickle.dump(fittingArray, f)
+
+            f.close()
+
+        return fittingArray
 
     # function for checking fits
+    # inputs coordinate to check, the x- and y-data keys that were fit, the function that was fit to, a pickle containing an array for all coordinates with the best fit parameters at each coordinate,
+    # and the time range as a 2-tuple or list
+    # returns a plot of the data points with the fitting overlaid
+    def checkFit(self, i, j, dataKeys, fitFunc, fitData, fitTimeRange):
+
+        for key in dataKeys:
+            if key not in self.dataKeys.keys():
+                print("checkFit ERROR: input data key " + str(
+                    key) + " is not in self.dataKeys. Check the spelling of the keys and that the desired datapoint has been added to the CUBE.\n"
+                           "Here is a list of keys in self.dataKeys for reference: " + str(self.dataKeys.keys()))
+                return -1
+
+        # retrieve the data that was fit from the data cube
+        dataIndices = [self.dataKeys[key] for key in dataKeys]
+
+        xData = self.data[i,j,fitTimeRange[0]:fitTimeRange[1], dataIndices[0]]
+        yData = self.data[i,j,fitTimeRange[0]:fitTimeRange[1], dataIndices[1]]
+
+        # gather the fit parameters at the given i,j
+        fitParams = fitData[i,j, 0:-2]
+
+        # generate data for plotting fit line
+        fitX = np.linspace(xData[0], xData[-1], 100)
+        fitY = fitFunc(fitX, *fitParams)
+
+        # make plots
+        plt.scatter(xData, yData, c = 'orange')
+        plt.plot(fitX, fitY)
+        plt.show()
 
 
 ########################################################################3
