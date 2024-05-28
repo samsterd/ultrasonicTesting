@@ -10,6 +10,7 @@
 #       add check to every move
 #           TIME IT AND CHECK FOR INCREASED OVERHEAD
 #           Needs to be negligible increase in move time, otherwise check on every scan instead
+#   change graceful failure to full failures - returning -1 is getting annoying and it should just fail
 
 # Functions:
 #   openEnder(port)
@@ -86,6 +87,16 @@ class Scanner():
         if moveRes == -1:
             print("Scanner.move: error sending code " + motionCommand + " to scanner. Movement aborted.")
             return -1
+
+    def currentPosition(self):
+        self.write("M114")
+        serialRead = self.serial.read_until()
+        pos = serialRead.decode('utf-8')
+        print(pos)
+        return pos
+
+    def home(self):
+        self.write("G28")
 
     def close(self):
 
