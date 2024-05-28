@@ -6,8 +6,10 @@ from matplotlib import colormaps as cmp
 import pickleJar as pj
 import pandas as pd
 import math
-import sqliteUtils as squ
-import copy
+from impedance import preprocessing
+from impedance.models.circuits.fitting import circuit_fit
+from impedance.models.circuits import Randles, CustomCircuit
+from tqdm import tqdm
 
 # Helper functions for loading, analyzing, and plotting electrochemistry data from Ivium and Squidstat potentiostats
 
@@ -191,6 +193,7 @@ def pickleSquidstatData(dir, saveName : str, stepsToIgnore = None):
     pj.savePickle(dataDict)
     return dataDict
 
+
 # Apply an input function to all of a certain dataType, using the data in argKeys as the function arguments and saving the result as resKey
 # Repickles the data when finished
 def applyFunctionToData(dataDict, dataType, func, argKeys, resKey, *funcArgs):
@@ -216,6 +219,32 @@ def applyFunctionToData(dataDict, dataType, func, argKeys, resKey, *funcArgs):
     # return the data
     return dataDict
 
+# Gather a piece of data over time. Same as the data that gets plotted in plotKeyVsTime, but returns the arrays
+# instead of plotting. Useful for setting up other plots (i.e. plotting e-chem vs ultrasound data)
+def gatherDataVsTime(dataDict, dataType, dataKey):
+    # initialize result list
+    timeList = []
+    dataList = []
+
+    # iterate through keys
+    for key in dataDict:
+
+        # check that data is correct type
+        if key != 'fileName' and dataDict[key]['dataType'] == dataType:
+            # gather time_collected and yKey
+            timeList.append(dataDict[key]['time_collected'])
+            dataList.append(dataDict[key][dataKey])
+
+    # format the time list so it is 0-referenced and in hours, not seconds
+    timeArr = pj.timeCollectedToExperimentHours(timeList)
+
+    return timeArr, np.array(dataList)
+
+
+#########################################################
+######### Plotting ################################
+#################################################
+
 def plotKeyVsTime(dataDict, dataType, yKey):
 
     # initialize result list
@@ -240,27 +269,6 @@ def plotKeyVsTime(dataDict, dataType, yKey):
     # plot results
     plt.scatter(formattedTime, np.array(yList))
     plt.show()
-
-# Gather a piece of data over time. Same as the data that gets plotted in plotKeyVsTime, but returns the arrays
-# instead of plotting. Useful for setting up other plots (i.e. plotting e-chem vs ultrasound data)
-def gatherDataVsTime(dataDict, dataType, dataKey):
-    # initialize result list
-    timeList = []
-    dataList = []
-
-    # iterate through keys
-    for key in dataDict:
-
-        # check that data is correct type
-        if key != 'fileName' and dataDict[key]['dataType'] == dataType:
-            # gather time_collected and yKey
-            timeList.append(dataDict[key]['time_collected'])
-            dataList.append(dataDict[key][dataKey])
-
-    # format the time list so it is 0-referenced and in hours, not seconds
-    timeArr = pj.timeCollectedToExperimentHours(timeList)
-
-    return timeArr, np.array(dataList)
 
 # Plot scans with the data points colormapped to time_collected
 def plotDataVsTime(dataDict, dataType, xKey, yKey, plotType = 'scatter'):
@@ -298,8 +306,89 @@ def plotDataVsTime(dataDict, dataType, xKey, yKey, plotType = 'scatter'):
 
     plt.show()
 
+##################################################################
+########### EIS Fitting ##########################################
+#################################################################
+
+# Set of functions for using the data dicts within the impedance module
+
+# convert data from a single eis experiment into the f, Z used by the impedance module
+# inputs the data dict e.g. data['eis0'], outputs two arrays - the frequencies, and the Z as complex numbers
+def eisConvertData(data : dict):
+
+    if 'dataType' not in data.keys() or data['dataType'] != 'eis':
+        print("eisConvertData: input data dict does is not the proper type. Check that the input data was produced using a pre-made pickling function.")
+        return -1
+
+    f = data['freq']
+    Z = data['re_z'] + 1j*data['im_z']
+
+    return f, Z
+
+# fit eis to a Randles model with a CPE and fixing the R0 value to the high frequency zero crossing
+# saves data as key['randles_circuit'] for the impedance package circuit object, ['randles_fit'] for the fit parameters and ['randes_err'] for the fitting errors
+def constrainedRandlesFit(dataDict : dict, firstParams : list):
+
+    # gather eis keys by experiment time using orderPickles as the template
+    times = []
+    eisKeys = []
+    for key in dataDict.keys():
+        if key != 'fileName' and dataDict[key]['dataType'] == 'eis':
+            times.append(dataDict[key]['time_collected'])
+            eisKeys.append(key)
+
+    zippedTimeKeys = zip(times, eisKeys)
+    orderedKeys = [key for _, key in sorted(zippedTimeKeys)]
+
+    # calculate the high frequency zero crossing if it hasn't been calculated
+    if 'hfr' not in dataDict[orderedKeys[0]]:
+        print("Calculating high frequency resistance...\n")
+        dataDict = applyFunctionToData(dataDict, 'eis', nyquistZeroCrossing, ['re_z', 'im_z'], 'hfr')
+
+    # define circuit string for fitting
+    randlesString = 'R0-p(R1-Wo1,CPE1)'
+
+    # iterate through keys
+    print("Fitting circuits...\n")
+    for i in tqdm(range(len(orderedKeys))):
+
+        # get data into a usable form and trim out data in the wrong quadrant
+        key = orderedKeys[i]
+        freq, z = eisConvertData(dataDict[key])
+        freq, z = preprocessing.ignoreBelowX(freq, z)
+
+        # generate guesses. If first eis spectrum, use user input. Otherwise use the previous fit as the starting point for the next one
+        if i == 0:
+            guesses = firstParams
+        else:
+            guesses = dataDict[orderedKeys[i-1]]['randles_fit']
+
+        # generate a dict for r0 to be held constant in fitting
+        r0 = {'R0' : dataDict[key]['hfr']}
+
+        # fit circuit
+        fit, err = circuit_fit(freq, z, randlesString, guesses, r0)
+
+        # gather data and save in datadict
+        circuit = Randles(initial_guess = fit, CPE = True, constants = r0)
+        dataDict[key]['randles_circuit'] = circuit
+        dataDict[key]['randles_fit'] = fit
+        dataDict[key]['randles_err'] = err
+        dataDict[key]['randles_r1'] = fit[0]
+        dataDict[key]['randles_w0'] = fit[1]
+        dataDict[key]['randles_w1'] = fit[2]
+        dataDict[key]['randles_cpe0'] = fit[3]
+        dataDict[key]['randles_cpe1'] = fit[4]
+
+    # re-pickle the dict
+    pj.savePickle(dataDict)
+
+    return dataDict
+
 ##############################################################
 ######## Basic Analysis Functions #######################
+###########################################################
+
 def negFunc(array):
     return -1 * array
 
@@ -323,3 +412,63 @@ def resAtFreq(re_z, freq, targetFreq):
     except IndexError:
         print("resAtFreq: Frequency not found in array. Check your value of targetFreq")
         return None
+
+# find the zero crossing of a nyquist plot. Returns the highest frequency real impedance if there is no zero crossing
+def nyquistZeroCrossing(re, im):
+
+    crossing = pj.zeroCrossings(-1*im, re, True)
+
+    # handle case where no zero crossing found, instead return the highest frequency value of re
+    if crossing == -1:
+        return re[0]
+    else:
+        return crossing[0]
+
+##########################################################################
+######## Deprecated Code ##############################
+########################################################
+#----DEPRECATED-----
+# It turns out this function is unneeded an the freq, Z arrays can be directly loaded into the impedance module...
+# helper function that reads in pickled output files (should work with squidstat or ivium) and converts it to a simple 3-column CSV
+# of frequency, Z_real, and Z_imag. This makes it easier to use the impedance.py package
+# Note: this process of reading machine output->pickling to a custom set -> remaking it as a series of csvs -> then doing analysis is really inefficient
+# This process should be improved
+# Inputs: the path to the pickled squidstat data and an optional name for the subdirectory where the new files will go
+# Outputs: writes each EIS data set as a CSV in a subfolder called "impedance_csv//"
+#   Each file will have the original filename so the metadata can be accessed again
+def convertPickleToReadableCSV(pickleFile, destinationDir = '//impedance_csv//'):
+
+    # load the eis pickle
+    data = pj.loadPickle(pickleFile)
+
+    # create the destination directory
+    newDir = os.path.dirname(pickleFile) + destinationDir
+    try:
+        os.mkdir(newDir)
+    except FileExistsError:
+        print("convertPickleToReadableCSV: destination directory " + newDir + " already exists. Conversion aborted to avoid "
+                                                                              "overwriting existing files. Either input a new destinationDir or delete old files and rerun.")
+        return -1
+
+    # iterate through the data sets, operating on 'dataType' == 'eis'
+    for key in data.keys():
+
+        if key != 'fileName' and data[key]['dataType'] == 'eis':
+
+            # gather data fields. transpose them so that they are rows
+            freq = data[key]['freq']
+            reZ = data[key]['re_z']
+            imZ = data[key]['im_z']
+            dataRows = np.transpose(np.array([freq, reZ, imZ]))
+
+            # generate filename
+            fileName = newDir + data[key]['originalFileName']
+
+            # open file, write in data
+            with open(fileName, 'w+', newline = '') as f:
+                csvWriter = csv.writer(f)
+                csvWriter.writerows(dataRows)
+
+            f.close()
+
+    return 0
