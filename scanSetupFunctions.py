@@ -6,7 +6,7 @@
 
 import picosdkRapidblockPulse as pico
 import ultratekPulser as utp
-import enderControl as ender
+import scanner as sc
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -62,18 +62,13 @@ def singlePulseMeasure(params):
     plt.ylabel('Voltage (mV)')
     plt.show()
 
-# Helper function to connect and move the Ender
-# Inputs: instrumentPorts dict, the axis to move, and the distance
-def repositionEnder(params):
+# Helper function to connect to and move the scanner
+# Inputs the parameters dict, which must contain the scannerPort, axis, and distance keys
+def moveScanner(params):
 
-    # Connect to Ender
-    enderConnection = ender.openEnder(params['enderPort'])
-
-    # Move ender
-    ender.moveEnder(enderConnection, params['axis'], params['distance'])
-
-    # Close connection
-    ender.closeEnder(enderConnection)
+    scanner = sc.Scanner(params['scannerPort'])
+    scanner.move(params['axis'], params['distance'])
+    scanner.close()
 
 # Recursively determines the minimum voltage range needed to capture data at the current location
 # Returns the waveform data at the proper rang and the updated params dict

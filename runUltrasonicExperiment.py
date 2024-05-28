@@ -91,7 +91,7 @@ experimentParams = {
     ######### Only change if instrument USB ports are changed! ######################
     #################################################################################
     'pulserPort' : '/dev/ttyUSB0',                          # Ultratek pulser port name
-    'enderPort' : '/dev/ttyUSB1',                           # Ender port name
+    'scannerPort' : '/dev/ttyUSB1',                           # Ender port name
     'dllFile' : 'C://USUTSDK//USBUTSDKC//USBUT.dll'         # Only used for 'pulserType' : 'tone burst'. Location of USBUT350 pulser SDK
 }
 
@@ -124,7 +124,7 @@ def runExperiment(params : dict):
     # 'multi scan' = repeat a 2D scan with a set frequency
     match experiment:
         case 'move':
-            setup.repositionEnder(params)
+            setup.moveScanner(params)
 
         case 'single pulse':
             setup.singlePulseMeasure(params)
