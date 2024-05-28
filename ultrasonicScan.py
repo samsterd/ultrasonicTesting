@@ -26,7 +26,7 @@ def runScan(params):
     #Connect to picoscope, ender, pulser
     picoConnection = pico.openPicoscope()
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
-    scanner = sc.Scanner(params['enderPort'])
+    scanner = sc.Scanner(params)
 
     #Setup picoscope
     picoConnection = pico.setupPicoMeasurement(picoConnection,

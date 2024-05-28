@@ -66,7 +66,7 @@ def singlePulseMeasure(params):
 # Inputs the parameters dict, which must contain the scannerPort, axis, and distance keys
 def moveScanner(params):
 
-    scanner = sc.Scanner(params['scannerPort'])
+    scanner = sc.Scanner(params)
     scanner.move(params['axis'], params['distance'])
     scanner.close()
 

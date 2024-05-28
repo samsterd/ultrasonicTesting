@@ -83,16 +83,23 @@ experimentParams = {
 
     'scanInterval' : 3600,                          # For multi scans: Minimum time between start of scans, in seconds.
     'numberOfScans' : 10,                           # For multi scans: Number of times to run the scan
-    'pulseInterval' : 1,                           # For repeat pulse: Minimum time between pulse collection, in seconds
-    'experimentTime' : 5,                        # For repeat pulse: Time to collect data, in seconds
+    'pulseInterval' : 1,                            # For repeat pulse: Minimum time between pulse collection, in seconds
+    'experimentTime' : 5,                           # For repeat pulse: Time to collect data, in seconds
 
     #################################################################################
     ########################## Port Names ###########################################
     ######### Only change if instrument USB ports are changed! ######################
     #################################################################################
     'pulserPort' : '/dev/ttyUSB0',                          # Ultratek pulser port name
-    'scannerPort' : '/dev/ttyUSB1',                           # Ender port name
-    'dllFile' : 'C://USUTSDK//USBUTSDKC//USBUT.dll'         # Only used for 'pulserType' : 'tone burst'. Location of USBUT350 pulser SDK
+    'scannerPort' : '/dev/ttyUSB1',                         # Ender port name
+    'dllFile' : 'C://USUTSDK//USBUTSDKC//USBUT.dll',        # Only used for 'pulserType' : 'tone burst'. Location of USBUT350 pulser SDK
+
+    ##################################################################################
+    ######################### Scanner Size Parameters ################################
+    ##################################################################################
+    'transducerHolderHeight' : 50,                            # Z-direction length of the transducer holder, in mm
+    'scannerMaxDimensions' : (220, 220, 240)                # Maximum dimensions of the scanner.
+                                                            # For the Ender-3 or other 3D printers this is the build volume
 }
 
 ##########################################################################################
