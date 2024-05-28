@@ -3,6 +3,7 @@
 
 # Overhaul goals:
 #   turn everything into gantry class
+#   update experiment functions to work off of Scanner class
 #   add guardrails / limits based on absolute positioning
 #       gather absolute pos function
 #       initialize limits
@@ -52,7 +53,11 @@ class Scanner():
     # Writes a series of commands to perform relative movements with the scanner
     # Inputs the axis of motion as a string ('X','Y', or 'Z'), and the distance to move (in mm) (can be negative)
     # function translates the movement to GCode and passes it to the scanner
-    def move(self, axis, distance):
+    def move(self, axis : str, distance):
+
+        if axis not in ['X', 'x', 'Y', 'y', 'Z', 'z']:
+            print("Scanner.move error: invalid axis input. Axis must be one of the strings \'X\', \'Y\', or \'Z\'. Movement aborted.")
+            return -1
 
         # Convert axis and distance inputs into the proper GCode
         motionCommand = "G1 " + axis + str(distance)
