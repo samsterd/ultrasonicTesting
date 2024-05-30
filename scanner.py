@@ -1,22 +1,26 @@
 # set of functions for controlling the Ender-3 for ultrasonic scanning
 # modified from test_ender functions
 
-# Overhaul goals:
-#   turn everything into gantry class
-#   update experiment functions to work off of Scanner class
-#   add guardrails / limits based on absolute positioning
-#       gather absolute pos function
-#       initialize limits
-#       add check to every move
-#           TIME IT AND CHECK FOR INCREASED OVERHEAD
-#           Needs to be negligible increase in move time, otherwise check on every scan instead
-#   change graceful failure to full failures - returning -1 is getting annoying and it should just fail
-
+# Scanner control is implemented through the Scanner class
+# Variables:
+#   port - USB port address of scanner
+#   serial - Pyserial Serial object for the connection to the scanner
+#   minDimensions - 3-tuple of the minimum coordinates the scanner can safely move to. Equal to (0, 0, transducer holder height)
+#   maxDimensions - 3-tuple of the max coordinates the scanner can move to. Determined by the printer volume. For Ender-3 it is (220, 220, 240)
 # Functions:
-#   openEnder(port)
-#   writeToEnder(serialConnection, command)
-#   moveEnder(serialConnection, axis, distance)
-#   closeEnder(serialConnection)
+#   init(parameters : dict) - initializes the connection to the scanner and other variables based on information passed in parameters dict
+#                             parameters must include 'scannerPort', 'transducerHolderHeight', and 'scannerMaxDimensions'
+#   write(command : str) - formats arbitrary strings and passes them through the serial connection
+#   move(axis : str, distance : number) - moves along the specified axis and distance
+#   currentPosition() - gets the current position from the scanner. Returns a 3-tuple of the (x, y, z) coordinates
+#   safeMoveQ(axis : str, distance : number) - checks that a proposed move is within min/maxDimensions of scanner. Returns a Boolean
+#   home() - runs the scanner homing protocol to calibrate its current position by moving to (0,0,0)
+#            NOTE: DO NOT RUN THIS WITH THE TRANSDUCER HOLDER OR ANY EXPERIMENTAL MATERIALS ON THE SCANNER STAGE
+#   cancel() - stops the current move action. Cannot cancel a home() command
+#   close() - stops the current serial connection
+# Also includes two helper functions
+#   axisDistanceToArray(axis : str, distance : number) - converts an axis/distance pair into a len-3 numpy array corresponding to the move
+#   validAxisQ(axis : str) - tests whether an input string is a valid axis
 
 import serial
 import numpy as np
@@ -29,7 +33,7 @@ class Scanner():
     # the parameterDict must contain the keys 'scannerPort', 'transducerHolderHeight' and 'scannerMaxDimensions'
     def __init__(self, parameters : dict, baudRate = 115200):
 
-        if 'scannerPort' not in parameters.keys() or 'transducerHolderSize' not in parameters.keys() or 'scannerMaxDimensions' not in parameters.keys():
+        if 'scannerPort' not in parameters.keys() or 'transducerHolderHeight' not in parameters.keys() or 'scannerMaxDimensions' not in parameters.keys():
             raise KeyError("Scanner: input parameters does not contain enough information. "
                   "parameters must be a dict with keys \'scannerPort\', \'transducerHolderHeight\' and \'scannerMaxDimensions\'")
 
@@ -66,7 +70,7 @@ class Scanner():
     # function translates the movement to GCode and passes it to the scanner
     def move(self, axis : str, distance):
 
-        if not validAxisQ(axis):
+        if not self.validAxisQ(axis):
             raise ValueError('Input axis is not \'X\', \'Y\', or \'Z\'')
 
         if not self.safeMoveQ(axis, distance):
@@ -92,10 +96,15 @@ class Scanner():
         # Send motion command
         moveRes = self.write(motionCommand)
 
+        # flush out the responses. It is unclear why 5 reads are needed for 4 commands, but testing has shown it is needed
+        for i in range(5):
+            self.serial.read_until()
+
     def currentPosition(self):
 
         # set to absolute positioning
         self.write("G90")
+        self.serial.read_until()
         # gather the current position from the scanner
         self.write("M114")
         serialRead = self.serial.read_until()
@@ -113,22 +122,20 @@ class Scanner():
     # test whether a given move is safe based on the measurements of the scanner and transducer holder
     def safeMoveQ(self, axis, distance):
 
-        if not validAxisQ(axis):
+        if not self.validAxisQ(axis):
             raise ValueError('Input axis is not \'X\', \'Y\', or \'Z\'')
 
         # get the current position, destination position
         currentPos = np.array(self.currentPosition())
-        movePos = axisDistanceToArray(axis, distance)
+        movePos = self.axisDistanceToArray(axis, distance)
         destinationPos = currentPos + movePos
 
         # iterate through destinationPos and check vs max and min dimensions
         for i in range(3):
-            if destinationPos[i] < self.minDimensions[i] or destinationPos > self.maxDimensions[i]:
+            if destinationPos[i] < self.minDimensions[i] or destinationPos[i] > self.maxDimensions[i]:
                 return False
 
         return True
-
-
 
     # NOTE: DO NOT RUN WHILE THE TRANSDUCER HOLDER IS ATTACHED
     def home(self):
@@ -147,23 +154,25 @@ class Scanner():
             print(f"Scanner.close error: {error}")
             raise serial.SerialException
 
-# helper function to convert an axis, distance pair to a numpy array
-# i.e. 'X', 3 to [3,0,0] or 'Z', -5 to [0,0,-5]
-def axisDistanceToArray(axis : str, distance):
+    # helper function to convert an axis, distance pair to a numpy array
+    # i.e. 'X', 3 to [3,0,0] or 'Z', -5 to [0,0,-5]
+    @classmethod
+    def axisDistanceToArray(self, axis : str, distance):
 
-    if not validAxisQ(axis):
-        raise ValueError('Input axis is not \'X\', \'Y\', or \'Z\'')
-    if axis.upper() == 'X':
-        return np.array([distance, 0, 0])
-    elif axis.upper() == 'Y':
-        return np.array([0,distance,0])
-    elif axis.upper() == 'Z':
-        return np.array([0,0,distance])
+        if not self.validAxisQ(axis):
+            raise ValueError('Input axis is not \'X\', \'Y\', or \'Z\'')
+        if axis.upper() == 'X':
+            return np.array([distance, 0, 0])
+        elif axis.upper() == 'Y':
+            return np.array([0,distance,0])
+        elif axis.upper() == 'Z':
+            return np.array([0,0,distance])
 
-# helper function to check if a given input string is 'X', 'Y', or 'Z'
-def validAxisQ(axis : str):
+    # helper function to check if a given input string is 'X', 'Y', or 'Z'
+    @staticmethod
+    def validAxisQ(axis : str):
 
-    if axis.upper() in ['X', 'Y', 'Z']:
-        return True
-    else:
-        return False
+        if axis.upper() in ['X', 'Y', 'Z']:
+            return True
+        else:
+            return False
