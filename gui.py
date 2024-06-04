@@ -11,7 +11,7 @@ import sys
 # xfigure out how to transition windows
 # xdefine windows for other experiments
 # move files to gui.py, integrate gui start into run script
-# define looping conditions between experiments
+# define control flow of experiment!
 # figure out mouseover notes
 # gather parameters from widgets
 # define initialization experiment
@@ -374,24 +374,11 @@ class MainWindow(QMainWindow):
     def startButtonToggled(self, checked):
         print(checked)
 
-#sys.argv as argument if it will need to accept system arguments (probably not)
-app = QApplication([])
+# function called from runUltrasonicExperiment to start setup through gui
+def startGUI():
+    app = QApplication([])
 
-window = MainWindow()
-window.show()
+    window = MainWindow()
+    window.show()
 
-app.exec_()
-
-# widgets needed
-# QLabel (writes text)
-#       font = widget.font() gets current font
-#       font.setPointSize() adjusts size
-#       widget.setFont(font) applies new size to current fot
-# QCheckBox() for boolean options
-# QComboBox dropdown
-#   widget.addItems([list of strings]) adds things to the list
-#   currentIndexChanged triggers when selected item updates, gives index in list
-#   currentTextChanged does the same but gives the item not its index
-# QLineEdit enters text (i.e. filename)
-#
-# layout - QVBoxLayout
+    app.exec_()
