@@ -16,19 +16,26 @@ from typing import Callable
 # xfigure out how to transition windows
 # xdefine windows for other experiments
 # xmove files to gui.py, integrate gui start into run script
-# define control flow of experiment!
-#       It might be better to make buttons for moving from any window to any other relevant window?
+# xdefine control flow of experiment!
+#      xIt might be better to make buttons for moving from any window to any other relevant window?
+# IMPLEMENT EVERYTHING AS QSTACKEDWIDGET()
+# fix control flow to include timeWindow (forgot about that)
 # create an experiment window that summarizes parameters and has option to abort or run
+# create executeExperiment for every experiment
+#   on move: change button to Moving..., make unclickable for duration
+#   add progress bars?
 # figure out mouseover notes
 # gather parameters from widgets
-# define initialization experiment
+# define initialization/setup experiment
 #   save ports etc in a json file?
 # clean up imports
-# put main loop somewhere better
+# put main loop somewhere better?
 # fill in option defaults based on values in params dict
+# implement a back button
 
 
 # windowType = init, move, pulse, save, scan, time, experiment
+# windowIndex = {init : 0, move : 1, pul
 # experimentType = init, "Move", "Single Pulse Measurement", "Repeat Pulse Measurement", "Single Scan", "Multiple Scans"])
 #
 # algorithm:
@@ -46,30 +53,36 @@ class MainWindow(QMainWindow):
 
         self.windowType = 'init'
         self.experimentType = 'init'
+        # create a dict to convert window types to indices
+        self.windowIndices = {'init' : 0, 'move' : 1, 'pulse' : 2, 'save' : 3, 'scan' : 4, 'time' : 5, 'experiment' : 6}
 
-        initWidget = self.initWindow()
+        # add widgets to stackedwidget in order defined by windowIndices
+        self.mainWidget = QStackedWidget()
+        self.mainWidget.addWidget(self.initWindow())
 
-        self.setCentralWidget(initWidget)
+        # self.mainWidget.addWidget(self.experimentWindow())
+        self.mainWidget.setCurrentIndex(0)
+
+        self.setCentralWidget(self.mainWidget)
 
 
     # init window is where experiment type is specified
+    #TODO: next button stops working after first return to init page
     def initWindow(self):
 
-        self.windowType = 'init'
-        self.experimentType = 'init'
         self.experimentSelect = QComboBox()
         self.experimentSelect.addItems(
             ["Move", "Single Pulse Measurement", "Repeat Pulse Measurement", "Single Scan", "Multiple Scans"])
         self.experimentSelectLabel = QLabel("Select Experiment Type: ")
         # self.input.textChanged.connect(self.label.setText)
 
-        self.nextButton = QPushButton("Next")
-        self.nextButton.clicked.connect(self.nextButtonClicked)
+        self.nextButtonInit = QPushButton("Next")
+        self.nextButtonInit.clicked.connect(self.nextButtonClicked)
 
         layout = QGridLayout()
         layout.addWidget(self.experimentSelectLabel, 0, 0)
         layout.addWidget(self.experimentSelect, 0, 1)
-        layout.addWidget(self.nextButton, 1, 1)
+        layout.addWidget(self.nextButtonInit, 1, 1)
 
         widget = QWidget()
         widget.setLayout(layout)
@@ -79,7 +92,6 @@ class MainWindow(QMainWindow):
     # move window specifies move parameters
     def moveWindow(self):
 
-        self.windowType = 'move'
         self.moveLabel = QLabel("Define movement parameters:")
 
         self.moveAxisLabel = QLabel("Axis: ")
@@ -94,6 +106,9 @@ class MainWindow(QMainWindow):
         self.moveButton = QPushButton("MOVE")
         self.moveButton.clicked.connect(self.executeMove)
 
+        self.nextButtonMove = QPushButton("Next")
+        self.nextButtonMove.clicked.connect(self.nextButtonClicked)
+
         layout = QGridLayout()
         layout.addWidget(self.moveLabel, 0,0)
         layout.addWidget(self.moveAxisLabel, 1, 0)
@@ -102,7 +117,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.distance, 2, 1)
         layout.addWidget(self.moveButtonLabel, 3, 0)
         layout.addWidget(self.moveButton, 3, 1)
-        layout.addWidget(self.nextButton, 4, 1)
+        layout.addWidget(self.nextButtonMove, 4, 1)
 
         widget = QWidget()
         widget.setLayout(layout)
@@ -117,7 +132,6 @@ class MainWindow(QMainWindow):
     #TODO: add a test pulse button
     def pulseWindow(self):
 
-        self.windowType = 'pulse'
         self.pulseLabel = QLabel("Define ultrasonic pulse and collection parameters:")
 
         self.transducerFrequencyLabel = QLabel("Central frequency of ultrasonic transducer (MHz):")
@@ -159,6 +173,9 @@ class MainWindow(QMainWindow):
         self.halfCycles = QLineEdit("2")
         self.halfCycles.setValidator(QIntValidator(1,32))
 
+        self.nextButtonPulse = QPushButton("Next")
+        self.nextButtonPulse.clicked.connect(self.nextButtonClicked)
+
         layout = QGridLayout()
         layout.addWidget(self.pulseLabel, 0, 0)
         layout.addWidget(self.transducerFrequencyLabel, 1, 0)
@@ -179,7 +196,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.waves, 8, 1)
         layout.addWidget(self.halfCyclesLabel, 9, 0)
         layout.addWidget(self.halfCycles, 9, 1)
-        layout.addWidget(self.nextButton, 10, 1)
+        layout.addWidget(self.nextButtonPulse, 10, 1)
 
         widget = QWidget()
         widget.setLayout(layout)
@@ -188,7 +205,6 @@ class MainWindow(QMainWindow):
     # time specifies times for repeat pulse and multi scan
     def timeWindow(self):
 
-        self.windowType = 'time'
         self.timeLabel = QLabel("Define experiment time parameters for Repeat Pulse or Multi Scan:")
 
         self.scanIntervalLabel = QLabel("Minimum time between starting scans (s):")
@@ -211,8 +227,12 @@ class MainWindow(QMainWindow):
         self.experimentTime = QLineEdit("10")
         self.experimentTime.setValidator(QDoubleValidator(0.1, 10000000, 1))
 
+        self.nextButtonTime = QPushButton("Next")
+        self.nextButtonTime.clicked.connect(self.nextButtonClicked)
+
         layout = QGridLayout()
         layout.addWidget(self.timeLabel, 0, 0)
+
         if self.experimentType == 'Repeat Pulse Measurement':
 
             layout.addWidget(self.pulseIntervalLabel, 1, 0)
@@ -228,7 +248,7 @@ class MainWindow(QMainWindow):
             layout.addWidget(self.numberOfScans, 2, 1)
             layout.addWidget(self.multiScanTimeExplanation, 3, 0)
 
-        layout.addWidget(self.nextButton, 4, 1)
+        layout.addWidget(self.nextButtonTime, 4, 1)
 
         widget = QWidget()
         widget.setLayout(layout)
@@ -237,7 +257,6 @@ class MainWindow(QMainWindow):
     # scan specifies scan length
     def scanWindow(self):
 
-        self.windowType = 'scan'
         self.scanLabel = QLabel("Define length parameters of the scan:")
 
         self.primaryAxisLabel = QLabel("Primary scan axis:")
@@ -264,6 +283,9 @@ class MainWindow(QMainWindow):
         self.secondaryAxisStep = QLineEdit("0.5")
         self.secondaryAxisStep.setValidator(QDoubleValidator(0.1, 100, 1))
 
+        self.nextButtonTime = QPushButton("Next")
+        self.nextButtonTime.clicked.connect(self.nextButtonClicked)
+
         layout = QGridLayout()
         layout.addWidget(self.scanLabel, 0, 0)
         layout.addWidget(self.primaryAxisLabel, 1, 0)
@@ -278,7 +300,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.secondaryAxisRange, 5, 1)
         layout.addWidget(self.secondaryAxisStepLabel, 6, 0)
         layout.addWidget(self.secondaryAxisStep, 6, 1)
-        layout.addWidget(self.nextButton, 7, 1)
+        layout.addWidget(self.nextButtonTime, 7, 1)
         # todo: add a safety check and a dialog box if the scan dimensions are invalid
 
         widget = QWidget()
@@ -287,7 +309,6 @@ class MainWindow(QMainWindow):
 
     def saveWindow(self):
 
-        self.windowType = 'save'
         self.saveLabel = QLabel("Define saving parameters:")
 
         self.experimentFolderLabel = QLabel("Save directory:")
@@ -307,6 +328,9 @@ class MainWindow(QMainWindow):
         self.pickleData = QCheckBox()
         self.pickleData.setChecked(False)
 
+        self.nextButtonSave = QPushButton("Next")
+        self.nextButtonSave.clicked.connect(self.nextButtonClicked)
+
         layout = QGridLayout()
         layout.addWidget(self.saveLabel, 0, 0)
         layout.addWidget(self.experimentFolderLabel, 1, 0)
@@ -318,11 +342,43 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.saveFormat, 4, 1)
         layout.addWidget(self.pickleDataLabel, 5, 0)
         layout.addWidget(self.pickleData, 5, 1)
-        layout.addWidget(self.nextButton, 6, 1)
+        layout.addWidget(self.nextButtonSave, 6, 1)
 
         widget = QWidget()
         widget.setLayout(layout)
         return widget
+
+    # this window summarizes all of the experimental parameters and gives the option to start the experiment or abort back to init
+    # its going to be long and tedious...
+    def experimentWindow(self):
+
+        if self.experimentType == 'Repeat Pulse Measurement':
+            print(self.pulser.currentText())
+            # layout = QGridLayout()
+            # # layout.addWidget(self.pulseLabel, 0, 0)
+            # layout.addWidget(self.transducerFrequencyLabel, 1, 0)
+            # layout.addWidget(self.transducerFrequency, 1, 1)
+            # layout.addWidget(self.pulserType, 2, 0)
+            # layout.addWidget(self.pulser, 2, 1)
+            # layout.addWidget(self.measureTimeLabel, 3, 0)
+            # layout.addWidget(self.measureTime, 3, 1)
+            # layout.addWidget(self.measureDelayLabel, 4, 0)
+            # layout.addWidget(self.measureDelay, 4, 1)
+            # layout.addWidget(self.voltageRangeLabel, 5, 0)
+            # layout.addWidget(self.voltageRange, 5, 1)
+            # layout.addWidget(self.voltageAutoRangeLabel, 6, 0)
+            # layout.addWidget(self.voltageAutoRange, 6, 1)
+            # layout.addWidget(self.samplesLabel, 7, 0)
+            # layout.addWidget(self.samples, 7, 1)
+            # layout.addWidget(self.wavesLabel, 8, 0)
+            # layout.addWidget(self.waves, 8, 1)
+            # layout.addWidget(self.halfCyclesLabel, 9, 0)
+            # layout.addWidget(self.halfCycles, 9, 1)
+            # layout.addWidget(self.nextButton, 10, 1)
+            #
+            # widget = QWidget()
+            # widget.setLayout(layout)
+            # return widget
 
     # create warning message subclass
     class WarningDialog(QDialog):
@@ -353,6 +409,7 @@ class MainWindow(QMainWindow):
         file = str(dlg.getExistingDirectory(self, "Select Directory"))
         self.experimentFolderName.setText(file)
 
+    # this function handles control flow of the gui. uses the current window and experiment type to set the next window
     def nextButtonClicked(self):
 
         # Handle initialization case first
@@ -361,52 +418,65 @@ class MainWindow(QMainWindow):
             # grab the experiment type from the combobox
             self.experimentType = self.experimentSelect.currentText()
 
+            # initialize the other windows after the experiment is chosen
+            # this is done here instead of __init__ because some options are experiment-dependent
+            self.mainWidget.addWidget(self.moveWindow())
+            self.mainWidget.addWidget(self.pulseWindow())
+            self.mainWidget.addWidget(self.saveWindow())
+            self.mainWidget.addWidget(self.scanWindow())
+            self.mainWidget.addWidget(self.timeWindow())
+
             if self.experimentType == 'Repeat Pulse Measurement':
-                self.switchWindow(self.pulseWindow())
+                self.switchWindow('pulse')
 
             elif self.experimentType != 'Setup':
-                self.switchWindow(self.moveWindow())
+                self.switchWindow('move')
 
         # next handle changes from move window
         elif self.windowType == 'move':
 
             if self.experimentType == 'Move':
-                self.switchWindow(self.initWindow())
+                self.switchWindow('init')
 
             # in all other cases, go to pulse menu
             else:
-                self.switchWindow(self.pulseWindow())
+                self.switchWindow('pulse')
 
         elif self.windowType == 'pulse':
 
             if self.experimentType == 'Single Pulse Measurement':
-                self.switchWindow(self.initWindow())
+                self.switchWindow('init')
 
             else:
-                self.switchWindow(self.saveWindow())
+                self.switchWindow('time')
 
-        elif self.windowType == 'save':
+        elif self.windowType == 'time':
 
             if self.experimentType == 'Repeat Pulse Measurement':
-                self.switchWindow(self.experimentWindow())
+                self.switchWindow('save')
 
             else:
-                self.switchWindow(self.scanWindow())
+                self.switchWindow('scan')
 
         elif self.windowType == 'scan':
 
-            self.switchWindow(self.experimentWindow())
+            self.switchWindow('save')
+
+        elif self.windowType == 'save':
+
+            self.switchWindow('experiment')
 
         # all unhandled cases (including experiment) go back to the init window
         else:
 
-            self.switchWindow(self.initWindow())
+            self.switchWindow('init')
 
-    # generate new window widget and change the central widget of the window
-    # the second argument is a function that generates the widgets and layout of the new window (i.e. initWindow())
-    def switchWindow(self, destinationWindow):
-        widget = destinationWindow
-        self.setCentralWidget(widget)
+    # inputs the name of the target window. grabs the stacked widget index of the window and changes the index of the stacked widget
+    # also updates the self.windowType field to destinationWindow
+    def switchWindow(self, destinationWindow : str):
+        self.windowType = destinationWindow
+        destinationIndex = self.windowIndices[destinationWindow]
+        self.mainWidget.setCurrentIndex(destinationIndex)
 
     # execute a physical move the gantry
     def executeMove(self):
