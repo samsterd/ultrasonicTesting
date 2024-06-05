@@ -18,7 +18,7 @@ from typing import Callable
 # xmove files to gui.py, integrate gui start into run script
 # xdefine control flow of experiment!
 #      xIt might be better to make buttons for moving from any window to any other relevant window?
-# IMPLEMENT EVERYTHING AS QSTACKEDWIDGET()
+# xIMPLEMENT EVERYTHING AS QSTACKEDWIDGET()
 # fix control flow to include timeWindow (forgot about that)
 # create an experiment window that summarizes parameters and has option to abort or run
 # create executeExperiment for every experiment
@@ -489,18 +489,18 @@ class MainWindow(QMainWindow):
     def nextButtonClicked(self):
 
         # Handle initialization case first
-        if self.windowType == 'init' and self.experimentType == 'init':
+        if self.windowType == 'init':
 
             # grab the experiment type from the combobox
             self.experimentType = self.experimentSelect.currentText()
 
             # initialize the other windows after the experiment is chosen
             # this is done here instead of __init__ because some options are experiment-dependent
-            self.mainWidget.addWidget(self.moveWindow())
-            self.mainWidget.addWidget(self.pulseWindow())
-            self.mainWidget.addWidget(self.saveWindow())
-            self.mainWidget.addWidget(self.scanWindow())
-            self.mainWidget.addWidget(self.timeWindow())
+            self.mainWidget.insertWidget(self.windowIndices['move'], self.moveWindow())
+            self.mainWidget.insertWidget(self.windowIndices['pulse'],self.pulseWindow())
+            self.mainWidget.insertWidget(self.windowIndices['save'],self.saveWindow())
+            self.mainWidget.insertWidget(self.windowIndices['scan'],self.scanWindow())
+            self.mainWidget.insertWidget(self.windowIndices['time'],self.timeWindow())
 
             if self.experimentType == 'Repeat Pulse Measurement':
                 self.switchWindow('pulse')
@@ -553,15 +553,38 @@ class MainWindow(QMainWindow):
     # inputs the name of the target window. grabs the stacked widget index of the window and changes the index of the stacked widget
     # also updates the self.windowType field to destinationWindow
     def switchWindow(self, destinationWindow : str):
+
         self.windowType = destinationWindow
         destinationIndex = self.windowIndices[destinationWindow]
+        print(self.windowType)
+        print(destinationIndex)
 
-        # the experiment window must be initialized right before it is displayed so it can grab the most recent values of everything
-        # NOTE: this should be initialized to a hard coded index
+        # make or remake the window, in case its widgets were used in a different window
+        # insertWidget is used to ensure the indices are static
+        # self.mainWidget.insertWidget(destinationIndex, self.runWindowFunction(destinationWindow))
         if destinationWindow == 'experiment':
-            self.mainWidget.addWidget(self.experimentWindow())
+            self.mainWidget.insertWidget(self.windowIndices[destinationWindow], self.experimentWindow())
 
         self.mainWidget.setCurrentIndex(destinationIndex)
+
+    # helper function that runs the window function corresponding to the input name
+    def runWindowFunction(self, window : str):
+        match window:
+            case 'init':
+                self.initWindow()
+            case 'move':
+                self.moveWindow()
+            case 'pulse':
+                self.pulseWindow()
+            case 'save':
+                self.saveWindow()
+            case 'scan':
+                self.scanWindow()
+            case 'time':
+                self.timeWindow()
+            case 'experiment':
+                self.experimentWindow()
+
 
     # execute a physical move the gantry
     def executeMove(self):
