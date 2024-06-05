@@ -9,6 +9,7 @@ import ultrasonicScan as scan
 import multiscan
 import repeatPulse
 from typing import Callable
+import time
 
 #TODO:
 # xmake an initial experiment select window
@@ -19,20 +20,20 @@ from typing import Callable
 # xdefine control flow of experiment!
 #      xIt might be better to make buttons for moving from any window to any other relevant window?
 # xIMPLEMENT EVERYTHING AS QSTACKEDWIDGET()
-# fix control flow to include timeWindow (forgot about that)
-# create an experiment window that summarizes parameters and has option to abort or run
+# xfix control flow to include timeWindow (forgot about that)
+# xcreate an experiment window that summarizes parameters and has option to abort or run
 # create executeExperiment for every experiment
-#   on move: change button to Moving..., make unclickable for duration
+#   xon move: change button to Moving..., make unclickable for duration
 #   add progress bars?
 # figure out mouseover notes
-# gather parameters from widgets
+# xgather parameters from widgets
 # define initialization/setup experiment
 #   save ports etc in a json file?
 # clean up imports
 # put main loop somewhere better?
 # fill in option defaults based on values in params dict
 # implement a back button
-# update addWidgets to put them in a hardcoded index determined by self.windowIndices
+# xupdate addWidgets to put them in a hardcoded index determined by self.windowIndices
 
 
 # windowType = init, move, pulse, save, scan, time, experiment
@@ -174,6 +175,12 @@ class MainWindow(QMainWindow):
         self.halfCycles = QLineEdit("2")
         self.halfCycles.setValidator(QIntValidator(1,32))
 
+        self.executePulseButton = QPushButton("Execute Pulse")
+        self.executePulseButton.clicked.connect(self.executeSinglePulse)
+
+        self.returnToMoveButton = QPushButton("Return To Move")
+        self.returnToMoveButton.clicked.connect(self.returnToMove)
+
         self.nextButtonPulse = QPushButton("Next")
         self.nextButtonPulse.clicked.connect(self.nextButtonClicked)
 
@@ -197,7 +204,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.waves, 8, 1)
         layout.addWidget(self.halfCyclesLabel, 9, 0)
         layout.addWidget(self.halfCycles, 9, 1)
-        layout.addWidget(self.nextButtonPulse, 10, 1)
+        layout.addWidget(self.executePulseButton, 10, 1)
+        layout.addWidget(self.returnToMoveButton, 11, 1)
+        layout.addWidget(self.nextButtonPulse, 12, 1)
 
         widget = QWidget()
         widget.setLayout(layout)
@@ -428,7 +437,7 @@ class MainWindow(QMainWindow):
 
             self.executeSingleScanButton = QPushButton("Execute Scan")
             self.executeSingleScanButton.clicked.connect(self.executeSingleScan)
-            self.cancelButton = QPushButton("Cancel (Return To Start")
+            self.cancelButton = QPushButton("Cancel (Return To Start)")
             self.cancelButton.clicked.connect(self.nextButtonClicked)
 
             layout.addWidget(self.executeSingleScanButton, 24, 1)
@@ -446,7 +455,7 @@ class MainWindow(QMainWindow):
 
             self.executeMultiScanButton = QPushButton("Execute Scans")
             self.executeMultiScanButton.clicked.connect(self.executeMultiScan)
-            self.cancelButton = QPushButton("Cancel (Return To Start")
+            self.cancelButton = QPushButton("Cancel (Return To Start)")
             self.cancelButton.clicked.connect(self.nextButtonClicked)
 
             layout.addWidget(self.executeMultiScanButton, 28, 1)
@@ -556,47 +565,29 @@ class MainWindow(QMainWindow):
 
         self.windowType = destinationWindow
         destinationIndex = self.windowIndices[destinationWindow]
-        print(self.windowType)
-        print(destinationIndex)
 
-        # make or remake the window, in case its widgets were used in a different window
-        # insertWidget is used to ensure the indices are static
         # self.mainWidget.insertWidget(destinationIndex, self.runWindowFunction(destinationWindow))
         if destinationWindow == 'experiment':
             self.mainWidget.insertWidget(self.windowIndices[destinationWindow], self.experimentWindow())
 
         self.mainWidget.setCurrentIndex(destinationIndex)
 
-    # helper function that runs the window function corresponding to the input name
-    def runWindowFunction(self, window : str):
-        match window:
-            case 'init':
-                self.initWindow()
-            case 'move':
-                self.moveWindow()
-            case 'pulse':
-                self.pulseWindow()
-            case 'save':
-                self.saveWindow()
-            case 'scan':
-                self.scanWindow()
-            case 'time':
-                self.timeWindow()
-            case 'experiment':
-                self.experimentWindow()
-
+    # returnToMove is made as a separate function to connect to the returnToMoveButton because directly calling switchWindow
+    # on the button clicked event causes problems with immediately executing the window change
+    def returnToMove(self):
+        self.switchWindow('move')
 
     # execute a physical move the gantry
     def executeMove(self):
 
-        #todo: change the label while move is executing, set to unclickable?
+        # change status of button while move is executing
+        self.moveButton.setText("MOVING...")
+        self.moveButton.setEnabled(False)
+        self.moveButton.repaint()
 
         # gather the input parameters from widgets
         self.params['axis'] = self.moveAxis.currentText()
         self.params['distance'] = float(self.distance.text())
-
-        print(self.params['axis'])
-        print(self.params['distance'])
 
         # execute the move
         # moveRes = setup.moveScanner(self.params)
@@ -607,14 +598,146 @@ class MainWindow(QMainWindow):
         #                        "transducer holder and try again. If you are sure the move should be safe, hit Abort and run the Setup experiment\n"
         #                        "to ensure the size parameters are correct and the gantry has been homed.")
 
+        # wait a short time before unlocking the button
+        time.sleep(0.5)
+
+        # change button back to normal
+        self.moveButton.setText("MOVE")
+        self.moveButton.setEnabled(True)
+
+    def executeSinglePulse(self):
+
+        # change status of button while experiment is running
+        self.executePulseButton.setText("Running Pulse...")
+        self.executePulseButton.setEnabled(False)
+        self.executePulseButton.repaint()
+
+        # gather parameters
+        self.params['transducerFrequency'] = float(self.transducerFrequency.text())
+        self.params['pulserType'] = self.pulser.currentText()
+        self.params['measureTime'] = float(self.measureTime.text())
+        self.params['measureDelay'] = float(self.measureDelay.text())
+        self.params['voltageRange'] = float(self.voltageRange.currentText())
+        self.params['voltageAutoRange'] = self.voltageAutoRange.isChecked()
+        self.params['waves'] = int(self.waves.text())
+        self.params['samples'] = int(self.samples.text())
+        self.params['halfCycles'] = int(self.halfCycles.text())
+
+        # setup.singlePulseMeasure(self.params)
+
+        # change button back to normal
+        self.executePulseButton.setText("Execute Pulse")
+        self.executePulseButton.setEnabled(True)
+
     def executeRepeatPulse(self):
-        print("repeat pulse")
+
+        # change status of button while experiment is running
+        self.executeRepeatPulseButton.setText("Experiment Running...")
+        self.executeRepeatPulseButton.setEnabled(False)
+        self.executeRepeatPulseButton.repaint()
+
+        # gather parameters
+        self.params['transducerFrequency'] = float(self.transducerFrequency.text())
+        self.params['pulserType'] = self.pulser.currentText()
+        self.params['measureTime'] = float(self.measureTime.text())
+        self.params['measureDelay'] = float(self.measureDelay.text())
+        self.params['voltageRange'] = float(self.voltageRange.currentText())
+        self.params['voltageAutoRange'] = self.voltageAutoRange.isChecked()
+        self.params['waves'] = int(self.waves.text())
+        self.params['samples'] = int(self.samples.text())
+        self.params['halfCycles'] = int(self.halfCycles.text())
+
+        self.params['experimentFolder'] = self.experimentFolderName.text()
+        self.params['experimentName'] = self.experimentName.text()
+        self.params['experimentBaseName'] = self.experimentName.text()
+        self.params['saveFormat'] = self.saveFormat.currentText()
+        self.params['pickleData'] = self.pickleData.isChecked()
+
+        self.params['pulseInterval'] = float(self.pulseInterval.text())
+        self.params['experimentTime'] = float(self.experimentTime.text())
+
+        # run experiment
+        #repeatPulse.repeatPulse(self.params)
+
+        # change button back to normal
+        self.executeRepeatPulseButton.setText("Execute Repeat Pulse")
+        self.executeRepeatPulseButton.setEnabled(True)
 
     def executeSingleScan(self):
-        print("scanning")
+
+        # change status of button while experiment is running
+        self.executeSingleScanButton.setText("Scan Running...")
+        self.executeSingleScanButton.setEnabled(False)
+        self.executeSingleScanButton.repaint()
+
+        # gather parameters
+        self.params['transducerFrequency'] = float(self.transducerFrequency.text())
+        self.params['pulserType'] = self.pulser.currentText()
+        self.params['measureTime'] = float(self.measureTime.text())
+        self.params['measureDelay'] = float(self.measureDelay.text())
+        self.params['voltageRange'] = float(self.voltageRange.currentText())
+        self.params['voltageAutoRange'] = self.voltageAutoRange.isChecked()
+        self.params['waves'] = int(self.waves.text())
+        self.params['samples'] = int(self.samples.text())
+        self.params['halfCycles'] = int(self.halfCycles.text())
+
+        self.params['experimentFolder'] = self.experimentFolderName.text()
+        self.params['experimentName'] = self.experimentName.text()
+        self.params['experimentBaseName'] = self.experimentName.text()
+        self.params['saveFormat'] = self.saveFormat.currentText()
+        self.params['pickleData'] = self.pickleData.isChecked()
+
+        self.params['primaryAxis'] = self.primaryAxis.currentText()
+        self.params['secondaryAxis'] = self.secondaryAxis.currentText()
+        self.params['primaryAxisRange'] = float(self.primaryAxisRange.text())
+        self.params['primaryAxisStep'] = float(self.primaryAxisStep.text())
+        self.params['secondaryAxisRange'] = float(self.secondaryAxisRange.text())
+        self.params['secondaryAxisStep'] = float(self.secondaryAxisStep.text())
+
+        print(self.params)
+        # scan.runScan(self.params)
+
+        # change button back to normal
+        self.executeSingleScanButton.setText("Execute Scan")
+        self.executeSingleScanButton.setEnabled(True)
 
     def executeMultiScan(self):
-        print("multiscanning")
+
+        # change status of button while experiment is running
+        self.executeMultiScanButton.setText("Scans Running...")
+        self.executeMultiScanButton.setEnabled(False)
+        self.executeMultiScanButton.repaint()
+
+        # gather parameters
+        self.params['transducerFrequency'] = float(self.transducerFrequency.text())
+        self.params['pulserType'] = self.pulser.currentText()
+        self.params['measureTime'] = float(self.measureTime.text())
+        self.params['measureDelay'] = float(self.measureDelay.text())
+        self.params['voltageRange'] = float(self.voltageRange.currentText())
+        self.params['voltageAutoRange'] = self.voltageAutoRange.isChecked()
+        self.params['waves'] = int(self.waves.text())
+        self.params['samples'] = int(self.samples.text())
+        self.params['halfCycles'] = int(self.halfCycles.text())
+
+        self.params['experimentFolder'] = self.experimentFolderName.text()
+        self.params['experimentName'] = self.experimentName.text()
+        self.params['experimentBaseName'] = self.experimentName.text()
+        self.params['saveFormat'] = self.saveFormat.currentText()
+        self.params['pickleData'] = self.pickleData.isChecked()
+
+        self.params['primaryAxis'] = self.primaryAxis.currentText()
+        self.params['secondaryAxis'] = self.secondaryAxis.currentText()
+        self.params['primaryAxisRange'] = float(self.primaryAxisRange.text())
+        self.params['primaryAxisStep'] = float(self.primaryAxisStep.text())
+        self.params['secondaryAxisRange'] = float(self.secondaryAxisRange.text())
+        self.params['secondaryAxisStep'] = float(self.secondaryAxisStep.text())
+
+        self.params['scanInterval'] = int(self.scanInterval.text())
+        self.params['numberOfScans'] = int(self.numberOfScans.text())
+
+        # change button back to normal
+        self.executeMultiScanButton.setText("Execute Scans")
+        self.executeMultiScanButton.setEnabled(True)
 
 # function called from runUltrasonicExperiment to start setup through gui
 #TODO: currently passing in params to get port names, default values. This might be better to update?
