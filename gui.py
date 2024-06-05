@@ -32,6 +32,7 @@ from typing import Callable
 # put main loop somewhere better?
 # fill in option defaults based on values in params dict
 # implement a back button
+# update addWidgets to put them in a hardcoded index determined by self.windowIndices
 
 
 # windowType = init, move, pulse, save, scan, time, experiment
@@ -352,33 +353,108 @@ class MainWindow(QMainWindow):
     # its going to be long and tedious...
     def experimentWindow(self):
 
+        self.experimentLabel = QLabel("Double check experimental parameters and run experiment:")
+        layout = QGridLayout()
+        layout.addWidget(self.experimentLabel, 0, 0)
+
+        self.pulseParametersLabel = QLabel("Ultrasound Parameters:")
+        layout.addWidget(self.pulseParametersLabel, 1, 0)
+        layout.addWidget(self.transducerFrequencyLabel, 2, 0)
+        layout.addWidget(self.transducerFrequency, 2, 1)
+        layout.addWidget(self.pulserType, 3, 0)
+        layout.addWidget(self.pulser, 3, 1)
+        layout.addWidget(self.measureTimeLabel, 4, 0)
+        layout.addWidget(self.measureTime, 4, 1)
+        layout.addWidget(self.measureDelayLabel, 5, 0)
+        layout.addWidget(self.measureDelay, 5, 1)
+        layout.addWidget(self.voltageRangeLabel, 6, 0)
+        layout.addWidget(self.voltageRange, 6, 1)
+        layout.addWidget(self.voltageAutoRangeLabel, 7, 0)
+        layout.addWidget(self.voltageAutoRange, 7, 1)
+        layout.addWidget(self.samplesLabel, 8, 0)
+        layout.addWidget(self.samples, 8, 1)
+        layout.addWidget(self.wavesLabel, 9, 0)
+        layout.addWidget(self.waves, 9, 1)
+        layout.addWidget(self.halfCyclesLabel, 10, 0)
+        layout.addWidget(self.halfCycles, 10, 1)
+
+        self.saveParametersLabel = QLabel("Save Parameters:")
+        layout.addWidget(self.saveParametersLabel, 11, 0)
+        layout.addWidget(self.experimentFolderLabel, 12, 0)
+        layout.addWidget(self.experimentFolderName, 12, 1)
+        layout.addWidget(self.experimentFolderButton, 13, 1)
+        layout.addWidget(self.experimentNameLabel, 14, 0)
+        layout.addWidget(self.experimentName, 14, 1)
+        layout.addWidget(self.saveFormatLabel, 15, 0)
+        layout.addWidget(self.saveFormat, 15, 1)
+        layout.addWidget(self.pickleDataLabel, 16, 0)
+        layout.addWidget(self.pickleData, 16, 1)
+
         if self.experimentType == 'Repeat Pulse Measurement':
-            print(self.pulser.currentText())
-            # layout = QGridLayout()
-            # # layout.addWidget(self.pulseLabel, 0, 0)
-            # layout.addWidget(self.transducerFrequencyLabel, 1, 0)
-            # layout.addWidget(self.transducerFrequency, 1, 1)
-            # layout.addWidget(self.pulserType, 2, 0)
-            # layout.addWidget(self.pulser, 2, 1)
-            # layout.addWidget(self.measureTimeLabel, 3, 0)
-            # layout.addWidget(self.measureTime, 3, 1)
-            # layout.addWidget(self.measureDelayLabel, 4, 0)
-            # layout.addWidget(self.measureDelay, 4, 1)
-            # layout.addWidget(self.voltageRangeLabel, 5, 0)
-            # layout.addWidget(self.voltageRange, 5, 1)
-            # layout.addWidget(self.voltageAutoRangeLabel, 6, 0)
-            # layout.addWidget(self.voltageAutoRange, 6, 1)
-            # layout.addWidget(self.samplesLabel, 7, 0)
-            # layout.addWidget(self.samples, 7, 1)
-            # layout.addWidget(self.wavesLabel, 8, 0)
-            # layout.addWidget(self.waves, 8, 1)
-            # layout.addWidget(self.halfCyclesLabel, 9, 0)
-            # layout.addWidget(self.halfCycles, 9, 1)
-            # layout.addWidget(self.nextButton, 10, 1)
-            #
-            # widget = QWidget()
-            # widget.setLayout(layout)
-            # return widget
+
+            self.repeatPulseLabel = QLabel("Repeat Pulse Parameters:")
+            layout.addWidget(self.repeatPulseLabel, 17, 0)
+            layout.addWidget(self.pulseIntervalLabel, 18, 0)
+            layout.addWidget(self.pulseInterval, 18, 1)
+            layout.addWidget(self.experimentTimeLabel, 19, 0)
+            layout.addWidget(self.experimentTime, 19, 1)
+
+            self.executeRepeatPulseButton = QPushButton("Execute Repeat Pulse")
+            self.executeRepeatPulseButton.clicked.connect(self.executeRepeatPulse)
+            self.cancelButton = QPushButton("Cancel (Return To Start)")
+            self.cancelButton.clicked.connect(self.nextButtonClicked)
+
+            layout.addWidget(self.executeRepeatPulseButton, 20, 1)
+            layout.addWidget(self.cancelButton, 21, 1)
+
+        if self.experimentType == 'Single Scan' or self.experimentType == 'Multiple Scans':
+
+            self.scanLabel = QLabel("Scan Parameters:")
+            layout.addWidget(self.scanLabel, 17, 0)
+            layout.addWidget(self.primaryAxisLabel, 18, 0)
+            layout.addWidget(self.primaryAxis, 18, 1)
+            layout.addWidget(self.primaryAxisRangeLabel, 19, 0)
+            layout.addWidget(self.primaryAxisRange, 19, 1)
+            layout.addWidget(self.primaryAxisStepLabel, 20, 0)
+            layout.addWidget(self.primaryAxisStep, 20, 1)
+            layout.addWidget(self.secondaryAxisLabel, 21, 0)
+            layout.addWidget(self.secondaryAxis, 21, 1)
+            layout.addWidget(self.secondaryAxisRangeLabel, 22, 0)
+            layout.addWidget(self.secondaryAxisRange, 22, 1)
+            layout.addWidget(self.secondaryAxisStepLabel, 23, 0)
+            layout.addWidget(self.secondaryAxisStep, 23, 1)
+
+        if self.experimentType == 'Single Scan':
+
+            self.executeSingleScanButton = QPushButton("Execute Scan")
+            self.executeSingleScanButton.clicked.connect(self.executeSingleScan)
+            self.cancelButton = QPushButton("Cancel (Return To Start")
+            self.cancelButton.clicked.connect(self.nextButtonClicked)
+
+            layout.addWidget(self.executeSingleScanButton, 24, 1)
+            layout.addWidget(self.cancelButton, 25, 1)
+
+        if self.experimentType == 'Multiple Scans':
+
+            self.multiScanTimeLabel = QLabel("Multiple Scan Times:")
+            layout.addWidget(self.multiScanTimeLabel, 24, 0)
+            layout.addWidget(self.scanIntervalLabel, 25, 0)
+            layout.addWidget(self.scanInterval, 25, 1)
+            layout.addWidget(self.numberOfScansLabel, 26, 0)
+            layout.addWidget(self.numberOfScans, 26, 1)
+            layout.addWidget(self.multiScanTimeExplanation, 27, 0)
+
+            self.executeMultiScanButton = QPushButton("Execute Scans")
+            self.executeMultiScanButton.clicked.connect(self.executeMultiScan)
+            self.cancelButton = QPushButton("Cancel (Return To Start")
+            self.cancelButton.clicked.connect(self.nextButtonClicked)
+
+            layout.addWidget(self.executeMultiScanButton, 28, 1)
+            layout.addWidget(self.cancelButton, 29, 1)
+
+        widget = QWidget()
+        widget.setLayout(layout)
+        return widget
 
     # create warning message subclass
     class WarningDialog(QDialog):
@@ -447,6 +523,9 @@ class MainWindow(QMainWindow):
             if self.experimentType == 'Single Pulse Measurement':
                 self.switchWindow('init')
 
+            elif self.experimentType == 'Single Scan':
+                self.switchWindow('scan')
+
             else:
                 self.switchWindow('time')
 
@@ -476,6 +555,12 @@ class MainWindow(QMainWindow):
     def switchWindow(self, destinationWindow : str):
         self.windowType = destinationWindow
         destinationIndex = self.windowIndices[destinationWindow]
+
+        # the experiment window must be initialized right before it is displayed so it can grab the most recent values of everything
+        # NOTE: this should be initialized to a hard coded index
+        if destinationWindow == 'experiment':
+            self.mainWidget.addWidget(self.experimentWindow())
+
         self.mainWidget.setCurrentIndex(destinationIndex)
 
     # execute a physical move the gantry
@@ -498,6 +583,15 @@ class MainWindow(QMainWindow):
         #     self.WarningDialog("Specified move is unsafe and will not execute. Check the move parameters and the position of the\n"
         #                        "transducer holder and try again. If you are sure the move should be safe, hit Abort and run the Setup experiment\n"
         #                        "to ensure the size parameters are correct and the gantry has been homed.")
+
+    def executeRepeatPulse(self):
+        print("repeat pulse")
+
+    def executeSingleScan(self):
+        print("scanning")
+
+    def executeMultiScan(self):
+        print("multiscanning")
 
 # function called from runUltrasonicExperiment to start setup through gui
 #TODO: currently passing in params to get port names, default values. This might be better to update?
