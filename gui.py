@@ -75,8 +75,18 @@ class MainWindow(QMainWindow):
                               'scannerSetup' : 7, 'homing' : 8, 'dimensions' : 9}
 
         # add widgets to stackedwidget in order defined by windowIndices
+        # note that a filler temp widget is created for the experiment window since that needs to be made after the parameters are chosen
         self.mainWidget = QStackedWidget()
-        self.mainWidget.addWidget(self.initWindow())
+        self.mainWidget.insertWidget(self.windowIndices['init'],self.initWindow())
+        self.mainWidget.insertWidget(self.windowIndices['move'], self.moveWindow())
+        self.mainWidget.insertWidget(self.windowIndices['pulse'], self.pulseWindow())
+        self.mainWidget.insertWidget(self.windowIndices['save'], self.saveWindow())
+        self.mainWidget.insertWidget(self.windowIndices['scan'], self.scanWindow())
+        self.mainWidget.insertWidget(self.windowIndices['time'], self.timeWindow())
+        self.mainWidget.insertWidget(self.windowIndices['experiment'], QWidget())
+        self.mainWidget.insertWidget(self.windowIndices['scannerSetup'], self.scannerSetupWindow())
+        self.mainWidget.insertWidget(self.windowIndices['homing'], self.homingWindow())
+        self.mainWidget.insertWidget(self.windowIndices['dimensions'], self.measureDimensionsWindow())
 
         # self.mainWidget.addWidget(self.experimentWindow())
         self.mainWidget.setCurrentIndex(0)
@@ -90,24 +100,14 @@ class MainWindow(QMainWindow):
     # this function handles control flow of the gui. uses the current window and experiment type to set the next window
     def nextButtonClicked(self):
 
-        print(self.mainWidget.count())
         # Handle initialization case first
         if self.windowType == 'init':
 
             # grab the experiment type from the combobox
             self.experimentType = self.experimentSelect.currentText()
 
-            # initialize the other windows after the experiment is chosen
-            # this is done here instead of __init__ because some options are experiment-dependent
-            self.mainWidget.insertWidget(self.windowIndices['move'], self.moveWindow())
-            self.mainWidget.insertWidget(self.windowIndices['pulse'], self.pulseWindow())
-            self.mainWidget.insertWidget(self.windowIndices['save'], self.saveWindow())
-            self.mainWidget.insertWidget(self.windowIndices['scan'], self.scanWindow())
-            self.mainWidget.insertWidget(self.windowIndices['time'], self.timeWindow())
-
-            self.mainWidget.insertWidget(self.windowIndices['scannerSetup'], self.scannerSetupWindow())
-            self.mainWidget.insertWidget(self.windowIndices['homing'], self.homingWindow())
-            self.mainWidget.insertWidget(self.windowIndices['dimensions'], self.measureDimensionsWindow())
+            # remake all windows to re-initialize parameters and ensure that widgets are not disappearing
+            self.remakeWindowsExceptInitAndExperiment()
 
             if self.experimentType == 'Repeat Pulse Measurement':
                 self.switchWindow('pulse')
@@ -735,11 +735,60 @@ class MainWindow(QMainWindow):
         self.windowType = destinationWindow
         destinationIndex = self.windowIndices[destinationWindow]
 
-        # self.mainWidget.insertWidget(destinationIndex, self.runWindowFunction(destinationWindow))
+        # the experiment window must be remade right before it is shown to be properly formatted and filled with the chosen values
         if destinationWindow == 'experiment':
-            self.mainWidget.insertWidget(self.windowIndices[destinationWindow], self.experimentWindow())
+            self.remakeWindow('experiment')
 
         self.mainWidget.setCurrentIndex(destinationIndex)
+
+    # inputs a windowType. removes that window's current widget, remakes the widget and inserts it back in its old place
+    # this is used when a window changes in response to the inputs in a previous window
+    def remakeWindow(self, window):
+
+        # get index of window
+        index = self.windowIndices[window]
+
+        # get the widget at that index and remove it
+        self.mainWidget.removeWidget(self.mainWidget.widget(index))
+
+        # run the correct window function
+        newWidget = self.runWindowFunction(window)
+
+        # insert that widget into the correct index
+        self.mainWidget.insertWidget(index, newWidget)
+
+    # helper function to remake all windows except the init one
+    # this re-initializes parameters and prevents widgets from disappearing after the experiment window is displayed
+    def remakeWindowsExceptInitAndExperiment(self):
+
+        for window in self.windowIndices.keys():
+            if window != 'init' and window != 'experiment':
+                self.remakeWindow(window)
+
+    # takes a windowType string and runs the corresponding window widget creation function
+    def runWindowFunction(self, windowType):
+
+        match windowType:
+            case 'init':
+                return self.initWindow()
+            case 'move':
+                return self.moveWindow()
+            case 'pulse':
+                return self.pulseWindow()
+            case 'save':
+                return self.saveWindow()
+            case 'scan':
+                return self.scanWindow()
+            case 'time':
+                return self.timeWindow()
+            case 'experiment':
+                return self.experimentWindow()
+            case 'scannerSetup':
+                return self.scannerSetupWindow()
+            case 'homing':
+                return self.homingWindow()
+            case 'dimensions':
+                return self.measureDimensionsWindow()
 
     # returnToMove is made as a separate function to connect to the returnToMoveButton because directly calling switchWindow
     # on the button clicked event causes problems with immediately executing the window change
