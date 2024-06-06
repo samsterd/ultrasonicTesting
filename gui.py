@@ -1,9 +1,5 @@
-#todo: clean up imports!!!
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
-# from PyQt5.QtWidgets import QFileDialog
-import sys
+from PyQt5.QtGui import QDoubleValidator, QIntValidator
+from PyQt5.QtWidgets import QApplication, QDialog, QFileDialog, QDialogButtonBox, QVBoxLayout, QMainWindow, QGridLayout,  QStackedWidget, QWidget, QLabel, QCheckBox, QComboBox, QPushButton, QLineEdit
 import scanSetupFunctions as setup
 import ultrasonicScan as scan
 import multiscan
@@ -28,11 +24,11 @@ import json
 # xcreate executeExperiment for every experiment
 #   xon move: change button to Moving..., make unclickable for duration
 #   add progress bars?
-# add reading parameter json file to __init__
+# xadd reading parameter json file to __init__
 # figure out mouseover notes
 # xgather parameters from widgets
-# define initialization/setup experiment
-#   save ports etc in a json file?
+# xdefine initialization/setup experiment
+#   xsave ports etc in a json file?
 # clean up imports
 # put main loop somewhere better?
 # fill in option defaults based on values in params dict
@@ -41,7 +37,7 @@ import json
 # before merging: check linux compatibility
 # Once merged: update the SOP on notion
 #
-# todo: setup function
+# xtodo: setup function
 #   example move
 #       need to add safeMoveQ override flag
 #   run homing function
