@@ -95,7 +95,8 @@ class Pulser():
         elif self.type == "tone burst":
 
             # convert frequency to kHz
-            freqkhz = freq * 1000
+            # math.floor is used to round to nearest integer
+            freqkhz = math.floor(freq * 1000)
 
             # send command
             self.connection.setFrequency(freqkhz)
