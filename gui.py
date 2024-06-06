@@ -8,7 +8,8 @@ import scanSetupFunctions as setup
 import ultrasonicScan as scan
 import multiscan
 import repeatPulse
-from typing import Callable
+import scanner as sc
+from serial import SerialException
 import time
 
 #TODO:
@@ -22,9 +23,10 @@ import time
 # xIMPLEMENT EVERYTHING AS QSTACKEDWIDGET()
 # xfix control flow to include timeWindow (forgot about that)
 # xcreate an experiment window that summarizes parameters and has option to abort or run
-# create executeExperiment for every experiment
+# xcreate executeExperiment for every experiment
 #   xon move: change button to Moving..., make unclickable for duration
 #   add progress bars?
+# add reading parameter json file to __init__
 # figure out mouseover notes
 # xgather parameters from widgets
 # define initialization/setup experiment
@@ -34,11 +36,24 @@ import time
 # fill in option defaults based on values in params dict
 # implement a back button
 # xupdate addWidgets to put them in a hardcoded index determined by self.windowIndices
+# before merging: check linux compatibility
+# Once merged: update the SOP on notion
+#
+# todo: setup function
+#   example move
+#       need to add safeMoveQ override flag
+#   run homing function
+#   prompt to measure transducer holder height, input it
+#   prompt to verify gantry dimensions
+#   move into a more reasonable position
+#   enter port or dll file
+#   run single pulse
+#       edit pulse display to add inputs for these if experimentType == setup
+#       may need to add error handling depending on whether exception gets raised on failure
 
-
-# windowType = init, move, pulse, save, scan, time, experiment
+# windowType = init, move, pulse, save, scan, time, experiment, 'scannerSetup'  'homing', 'dimensions'
 # windowIndex = {init : 0, move : 1, pul
-# experimentType = init, "Move", "Single Pulse Measurement", "Repeat Pulse Measurement", "Single Scan", "Multiple Scans"])
+# experimentType = init, "Move", "Single Pulse Measurement", "Repeat Pulse Measurement", "Single Scan", "Multiple Scans", "Setup"])
 #
 # algorithm:
 # start on init window
@@ -56,7 +71,8 @@ class MainWindow(QMainWindow):
         self.windowType = 'init'
         self.experimentType = 'init'
         # create a dict to convert window types to indices
-        self.windowIndices = {'init' : 0, 'move' : 1, 'pulse' : 2, 'save' : 3, 'scan' : 4, 'time' : 5, 'experiment' : 6}
+        self.windowIndices = {'init' : 0, 'move' : 1, 'pulse' : 2, 'save' : 3, 'scan' : 4, 'time' : 5, 'experiment' : 6,
+                              'scannerSetup' : 7, 'homing' : 8, 'dimensions' : 9}
 
         # add widgets to stackedwidget in order defined by windowIndices
         self.mainWidget = QStackedWidget()
@@ -67,14 +83,106 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(self.mainWidget)
 
+    ################################################################################
+    ################ NEXT BUTTON CONTROL FLOW ######################################
+    #################################################################################
+
+    # this function handles control flow of the gui. uses the current window and experiment type to set the next window
+    def nextButtonClicked(self):
+
+        print(self.mainWidget.count())
+        # Handle initialization case first
+        if self.windowType == 'init':
+
+            # grab the experiment type from the combobox
+            self.experimentType = self.experimentSelect.currentText()
+
+            # initialize the other windows after the experiment is chosen
+            # this is done here instead of __init__ because some options are experiment-dependent
+            self.mainWidget.insertWidget(self.windowIndices['move'], self.moveWindow())
+            self.mainWidget.insertWidget(self.windowIndices['pulse'], self.pulseWindow())
+            self.mainWidget.insertWidget(self.windowIndices['save'], self.saveWindow())
+            self.mainWidget.insertWidget(self.windowIndices['scan'], self.scanWindow())
+            self.mainWidget.insertWidget(self.windowIndices['time'], self.timeWindow())
+
+            self.mainWidget.insertWidget(self.windowIndices['scannerSetup'], self.scannerSetupWindow())
+            self.mainWidget.insertWidget(self.windowIndices['homing'], self.homingWindow())
+            self.mainWidget.insertWidget(self.windowIndices['dimensions'], self.measureDimensionsWindow())
+
+            if self.experimentType == 'Repeat Pulse Measurement':
+                self.switchWindow('pulse')
+
+            elif self.experimentType == 'Setup':
+                self.switchWindow('scannerSetup')
+
+            else:
+                self.switchWindow('move')
+
+        # next handle changes from move window
+        elif self.windowType == 'move':
+
+            if self.experimentType == 'Move':
+                self.switchWindow('init')
+
+            # in all other cases, go to pulse menu
+            else:
+                self.switchWindow('pulse')
+
+        elif self.windowType == 'pulse':
+
+            if self.experimentType == 'Single Pulse Measurement' or self.experimentType == 'Setup':
+                self.switchWindow('init')
+
+            elif self.experimentType == 'Single Scan':
+                self.switchWindow('scan')
+
+            else:
+                self.switchWindow('time')
+
+        elif self.windowType == 'time':
+
+            if self.experimentType == 'Repeat Pulse Measurement':
+                self.switchWindow('save')
+
+            else:
+                self.switchWindow('scan')
+
+        elif self.windowType == 'scan':
+
+            self.switchWindow('save')
+
+        elif self.windowType == 'save':
+
+            self.switchWindow('experiment')
+
+        # setup window progression
+        elif self.windowType == 'scannerSetup':
+
+            self.switchWindow('homing')
+
+        elif self.windowType == 'homing':
+
+            self.switchWindow('dimensions')
+
+        elif self.windowType == 'dimensions':
+
+            self.switchWindow('pulse')
+
+        # all unhandled cases (including experiment) go back to the init window
+        else:
+
+            self.switchWindow('init')
+
+####################################################################################
+############### WINDOW DEFINITIONS #################################################
+####################################################################################
 
     # init window is where experiment type is specified
-    #TODO: next button stops working after first return to init page
     def initWindow(self):
 
         self.experimentSelect = QComboBox()
         self.experimentSelect.addItems(
-            ["Move", "Single Pulse Measurement", "Repeat Pulse Measurement", "Single Scan", "Multiple Scans"])
+            ["Move", "Single Pulse Measurement", "Repeat Pulse Measurement", "Single Scan", "Multiple Scans", "Setup"])
         self.experimentSelectLabel = QLabel("Select Experiment Type: ")
         # self.input.textChanged.connect(self.label.setText)
 
@@ -124,17 +232,16 @@ class MainWindow(QMainWindow):
         widget = QWidget()
         widget.setLayout(layout)
 
-        #todo: add a move button to execute experiment separate from the next button
-        #TODO: add safety check and a dialog box if the move is invalid
-
         return widget
 
 
     # pulse window specifies scope and pulser paramters
-    #TODO: add a test pulse button
     def pulseWindow(self):
 
-        self.pulseLabel = QLabel("Define ultrasonic pulse and collection parameters:")
+        if self.experimentType == 'Setup':
+            self.pulseLabel = QLabel("Run a test pulse to verify the pulser and oscilloscope connection.\n")
+        else:
+            self.pulseLabel = QLabel("Define ultrasonic pulse and collection parameters:")
 
         self.transducerFrequencyLabel = QLabel("Central frequency of ultrasonic transducer (MHz):")
         self.transducerFrequency = QLineEdit("2.25")
@@ -175,6 +282,13 @@ class MainWindow(QMainWindow):
         self.halfCycles = QLineEdit("2")
         self.halfCycles.setValidator(QIntValidator(1,32))
 
+        # add port information for setup
+        if self.experimentType == 'Setup':
+            self.pulserPortLabel = QLabel("USB Port of Pulser (COM# or /dev/ttyUSB#) (Compact Pulser Only):")
+            self.pulserPort = QLineEdit("COM5")
+            self.dllFileLabel = QLabel("Location of SDK DLL File (Tone Burst Pulser Only):")
+            self.dllFile = QLineEdit("C://USUTSDK//USDBUTSDKC//USBUT.dll")
+
         self.executePulseButton = QPushButton("Execute Pulse")
         self.executePulseButton.clicked.connect(self.executeSinglePulse)
 
@@ -204,9 +318,18 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.waves, 8, 1)
         layout.addWidget(self.halfCyclesLabel, 9, 0)
         layout.addWidget(self.halfCycles, 9, 1)
-        layout.addWidget(self.executePulseButton, 10, 1)
-        layout.addWidget(self.returnToMoveButton, 11, 1)
-        layout.addWidget(self.nextButtonPulse, 12, 1)
+        if self.experimentType == 'Setup':
+            layout.addWidget(self.pulserPortLabel, 10, 0)
+            layout.addWidget(self.pulserPort, 10, 1)
+            layout.addWidget(self.dllFileLabel, 11, 0)
+            layout.addWidget(self.dllFile, 11, 1)
+            layout.addWidget(self.executePulseButton, 12, 1)
+            layout.addWidget(self.returnToMoveButton, 13, 1)
+            layout.addWidget(self.nextButtonPulse, 14, 1)
+        else:
+            layout.addWidget(self.executePulseButton, 10, 1)
+            layout.addWidget(self.returnToMoveButton, 11, 1)
+            layout.addWidget(self.nextButtonPulse, 12, 1)
 
         widget = QWidget()
         widget.setLayout(layout)
@@ -465,6 +588,113 @@ class MainWindow(QMainWindow):
         widget.setLayout(layout)
         return widget
 
+    ############## SETUP WINDOWS #########################################
+    # Setup experiment consists of the following phases:
+    # 1) Set the USB port for the scanner. Verify by attempting to move
+    # 2) Prompt the user to disconnect everything from the printer head and run the homing function
+    # 3) Prompt the user to measure the transducer holder height and verify the scanner dimensions
+    # 4) Prompt the user to move the scanner to a more centered position
+    # 5) Run a modified single pulse experiment with the pulser port / dll file option exposed
+    # 6) Dump collected info into a json file
+    def scannerSetupWindow(self):
+
+        self.scannerConnectionInstructions = QLabel("First determine the USB port that the scanner is plugged into.\n"
+                                                    "The port will be verified by doing a short move 5mm to the left or right.\n"
+                                                    "If you do not see the scanner move, try a different port")
+        self.scannerPortLabel = QLabel("USB Port Name. On Windows this will be COM# and on Linus /dev/ttyUSB#:")
+        self.scannerPort = QLineEdit("COM1")
+
+        self.testMoveDirectionLabel = QLabel("Direction of test move:")
+        self.testMoveDirection = QComboBox()
+        self.testMoveDirection.addItems(["Left", "Right"])
+
+        self.executeTestMoveButton = QPushButton("Execute Test Move")
+        self.executeTestMoveButton.clicked.connect(self.executeTestMove)
+
+        self.scannerConnectionNextButton = QPushButton("Next")
+        self.scannerConnectionNextButton.clicked.connect(self.nextButtonClicked)
+
+        layout = QGridLayout()
+        layout.addWidget(self.scannerConnectionInstructions, 0, 0)
+        layout.addWidget(self.scannerPortLabel, 1, 0)
+        layout.addWidget(self.scannerPort, 1, 1)
+        layout.addWidget(self.testMoveDirectionLabel, 2, 0)
+        layout.addWidget(self.testMoveDirection, 2, 1)
+        layout.addWidget(self.executeTestMoveButton, 3, 1)
+        layout.addWidget(self.scannerConnectionNextButton, 4, 1)
+
+        widget = QWidget()
+        widget.setLayout(layout)
+
+        return widget
+
+    def homingWindow(self):
+
+        self.scannerHomingInstructions = QLabel("Homing the scanner calibrates its position. This must be done at least once\n"
+                                                "in order for the scanner to be moved safely.")
+        self.scannerHomingWarning = QLabel("WARNING: REMOVE THE TRANSDUCER HOLDER FROM THE SCANNER HEAD BEFORE HOMING.\n"
+                                           "FAILURE TO DO SO MAY RESULT IN DAMAGE TO THE HOLDER OR THE SCANNER!")
+        self.homingButton = QPushButton("Run Homing Protocol")
+        self.homingButton.clicked.connect(self.executeHoming)
+        self.homingNextButton = QPushButton("Next")
+        self.homingNextButton.clicked.connect(self.nextButtonClicked)
+
+        layout = QGridLayout()
+        layout.addWidget(self.scannerHomingInstructions)
+        layout.addWidget(self.scannerHomingWarning)
+        layout.addWidget(self.homingButton)
+        layout.addWidget(self.homingNextButton)
+
+        widget = QWidget()
+        widget.setLayout(layout)
+
+        return widget
+
+    def measureDimensionsWindow(self):
+
+        self.measureDimensionsInstructions = QLabel("Measure the transducer holder height and verify the scanning dimensions.\n"
+                                                    "This information is used to prevent unsafe moves of the scanner.")
+        self.transducerHeightLabel = QLabel("Transducer holder height (mm):")
+        self.transducerHeight = QLineEdit("50")
+        self.transducerHeight.setValidator(QDoubleValidator(1, 200, 1))
+
+        self.scannerWidthLabel = QLabel("Scanner Width (X-Axis) (mm):")
+        self.scannerWidth = QLineEdit("220")
+        self.scannerWidth.setValidator(QDoubleValidator(1, 1000, 1))
+
+        self.scannerLengthLabel = QLabel("Scanner Length (Y-Axis) (mm):")
+        self.scannerLength = QLineEdit("220")
+        self.scannerLength.setValidator(QDoubleValidator(1, 1000, 1))
+
+        self.scannerHeightLabel = QLabel("Scanner Height (Z-Axis) (mm):")
+        self.scannerHeight = QLineEdit("240")
+        self.scannerHeight.setValidator(QDoubleValidator(1, 1000, 1))
+
+        self.scannerDimensionsNextButton = QPushButton("Next")
+        self.scannerDimensionsNextButton.clicked.connect(self.nextButtonClicked)
+
+        layout = QGridLayout()
+        layout.addWidget(self.measureDimensionsInstructions, 0, 0)
+        layout.addWidget(self.transducerHeightLabel, 1, 0)
+        layout.addWidget(self.transducerHeight, 1, 1)
+        layout.addWidget(self.scannerWidthLabel, 2, 0)
+        layout.addWidget(self.scannerWidth, 2, 1)
+        layout.addWidget(self.scannerLengthLabel, 3, 0)
+        layout.addWidget(self.scannerLength, 3, 1)
+        layout.addWidget(self.scannerHeightLabel, 4, 0)
+        layout.addWidget(self.scannerHeight, 4, 1)
+        layout.addWidget(self.scannerDimensionsNextButton, 5, 1)
+
+        widget = QWidget()
+        widget.setLayout(layout)
+
+        return widget
+
+
+    #########################################################################
+    ################# DIALOG BOXES #########################################
+    #######################################################################
+
     # create warning message subclass
     class WarningDialog(QDialog):
         def __init__(self, warningMessage : str, parent = None):
@@ -494,70 +724,9 @@ class MainWindow(QMainWindow):
         file = str(dlg.getExistingDirectory(self, "Select Directory"))
         self.experimentFolderName.setText(file)
 
-    # this function handles control flow of the gui. uses the current window and experiment type to set the next window
-    def nextButtonClicked(self):
-
-        # Handle initialization case first
-        if self.windowType == 'init':
-
-            # grab the experiment type from the combobox
-            self.experimentType = self.experimentSelect.currentText()
-
-            # initialize the other windows after the experiment is chosen
-            # this is done here instead of __init__ because some options are experiment-dependent
-            self.mainWidget.insertWidget(self.windowIndices['move'], self.moveWindow())
-            self.mainWidget.insertWidget(self.windowIndices['pulse'],self.pulseWindow())
-            self.mainWidget.insertWidget(self.windowIndices['save'],self.saveWindow())
-            self.mainWidget.insertWidget(self.windowIndices['scan'],self.scanWindow())
-            self.mainWidget.insertWidget(self.windowIndices['time'],self.timeWindow())
-
-            if self.experimentType == 'Repeat Pulse Measurement':
-                self.switchWindow('pulse')
-
-            elif self.experimentType != 'Setup':
-                self.switchWindow('move')
-
-        # next handle changes from move window
-        elif self.windowType == 'move':
-
-            if self.experimentType == 'Move':
-                self.switchWindow('init')
-
-            # in all other cases, go to pulse menu
-            else:
-                self.switchWindow('pulse')
-
-        elif self.windowType == 'pulse':
-
-            if self.experimentType == 'Single Pulse Measurement':
-                self.switchWindow('init')
-
-            elif self.experimentType == 'Single Scan':
-                self.switchWindow('scan')
-
-            else:
-                self.switchWindow('time')
-
-        elif self.windowType == 'time':
-
-            if self.experimentType == 'Repeat Pulse Measurement':
-                self.switchWindow('save')
-
-            else:
-                self.switchWindow('scan')
-
-        elif self.windowType == 'scan':
-
-            self.switchWindow('save')
-
-        elif self.windowType == 'save':
-
-            self.switchWindow('experiment')
-
-        # all unhandled cases (including experiment) go back to the init window
-        else:
-
-            self.switchWindow('init')
+    #######################################################################3
+    ############## HELPER FUNCTIONS ########################################
+    ########################################################################
 
     # inputs the name of the target window. grabs the stacked widget index of the window and changes the index of the stacked widget
     # also updates the self.windowType field to destinationWindow
@@ -576,6 +745,10 @@ class MainWindow(QMainWindow):
     # on the button clicked event causes problems with immediately executing the window change
     def returnToMove(self):
         self.switchWindow('move')
+
+    ############################################################################
+    ######### EXECUTE EXPERIMENT FUNCTIONS ###################################
+    #########################################################################
 
     # execute a physical move the gantry
     def executeMove(self):
@@ -605,6 +778,49 @@ class MainWindow(QMainWindow):
         self.moveButton.setText("MOVE")
         self.moveButton.setEnabled(True)
 
+    # a special constrained version of move for testing the USB port connection
+    # this enables calling scanner.move() with checkMoveSafety = False and allows special error handling for timeouts
+    def executeTestMove(self):
+
+        # change status of button while move is executing
+        self.executeTestMoveButton.setText("MOVING...")
+        self.executeTestMoveButton.setEnabled(False)
+        self.executeTestMoveButton.repaint()
+
+        # gather parameters
+        self.params['pulserPort'] = self.scannerPort.text()
+        direction = self.testMoveDirection.currentText()
+        # set move direction and axis. It is constrained to move left or right so axis = 'x'
+        self.params['axis'] = 'X'
+        if direction == "Left":
+            self.params['distance'] = -5
+        else:
+            self.params['distance'] = 5
+
+        # need to add filler info for 'transducerHolderHeight' and 'scannerMaxDimensions'
+        self.params['transducerHolderHeight'] = 50
+        self.params['scannerMaxDimensions'] = (220, 220, 240)
+
+        print('test move')
+        # try:
+        #     scanner = sc.Scanner(self.params)
+        # except SerialException:
+        #     self.WarningDialog("Serial port exception raised. Try a different port.")
+        #
+        # scanner.move(self.params['axis'], self.params['distance'], checkMoveSafety = False)
+        # scanner.close()
+
+        # change button back to normal
+        self.executeTestMoveButton.setText("MOVE")
+        self.executeTestMoveButton.setEnabled(True)
+
+    def executeHoming(self):
+
+        print('test homing')
+        # scanner = sc.Scanner(self.params)
+        # scanner.home()
+        # scanner.close()
+
     def executeSinglePulse(self):
 
         # change status of button while experiment is running
@@ -623,6 +839,11 @@ class MainWindow(QMainWindow):
         self.params['samples'] = int(self.samples.text())
         self.params['halfCycles'] = int(self.halfCycles.text())
 
+        if self.experimentType == 'Setup':
+            self.params['pulserPort'] = self.pulserPort.text()
+            self.params['dllFile'] = self.dllFile.text()
+
+        # todo: add error handling
         # setup.singlePulseMeasure(self.params)
 
         # change button back to normal
@@ -749,5 +970,3 @@ def startGUI(params : dict):
     window.show()
 
     app.exec_()
-
-startGUI({})
