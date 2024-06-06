@@ -126,7 +126,7 @@ experimentParams = {
 def runExperiment(params : dict):
 
     if params['gui']:
-        gui.startGUI()
+        gui.startGUI(params)
 
     else:
         # get the experiment from the input

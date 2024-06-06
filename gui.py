@@ -218,7 +218,7 @@ class MainWindow(QMainWindow):
 
         self.distanceLabel = QLabel("Distance (mm):")
         self.distance = QLineEdit("1")
-        self.distance.setValidator(QDoubleValidator(0.1, 100, 1))
+        self.distance.setValidator(QDoubleValidator(-100, 100, 1))
 
         self.moveButtonLabel = QLabel("Execute Move:")
         self.moveButton = QPushButton("MOVE")
@@ -247,7 +247,8 @@ class MainWindow(QMainWindow):
     def pulseWindow(self):
 
         if self.experimentType == 'Setup':
-            self.pulseLabel = QLabel("Run a test pulse to verify the pulser and oscilloscope connection.\n")
+            self.pulseLabel = QLabel("Connect transducers, transducer holder, pulser, and oscilloscope.\n"
+                                     "Run a test pulse to verify the pulser and oscilloscope connection.")
         else:
             self.pulseLabel = QLabel("Define ultrasonic pulse and collection parameters:")
 
@@ -857,13 +858,13 @@ class MainWindow(QMainWindow):
         self.params['distance'] = float(self.distance.text())
 
         # execute the move
-        # moveRes = setup.moveScanner(self.params)
-        #
-        # # show a dialog box if move is invalid
-        # if moveRes == -1:
-        #     self.WarningDialog("Specified move is unsafe and will not execute. Check the move parameters and the position of the\n"
-        #                        "transducer holder and try again. If you are sure the move should be safe, hit Abort and run the Setup experiment\n"
-        #                        "to ensure the size parameters are correct and the gantry has been homed.")
+        moveRes = setup.moveScanner(self.params)
+
+        # show a dialog box if move is invalid
+        if moveRes == -1:
+            self.WarningDialog("Specified move is unsafe and will not execute. Check the move parameters and the position of the\n"
+                               "transducer holder and try again. If you are sure the move should be safe, hit Abort and run the Setup experiment\n"
+                               "to ensure the size parameters are correct and the gantry has been homed.")
 
         # wait a short time before unlocking the button
         time.sleep(0.5)
@@ -882,7 +883,7 @@ class MainWindow(QMainWindow):
         self.executeTestMoveButton.repaint()
 
         # gather parameters
-        self.params['pulserPort'] = self.scannerPort.text()
+        self.params['scannerPort'] = self.scannerPort.text()
         direction = self.testMoveDirection.currentText()
         # set move direction and axis. It is constrained to move left or right so axis = 'x'
         self.params['axis'] = 'X'
@@ -895,14 +896,13 @@ class MainWindow(QMainWindow):
         self.params['transducerHolderHeight'] = 50
         self.params['scannerMaxDimensions'] = (220, 220, 240)
 
-        print('test move')
-        # try:
-        #     scanner = sc.Scanner(self.params)
-        # except SerialException:
-        #     self.WarningDialog("Serial port exception raised. Try a different port.")
-        #
-        # scanner.move(self.params['axis'], self.params['distance'], checkMoveSafety = False)
-        # scanner.close()
+        try:
+            scanner = sc.Scanner(self.params)
+            scanner.move(self.params['axis'], self.params['distance'], checkMoveSafety=False)
+            scanner.close()
+        except SerialException:
+            self.WarningDialog("Serial port exception raised. Try a different port.")
+
 
         # change button back to normal
         self.executeTestMoveButton.setText("MOVE")
@@ -910,10 +910,9 @@ class MainWindow(QMainWindow):
 
     def executeHoming(self):
 
-        print('test homing')
-        # scanner = sc.Scanner(self.params)
-        # scanner.home()
-        # scanner.close()
+        scanner = sc.Scanner(self.params)
+        scanner.home()
+        scanner.close()
 
     def executeSinglePulse(self):
 
@@ -938,7 +937,7 @@ class MainWindow(QMainWindow):
             self.params['dllFile'] = self.dllFile.text()
 
         # todo: add error handling
-        # setup.singlePulseMeasure(self.params)
+        setup.singlePulseMeasure(self.params)
 
         # change button back to normal
         self.executePulseButton.setText("Execute Pulse")

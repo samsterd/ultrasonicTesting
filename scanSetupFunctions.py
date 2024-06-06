@@ -67,8 +67,9 @@ def singlePulseMeasure(params):
 def moveScanner(params):
 
     scanner = sc.Scanner(params)
-    scanner.move(params['axis'], params['distance'])
+    moveRes = scanner.move(params['axis'], params['distance'])
     scanner.close()
+    return moveRes
 
 # Recursively determines the minimum voltage range needed to capture data at the current location
 # Returns the waveform data at the proper rang and the updated params dict

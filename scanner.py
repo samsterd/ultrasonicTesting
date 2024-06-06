@@ -49,7 +49,6 @@ class Scanner():
         except serial.SerialException as error:
             print(f"Scanner.init: Error opening connection to scanner: {error}")
 
-            # return -1 for error
             raise serial.SerialException
 
     # encode strings to the proper format and send to the scanner via serial
@@ -98,8 +97,10 @@ class Scanner():
         moveRes = self.write(motionCommand)
 
         # flush out the responses. It is unclear why 5 reads are needed for 4 commands, but testing has shown it is needed
-        for i in range(5):
-            self.serial.read_until()
+        # this is only done when safeMoveQ is being called, otherwise the mover hangs
+        if checkMoveSafety:
+            for i in range(5):
+                self.serial.read_until()
 
     def currentPosition(self):
 
