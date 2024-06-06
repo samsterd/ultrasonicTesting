@@ -11,6 +11,8 @@ import repeatPulse
 import scanner as sc
 from serial import SerialException
 import time
+import os
+import json
 
 #TODO:
 # xmake an initial experiment select window
@@ -93,6 +95,10 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(self.mainWidget)
 
+        # this is done after setting up the initial page so a warning dialog can properly display on top
+        self.readSetupJSON()
+
+
     ################################################################################
     ################ NEXT BUTTON CONTROL FLOW ######################################
     #################################################################################
@@ -130,7 +136,13 @@ class MainWindow(QMainWindow):
 
         elif self.windowType == 'pulse':
 
-            if self.experimentType == 'Single Pulse Measurement' or self.experimentType == 'Setup':
+            if self.experimentType == 'Single Pulse Measurement':
+                self.switchWindow('init')
+
+            # this is the end of the setup experiment so the results must be recorded in set_parameters.json
+            elif self.experimentType == 'Setup':
+                self.writeSetupJSON()
+                self.WarningDialog("Updated setup_parameters.json with setup results.")
                 self.switchWindow('init')
 
             elif self.experimentType == 'Single Scan':
@@ -702,19 +714,17 @@ class MainWindow(QMainWindow):
 
             self.setWindowTitle("Warning!")
 
-            QBtn = QDialogButtonBox.Abort | QDialogButtonBox.Ok
+            QBtn = QDialogButtonBox.Ok
 
             self.warningButtonBox = QDialogButtonBox(QBtn)
-            # Todo: make sure ok and abort are tied to correct actions. define actions to return to prev window vs go back to init
-            # a hacky way to do this is to treat the abort button as hitting 'Next' after changing experimentType and windowType
-            # self.warningButtonBox.accepted.connect(self.accept)
-            # self.warningButtonBox.rejected.connect(self.accept)
+            self.warningButtonBox.clicked.connect(self.close)
 
             self.layout = QVBoxLayout()
             message = QLabel(warningMessage)
             self.layout.addWidget(message)
             self.layout.addWidget(self.warningButtonBox)
             self.setLayout(self.layout)
+            self.exec()
 
     def dirButtonClicked(self):
 
@@ -794,6 +804,45 @@ class MainWindow(QMainWindow):
     # on the button clicked event causes problems with immediately executing the window change
     def returnToMove(self):
         self.switchWindow('move')
+
+    # a function that reads setup_parameters.json and pulls in the relevant values
+    # it will display a warning dialog if the file is not found or improperly formatted
+    def readSetupJSON(self):
+
+        currentDir = os.path.dirname(os.path.realpath(__file__))
+        jsonFile = os.path.join(currentDir,'setup_parameters.json')
+
+        if not os.path.isfile(jsonFile):
+            self.WarningDialog("setup_parameters.json file not found. Either run the Setup experiment or\n"
+                               "check that all necessary parameters are correct in runUltrasonicExperiment.py.")
+
+        else:
+            # load the file
+            with open(jsonFile, 'r+') as f:
+                jsonData = json.load(f)
+
+            # copy the data into the params dict
+            for key in jsonData.keys():
+                self.params[key] = jsonData[key]
+
+    # takes the data taken from the Setup experiment and writes it to a json file
+    def writeSetupJSON(self):
+
+        # gather data from widgets
+        jsonDict = {}
+        jsonDict['pulserPort'] = self.pulserPort.text()
+        jsonDict['scannerPort'] = self.scannerPort.text()
+        jsonDict['dllFile'] = self.dllFile.text()
+        jsonDict['transducerHolderHeight'] = float(self.transducerHeight.text())
+        jsonDict['scannerMaxDimensions'] = (float(self.scannerWidth.text()),
+                                            float(self.scannerLength.text()),
+                                            float(self.scannerHeight.text()))
+
+        # if the previous file exists, overwrite it
+        currentDir = os.path.dirname(os.path.realpath(__file__))
+        jsonFile = os.path.join(currentDir,'setup_parameters.json')
+        with open(jsonFile, "w") as f:
+            json.dump(jsonDict, f)
 
     ############################################################################
     ######### EXECUTE EXPERIMENT FUNCTIONS ###################################
