@@ -981,7 +981,7 @@ class MainWindow(QMainWindow):
 
         # gather parameters
         self.params['transducerFrequency'] = float(self.transducerFrequency.text())
-        self.params['pulserType'] = self.pulser.currentText()
+        self.params['pulserType'] = self.pulser.currentText().lower()
         self.params['measureTime'] = float(self.measureTime.text())
         self.params['measureDelay'] = float(self.measureDelay.text())
         self.params['voltageRange'] = float(self.voltageRange.currentText())
@@ -1015,7 +1015,7 @@ class MainWindow(QMainWindow):
 
         # gather parameters
         self.params['transducerFrequency'] = float(self.transducerFrequency.text())
-        self.params['pulserType'] = self.pulser.currentText()
+        self.params['pulserType'] = self.pulser.currentText().lower()
         self.params['measureTime'] = float(self.measureTime.text())
         self.params['measureDelay'] = float(self.measureDelay.text())
         self.params['voltageRange'] = float(self.voltageRange.currentText())
@@ -1052,7 +1052,7 @@ class MainWindow(QMainWindow):
 
         # gather parameters
         self.params['transducerFrequency'] = float(self.transducerFrequency.text())
-        self.params['pulserType'] = self.pulser.currentText()
+        self.params['pulserType'] = self.pulser.currentText().lower()
         self.params['measureTime'] = float(self.measureTime.text())
         self.params['measureDelay'] = float(self.measureDelay.text())
         self.params['voltageRange'] = float(self.voltageRange.currentText())
