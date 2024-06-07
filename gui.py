@@ -14,43 +14,19 @@ import time
 import os
 import json
 
-#TODO:
-# xmake an initial experiment select window
-# xmake the move window
-# xfigure out how to transition windows
-# xdefine windows for other experiments
-# xmove files to gui.py, integrate gui start into run script
-# xdefine control flow of experiment!
-#      xIt might be better to make buttons for moving from any window to any other relevant window?
-# xIMPLEMENT EVERYTHING AS QSTACKEDWIDGET()
-# xfix control flow to include timeWindow (forgot about that)
-# xcreate an experiment window that summarizes parameters and has option to abort or run
-# xcreate executeExperiment for every experiment
-#   xon move: change button to Moving..., make unclickable for duration
-#   add progress bars?
-# xadd reading parameter json file to __init__
-# xgather parameters from widgets
-# xdefine initialization/setup experiment
-#   xsave ports etc in a json file?
-# xclean up imports
-# xget plotting single pulse data working
-# figure out mouseover notes
-# xfill in option defaults based on values in params dict
-# implement a back button
-# xupdate addWidgets to put them in a hardcoded index determined by self.windowIndices
-# before merging: check linux compatibility
-# implement post-measurement analysis
-# Once merged: update the SOP on notion
-#
+# A simple PyQt GUI for running ultrasound experiments
+# Gathers user inputs and then runs the correct experiment function. Also used to setup new instrument with the Setup
+#   experiment. Setup data that should be unchanged between experiments (like USB port names) is now saved in a JSON file
+# The GUI is a single MainWindow containing a QStackedWidget. Different 'windows' are displayed by generating the widgets
+#   associated with a given action using a function (i.e. moveWindow()) and changing the current widget of the QStackedWidget
+# Control flow and moving between windows is controlled by the function nextButtonClicked()
+# Code is divided into sections: Main Window, Next Button, Window Definition functions, Setup Windows subsection,
+#   Dialog Boxes, Helper Functions (for switching windows and reading JSON files with parameters), and experiment functions
 
-# windowType = init, move, pulse, save, scan, time, experiment, 'scannerSetup'  'homing', 'dimensions'
-# windowIndex = {init : 0, move : 1, pul
-# experimentType = init, "Move", "Single Pulse Measurement", "Repeat Pulse Measurement", "Single Scan", "Multiple Scans", "Setup"])
-#
-# algorithm:
-# start on init window
-# when next button is pressed, determine the next window to display based on current windowtype, experimenttype, and other info entered
-# create functions for each type of window
+################################################################################
+############### Main Window ###################################################
+##############################################################################
+
 
 class MainWindow(QMainWindow):
 
@@ -175,9 +151,11 @@ class MainWindow(QMainWindow):
 
             self.switchWindow('init')
 
-####################################################################################
-############### WINDOW DEFINITIONS #################################################
-####################################################################################
+    ####################################################################################
+    ############### WINDOW DEFINITIONS #################################################
+    ####################################################################################
+    # Functions to create widgets and associated layouts, which are then combined into the
+    # main window QStackedWidget
 
     # init window is where experiment type is specified
     def initWindow(self):
@@ -627,9 +605,8 @@ class MainWindow(QMainWindow):
     # 1) Set the USB port for the scanner. Verify by attempting to move
     # 2) Prompt the user to disconnect everything from the printer head and run the homing function
     # 3) Prompt the user to measure the transducer holder height and verify the scanner dimensions
-    # 4) Prompt the user to move the scanner to a more centered position
-    # 5) Run a modified single pulse experiment with the pulser port / dll file option exposed
-    # 6) Dump collected info into a json file
+    # 4) Run a modified single pulse experiment with the pulser port / dll file option exposed
+    # 5) Dump collected info into a json file
     def scannerSetupWindow(self):
 
         self.scannerConnectionInstructions = QLabel("First determine the USB port that the scanner is plugged into.\n"
@@ -728,6 +705,7 @@ class MainWindow(QMainWindow):
     #########################################################################
     ################# DIALOG BOXES #########################################
     #######################################################################
+    # Define and run dialog boxes for displaying warnings, plots, and finding save directories
 
     # create warning message subclass
     class WarningDialog(QDialog):
@@ -768,7 +746,6 @@ class MainWindow(QMainWindow):
             self.setLayout(self.layout)
             self.exec()
 
-
     def dirButtonClicked(self):
 
         dlg = QFileDialog(self)
@@ -780,6 +757,7 @@ class MainWindow(QMainWindow):
     #######################################################################3
     ############## HELPER FUNCTIONS ########################################
     ########################################################################
+    # Helper functions to either help manage window switching and creation or read/write JSON files
 
     # inputs the name of the target window. grabs the stacked widget index of the window and changes the index of the stacked widget
     # also updates the self.windowType field to destinationWindow
@@ -890,6 +868,7 @@ class MainWindow(QMainWindow):
     ############################################################################
     ######### EXECUTE EXPERIMENT FUNCTIONS ###################################
     #########################################################################
+    # These functions grab experimental parameters from the widgets and then run the corresponding experiment
 
     # execute a physical move the gantry
     def executeMove(self):
@@ -1021,7 +1000,7 @@ class MainWindow(QMainWindow):
         self.params['experimentTime'] = float(self.experimentTime.text())
 
         # run experiment
-        #repeatPulse.repeatPulse(self.params)
+        repeatPulse.repeatPulse(self.params)
 
         # change button back to normal
         self.executeRepeatPulseButton.setText("Execute Repeat Pulse")
@@ -1058,8 +1037,7 @@ class MainWindow(QMainWindow):
         self.params['secondaryAxisRange'] = float(self.secondaryAxisRange.text())
         self.params['secondaryAxisStep'] = float(self.secondaryAxisStep.text())
 
-        print(self.params)
-        # scan.runScan(self.params)
+        scan.runScan(self.params)
 
         # change button back to normal
         self.executeSingleScanButton.setText("Execute Scan")
@@ -1099,11 +1077,19 @@ class MainWindow(QMainWindow):
         self.params['scanInterval'] = int(self.scanInterval.text())
         self.params['numberOfScans'] = int(self.numberOfScans.text())
 
+        multiscan.multiscan(self.params)
+
         # change button back to normal
         self.executeMultiScanButton.setText("Execute Scans")
         self.executeMultiScanButton.setEnabled(True)
 
+##############################################################################
+############ EVERYTHING ELSE ##############################################
+#################################################################
+
 # create canvas figure class for showing matplotlib figs through Qt
+# code taken from online example: https://www.pythonguis.com/tutorials/plotting-matplotlib/
+# todo: move this so it isn't a global class...
 class MplCanvas(FigureCanvasQTAgg):
 
     def __init__(self, parent=None, width = 5, height = 4, dpi = 100):
@@ -1111,8 +1097,7 @@ class MplCanvas(FigureCanvasQTAgg):
         self.axes = fig.add_subplot(111)
         super(MplCanvas, self).__init__(fig)
 
-# function called from runUltrasonicExperiment to start setup through gui
-#TODO: currently passing in params to get port names, default values. This might be better to update?
+# function called from runUltrasonicExperiment to run execution loop
 def startGUI(params : dict):
 
     app = QApplication([])

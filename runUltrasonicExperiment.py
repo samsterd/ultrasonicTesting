@@ -27,33 +27,33 @@ experimentParams = {
     #'multi scan' = repeat a 2D scan with a set frequency
     #Once you have selected, fill out the values in the parameter list in the correct section
     #NOTE: ONLY CHANGE THE VALUES AFTER THE COLON ON EACH LINE
-    'experiment' : 'move',
+    'experiment' : 'single pulse',
 
     #####################################################################
     ################# 'move' parameters #################################
     ### Only applies when 'experiment' == 'move' ########################
     #####################################################################
 
-    'axis': 'X',                                     # Axis to move ender
-    'distance': -3,                                  # Distance in mm to move ender
+    'axis': 'X',                                     # Axis to move scanner
+    'distance': -3,                                  # Distance in mm to move scanner
 
     #################################################################################
     ###################### Ultrasonic Parameters #####################################
     #### Applies to 'single pulse', 'single scan', and 'multi scan' experiments #####
     #################################################################################
 
-    'transducerFrequency' : 2.25,                    # Central frequency of the ultrasonic transducer, in MHz. Current options are 2.25 or 50
+    'transducerFrequency' : 50,                    # Central frequency of the ultrasonic transducer, in MHz. Current options are 2.25 or 50
     'pulserType' : 'standard',                       # Type of pulser. 'standard' is the single wave CompactPulser. 'tone burst' uses the USBUT350 tone burst pulser
-    'measureTime' : 20,                               # Approx measurement time, in us. Note this can be changed by the picoscope time interval based on samples
+    'measureTime' : 1,                               # Approx measurement time, in us. Note this can be changed by the picoscope time interval based on samples
                                                      #      Changes to the measureTime will be printed in the console when the script is run
-    'measureDelay' : 13.5,                           # Approx delay after trigger to start measuring, in us
-    'voltageRange' : 0.1,                            # Picoscope voltage range in V. Note this is the total range: 1 V = [-0.5 V, 0.5 V]
+    'measureDelay' : 11,                           # Approx delay after trigger to start measuring, in us
+    'voltageRange' : 0.02,                            # Picoscope voltage range in V. Note this is the total range: 1 V = [-0.5 V, 0.5 V]
                                                      # Allowed voltages = (0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20)
     'voltageAutoRange' : True,                      # Set the oscilloscope to rerun measurements where the voltage range of the wave has significantly changed
                                                      # This enables the tightest possible voltageRange to be used, increasing the accuracy of low intensity signals without cutting off high intensity ones
                                                      # NOTE: this can add significant overhead (2-3x increase in collection time) for each waveform where the range changes
     'waves' : 1000,                                  # Number of waves to collect and average
-    'samples': 500,                                  # Number of data points per wave
+    'samples': 1000,                                  # Number of data points per wave
     'halfCycles' : 16,                               # Tone burst pulser only. Number of half-cycles in a tone burst pulse. Minimum 1, maximum 32
 
     ################################################################################
@@ -94,7 +94,7 @@ experimentParams = {
     ########################## Port Names ###########################################
     ######### Only change if instrument USB ports are changed! ######################
     #################################################################################
-    'pulserPort' : '/dev/ttyUSB0',                          # Ultratek pulser port name
+    'pulserPort' : 'COM5',                          # Ultratek pulser port name
     'scannerPort' : '/dev/ttyUSB1',                         # Ender port name
     'dllFile' : 'C://USUTSDK//USBUTSDKC//USBUT.dll',        # Only used for 'pulserType' : 'tone burst'. Location of USBUT350 pulser SDK
 
