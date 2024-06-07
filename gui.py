@@ -35,7 +35,7 @@ import json
 # xclean up imports
 # xget plotting single pulse data working
 # figure out mouseover notes
-# fill in option defaults based on values in params dict
+# xfill in option defaults based on values in params dict
 # implement a back button
 # xupdate addWidgets to put them in a hardcoded index determined by self.windowIndices
 # before merging: check linux compatibility
@@ -209,6 +209,8 @@ class MainWindow(QMainWindow):
         self.moveAxisLabel = QLabel("Axis: ")
         self.moveAxis = QComboBox()
         self.moveAxis.addItems(['X', 'Y', 'Z'])
+        self.moveAxisLabel.setToolTip("Axis to move scanner. X is left to right, Y moves the stage back and forth, Z moves up and down")
+        self.moveAxis.setToolTip("Axis to move scanner. X is left to right, Y moves the stage back and forth, Z moves up and down")
 
         self.distanceLabel = QLabel("Distance (mm):")
         self.distance = QLineEdit(str(self.params['distance']))
@@ -257,31 +259,47 @@ class MainWindow(QMainWindow):
         self.measureTimeLabel = QLabel("Approximate measurement time (us):\n"
                                        "Note: this can be changed by the Picoscope time interval selection.\n"
                                        "If the measure time is changed, it will be printed in the console.")
+        self.measureTimeLabel.setToolTip("Note: this can be changed by the Picoscope time interval selection based on the\n"
+                                       "number of data points per wave. If the measure time is changed, it will be printed in the console.")
         self.measureTime = QLineEdit(str(self.params['measureTime']))
         self.measureTime.setValidator(QDoubleValidator(0.001, 1000, 3))
 
-        self.measureDelayLabel = QLabel("Delay after trigger pulse is received before measurement starts (us):")
+        self.measureDelayLabel = QLabel("Delay Time (us):")
+        self.measureDelayLabel.setToolTip("Delay after trigger pulse is received before measurement starts.\n"
+                                          "This chooses where the x-axis starts in a plot of the measured waveform.")
         self.measureDelay = QLineEdit(str(self.params['measureDelay']))
         self.measureDelay.setValidator(QDoubleValidator(0.001, 1000, 3))
 
-        self.voltageRangeLabel = QLabel("Voltage range on the oscilloscope (V)")
+        self.voltageRangeLabel = QLabel("Voltage range on the oscilloscope (V):")
+        self.voltageRangeLabel.setToolTip("This determines the range of the y-axis in a plot of the measured waveform.\n"
+                                          "If it is too small, the waves will be cut off. If it is too large, the waves will\n"
+                                          "show artifacts due to division of the voltage range.")
         self.voltageRange = QComboBox()
         self.voltageRange.addItems(["0.02", "0.05", "0.1", "0.2", "0.5", "1", "2", "5", "10", "20"])
 
-        self.voltageAutoRangeLabel = QLabel("Automatically find the optimal voltage range during a measurement:\n"
-                                            "Note: this can increase scan collection time, but prevents measurement artifacts due to large amplitude changes.")
+        self.voltageAutoRangeLabel = QLabel("Voltage Auto Range (recommended):")
+        self.voltageAutoRangeLabel.setToolTip("Automatically finds the optimal voltage range during a measurement.\n"
+                                              "Note: this can increase collection time, but prevents measurement artifacts\n"
+                                              "due to large amplitude changes across a scan.")
         self.voltageAutoRange = QCheckBox()
         self.voltageAutoRange.setChecked(True)
 
-        self.samplesLabel = QLabel("Number of data points per wave (Measure time / number of data points = time resolution):")
+        self.samplesLabel = QLabel("Number of data points per wave:")
+        self.samplesLabel.setToolTip("This determines the time resolution of the measurement.\n"
+                                     "Measure time / number of data points = time resolution.\n"
+                                     "In the current configuration, the shortest resolution is 2 ns.")
         self.samples = QLineEdit(str(self.params['samples']))
         self.samples.setValidator(QIntValidator(1, 10000))
 
         self.wavesLabel = QLabel("Number of waveforms to average per measurement:")
+        self.wavesLabel.setToolTip("This increasing signal to noise at the cost of measurement time.\n"
+                                   "This parameter is memory limited. Setting above 10,000 will likely\n"
+                                   "cause the program to crash.")
         self.waves = QLineEdit(str(self.params['waves']))
         self.waves.setValidator(QIntValidator(1, 10000))
 
-        self.halfCyclesLabel = QLabel("For tone burst pulser only: number of half cycles per tone burst:")
+        self.halfCyclesLabel = QLabel("Half Cycles (Tone Burst Pulser Only):")
+        self.halfCyclesLabel.setToolTip("Sets the number of wave periods within a tone burst wave packet.")
         self.halfCycles = QLineEdit(str(self.params['halfCycles']))
         self.halfCycles.setValidator(QIntValidator(1,32))
 
@@ -355,7 +373,10 @@ class MainWindow(QMainWindow):
                                                "If the actual time per scan is greater than the minimum time between scans, the next scan will\n"
                                                "start immediately after the previous and the total experiment time will be greater than the minimum.")
 
-        self.pulseIntervalLabel = QLabel("Pulse interval (s):")
+        self.pulseIntervalLabel = QLabel("Minimum pulse interval (s):")
+        self.pulseIntervalLabel.setToolTip("Note: if an the time to collect each wave is longer than the minimum pulse interval,\n"
+                                           "there will be no wait between each pulse. The total number of pulses collected in the experiment\n"
+                                           "will then be less than experiment time / pulse interval")
         self.pulseInterval = QLineEdit(str(self.params['pulseInterval']))
         self.pulseInterval.setValidator(QDoubleValidator(0.0001, 100000, 4))
 
@@ -396,6 +417,7 @@ class MainWindow(QMainWindow):
         self.scanLabel = QLabel("Define length parameters of the scan:")
 
         self.primaryAxisLabel = QLabel("Primary scan axis:")
+        self.primaryAxisLabel.setToolTip("This is the first axis the scan will move along. 'X' is recommended.")
         self.primaryAxis = QComboBox()
         self.primaryAxis.addItems(['X', 'Y', 'Z'])
 
@@ -404,10 +426,12 @@ class MainWindow(QMainWindow):
         self.primaryAxisRange.setValidator(QDoubleValidator(0.1, 100, 1))
 
         self.primaryAxisStepLabel = QLabel("Primary axis step size (mm):")
+        self.primaryAxisStepLabel.setToolTip("Distance between each scan point. The scanner limit is 0.1.")
         self.primaryAxisStep = QLineEdit(str(self.params['primaryAxisStep']))
         self.primaryAxisStep.setValidator(QDoubleValidator(0.1, 100, 1))
 
         self.secondaryAxisLabel = QLabel("Secondary scan axis:")
+        self.secondaryAxisLabel.setToolTip("This is the second axis the scan will move along. 'Z' is recommended.")
         self.secondaryAxis = QComboBox()
         self.secondaryAxis.addItems(['X', 'Y', 'Z'])
 
@@ -416,6 +440,7 @@ class MainWindow(QMainWindow):
         self.secondaryAxisRange.setValidator(QDoubleValidator(0.1, 100, 1))
 
         self.secondaryAxisStepLabel = QLabel("Secondary axis step size (mm):")
+        self.secondaryAxisStepLabel.setToolTip("Distance between each scan point. The scanner limit is 0.1.")
         self.secondaryAxisStep = QLineEdit(str(self.params['secondaryAxisStep']))
         self.secondaryAxisStep.setValidator(QDoubleValidator(0.1, 100, 1))
 
@@ -454,13 +479,19 @@ class MainWindow(QMainWindow):
         self.experimentFolderButton.clicked.connect(self.dirButtonClicked)
 
         self.experimentNameLabel = QLabel("Name of experiment:")
+        self.experimentNameLabel.setToolTip("This is the name of the file the experiment data will be saved to.\n"
+                                            "Appropriate extensions (i.e. .sqlite3) will be added automatically.\n"
+                                            "Multi Scan data sets will be appended with the scan number, i.e.\n"
+                                            "experimentName_#.sqlite3")
         self.experimentName = QLineEdit(self.params['experimentName'])
 
         self.saveFormatLabel = QLabel("Save format:")
         self.saveFormat = QComboBox()
         self.saveFormat.addItems(["SQLite3 (recommended)", "JSON"])
 
-        self.pickleDataLabel = QLabel("Pickle data after collection:")
+        self.pickleDataLabel = QLabel("Pickle data after collection (SQLite3 Only):")
+        self.pickleDataLabel.setToolTip("Pickling the data converts the data to a Python dict and saves it directly as a binary.\n"
+                                        "This enables faster downstream analysis but takes more memory and adds ~10 seconds to each scan.")
         self.pickleData = QCheckBox()
         self.pickleData.setChecked(False)
 
