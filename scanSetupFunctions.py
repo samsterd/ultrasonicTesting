@@ -8,7 +8,6 @@ import picosdkRapidblockPulse as pico
 import ultratekPulser as utp
 import scanner as sc
 import matplotlib
-matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
 import time
@@ -19,6 +18,11 @@ import time
 # Outputs: Plot of pulse data received by the picoscope
 # Outline: connects to pulser, picoscope, turns on pulser, sets up picoscope measurement, collects data, closes connections, plots data
 def singlePulseMeasure(params):
+
+    # if not using GUI, set matplotlib backend to 'Tk'
+    # TODO: this is done for compatibility with the linux computer, but Qt5 SHOULD work there too...
+    if params['gui'] == False:
+        matplotlib.use('TkAgg')
 
     # Connect to picoscope
     picoConnection = pico.openPicoscope()
@@ -57,10 +61,14 @@ def singlePulseMeasure(params):
     pico.closePicoscope(picoConnection)
 
     # Plot data
-    plt.plot(times, voltages)
+    fig = plt.plot(times, voltages)
     plt.xlabel('Time (us)')
     plt.ylabel('Voltage (mV)')
-    plt.show()
+
+    if params['gui']:
+        return voltages, times
+    else:
+        plt.show()
 
 # Helper function to connect to and move the scanner
 # Inputs the parameters dict, which must contain the scannerPort, axis, and distance keys
