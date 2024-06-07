@@ -49,7 +49,6 @@ class Scanner():
         except serial.SerialException as error:
             print(f"Scanner.init: Error opening connection to scanner: {error}")
 
-            # return -1 for error
             raise serial.SerialException
 
     # encode strings to the proper format and send to the scanner via serial
@@ -67,13 +66,14 @@ class Scanner():
 
     # Writes a series of commands to perform relative movements with the scanner
     # Inputs the axis of motion as a string ('X','Y', or 'Z'), and the distance to move (in mm) (can be negative)
+    #   Also an optional checkMoveSafety flag which should always be set to true unless debugging a scanner that has not been homed
     # function translates the movement to GCode and passes it to the scanner
-    def move(self, axis : str, distance):
+    def move(self, axis : str, distance, checkMoveSafety = True):
 
         if not self.validAxisQ(axis):
             raise ValueError('Input axis is not \'X\', \'Y\', or \'Z\'')
 
-        if not self.safeMoveQ(axis, distance):
+        if checkMoveSafety and not self.safeMoveQ(axis, distance):
             print("Scanner.move Error: input move is not safe. Check that there is enough space for the scanner to make the desired move.")
             return -1
 
@@ -97,8 +97,10 @@ class Scanner():
         moveRes = self.write(motionCommand)
 
         # flush out the responses. It is unclear why 5 reads are needed for 4 commands, but testing has shown it is needed
-        for i in range(5):
-            self.serial.read_until()
+        # this is only done when safeMoveQ is being called, otherwise the mover hangs
+        if checkMoveSafety:
+            for i in range(5):
+                self.serial.read_until()
 
     def currentPosition(self):
 
