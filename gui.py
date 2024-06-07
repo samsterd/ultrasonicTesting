@@ -33,7 +33,7 @@ import json
 # xdefine initialization/setup experiment
 #   xsave ports etc in a json file?
 # xclean up imports
-# get plotting single pulse data working
+# xget plotting single pulse data working
 # figure out mouseover notes
 # fill in option defaults based on values in params dict
 # implement a back button
@@ -211,7 +211,7 @@ class MainWindow(QMainWindow):
         self.moveAxis.addItems(['X', 'Y', 'Z'])
 
         self.distanceLabel = QLabel("Distance (mm):")
-        self.distance = QLineEdit("1")
+        self.distance = QLineEdit(str(self.params['distance']))
         self.distance.setValidator(QDoubleValidator(-100, 100, 1))
 
         self.moveButtonLabel = QLabel("Execute Move:")
@@ -247,7 +247,7 @@ class MainWindow(QMainWindow):
             self.pulseLabel = QLabel("Define ultrasonic pulse and collection parameters:")
 
         self.transducerFrequencyLabel = QLabel("Central frequency of ultrasonic transducer (MHz):")
-        self.transducerFrequency = QLineEdit("2.25")
+        self.transducerFrequency = QLineEdit(str(self.params['transducerFrequency']))
         self.transducerFrequency.setValidator(QDoubleValidator(0.01, 100, 3))
 
         self.pulserType = QLabel("Type of ultrasonic pulser:")
@@ -257,11 +257,11 @@ class MainWindow(QMainWindow):
         self.measureTimeLabel = QLabel("Approximate measurement time (us):\n"
                                        "Note: this can be changed by the Picoscope time interval selection.\n"
                                        "If the measure time is changed, it will be printed in the console.")
-        self.measureTime = QLineEdit("20")
+        self.measureTime = QLineEdit(str(self.params['measureTime']))
         self.measureTime.setValidator(QDoubleValidator(0.001, 1000, 3))
 
         self.measureDelayLabel = QLabel("Delay after trigger pulse is received before measurement starts (us):")
-        self.measureDelay = QLineEdit("10")
+        self.measureDelay = QLineEdit(str(self.params['measureDelay']))
         self.measureDelay.setValidator(QDoubleValidator(0.001, 1000, 3))
 
         self.voltageRangeLabel = QLabel("Voltage range on the oscilloscope (V)")
@@ -274,15 +274,15 @@ class MainWindow(QMainWindow):
         self.voltageAutoRange.setChecked(True)
 
         self.samplesLabel = QLabel("Number of data points per wave (Measure time / number of data points = time resolution):")
-        self.samples = QLineEdit("1000")
+        self.samples = QLineEdit(str(self.params['samples']))
         self.samples.setValidator(QIntValidator(1, 10000))
 
         self.wavesLabel = QLabel("Number of waveforms to average per measurement:")
-        self.waves = QLineEdit("1000")
+        self.waves = QLineEdit(str(self.params['waves']))
         self.waves.setValidator(QIntValidator(1, 10000))
 
         self.halfCyclesLabel = QLabel("For tone burst pulser only: number of half cycles per tone burst:")
-        self.halfCycles = QLineEdit("2")
+        self.halfCycles = QLineEdit(str(self.params['halfCycles']))
         self.halfCycles.setValidator(QIntValidator(1,32))
 
         # add port information for setup
@@ -344,11 +344,11 @@ class MainWindow(QMainWindow):
         self.timeLabel = QLabel("Define experiment time parameters for Repeat Pulse or Multi Scan:")
 
         self.scanIntervalLabel = QLabel("Minimum time between starting scans (s):")
-        self.scanInterval = QLineEdit("1800")
+        self.scanInterval = QLineEdit(str(self.params['scanInterval']))
         self.scanInterval.setValidator(QIntValidator(1, 500000))
 
         self.numberOfScansLabel = QLabel("Number of scans to run:")
-        self.numberOfScans = QLineEdit("10")
+        self.numberOfScans = QLineEdit(str(self.params['numberOfScans']))
         self.numberOfScans.setValidator(QIntValidator(1, 10000))
 
         self.multiScanTimeExplanation = QLabel("Note: the minimum duration of a multi scan experiment is the time between scans times number of scans.\n"
@@ -356,11 +356,11 @@ class MainWindow(QMainWindow):
                                                "start immediately after the previous and the total experiment time will be greater than the minimum.")
 
         self.pulseIntervalLabel = QLabel("Pulse interval (s):")
-        self.pulseInterval = QLineEdit("1")
+        self.pulseInterval = QLineEdit(str(self.params['pulseInterval']))
         self.pulseInterval.setValidator(QDoubleValidator(0.0001, 100000, 4))
 
         self.experimentTimeLabel = QLabel("Experiment time (s):")
-        self.experimentTime = QLineEdit("10")
+        self.experimentTime = QLineEdit(str(self.params['experimentTime']))
         self.experimentTime.setValidator(QDoubleValidator(0.1, 10000000, 1))
 
         self.nextButtonTime = QPushButton("Next")
@@ -400,11 +400,11 @@ class MainWindow(QMainWindow):
         self.primaryAxis.addItems(['X', 'Y', 'Z'])
 
         self.primaryAxisRangeLabel = QLabel("Primary axis range (mm):")
-        self.primaryAxisRange = QLineEdit("10")
+        self.primaryAxisRange = QLineEdit(str(self.params['primaryAxisRange']))
         self.primaryAxisRange.setValidator(QDoubleValidator(0.1, 100, 1))
 
         self.primaryAxisStepLabel = QLabel("Primary axis step size (mm):")
-        self.primaryAxisStep = QLineEdit("0.5")
+        self.primaryAxisStep = QLineEdit(str(self.params['primaryAxisStep']))
         self.primaryAxisStep.setValidator(QDoubleValidator(0.1, 100, 1))
 
         self.secondaryAxisLabel = QLabel("Secondary scan axis:")
@@ -412,11 +412,11 @@ class MainWindow(QMainWindow):
         self.secondaryAxis.addItems(['X', 'Y', 'Z'])
 
         self.secondaryAxisRangeLabel = QLabel("Secondary axis range (mm):")
-        self.secondaryAxisRange = QLineEdit("10")
+        self.secondaryAxisRange = QLineEdit(str(self.params['secondaryAxisRange']))
         self.secondaryAxisRange.setValidator(QDoubleValidator(0.1, 100, 1))
 
         self.secondaryAxisStepLabel = QLabel("Secondary axis step size (mm):")
-        self.secondaryAxisStep = QLineEdit("0.5")
+        self.secondaryAxisStep = QLineEdit(str(self.params['secondaryAxisStep']))
         self.secondaryAxisStep.setValidator(QDoubleValidator(0.1, 100, 1))
 
         self.nextButtonTime = QPushButton("Next")
@@ -454,7 +454,7 @@ class MainWindow(QMainWindow):
         self.experimentFolderButton.clicked.connect(self.dirButtonClicked)
 
         self.experimentNameLabel = QLabel("Name of experiment:")
-        self.experimentName = QLineEdit("sample_name")
+        self.experimentName = QLineEdit(self.params['experimentName'])
 
         self.saveFormatLabel = QLabel("Save format:")
         self.saveFormat = QComboBox()
@@ -605,7 +605,7 @@ class MainWindow(QMainWindow):
                                                     "The port will be verified by doing a short move 5mm to the left or right.\n"
                                                     "If you do not see the scanner move, try a different port")
         self.scannerPortLabel = QLabel("USB Port Name. On Windows this will be COM# and on Linus /dev/ttyUSB#:")
-        self.scannerPort = QLineEdit("COM1")
+        self.scannerPort = QLineEdit(str(self.params['scannerPort']))
 
         self.testMoveDirectionLabel = QLabel("Direction of test move:")
         self.testMoveDirection = QComboBox()
@@ -658,19 +658,19 @@ class MainWindow(QMainWindow):
         self.measureDimensionsInstructions = QLabel("Measure the transducer holder height and verify the scanning dimensions.\n"
                                                     "This information is used to prevent unsafe moves of the scanner.")
         self.transducerHeightLabel = QLabel("Transducer holder height (mm):")
-        self.transducerHeight = QLineEdit("50")
+        self.transducerHeight = QLineEdit(str(self.params['transducerHolderHeight']))
         self.transducerHeight.setValidator(QDoubleValidator(1, 200, 1))
 
         self.scannerWidthLabel = QLabel("Scanner Width (X-Axis) (mm):")
-        self.scannerWidth = QLineEdit("220")
+        self.scannerWidth = QLineEdit(str(self.params['scannerMaxDimensions'][0]))
         self.scannerWidth.setValidator(QDoubleValidator(1, 1000, 1))
 
         self.scannerLengthLabel = QLabel("Scanner Length (Y-Axis) (mm):")
-        self.scannerLength = QLineEdit("220")
+        self.scannerLength = QLineEdit(str(self.params['scannerMaxDimensions'][1]))
         self.scannerLength.setValidator(QDoubleValidator(1, 1000, 1))
 
         self.scannerHeightLabel = QLabel("Scanner Height (Z-Axis) (mm):")
-        self.scannerHeight = QLineEdit("240")
+        self.scannerHeight = QLineEdit(str(self.params['scannerMaxDimensions'][2]))
         self.scannerHeight.setValidator(QDoubleValidator(1, 1000, 1))
 
         self.scannerDimensionsNextButton = QPushButton("Next")
