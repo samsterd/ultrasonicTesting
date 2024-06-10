@@ -18,7 +18,7 @@ def repeatPulse(params):
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
 
     # generate filename for current scan
-    params['fileName'] = params['experimentFolder'] + params['experimentName']
+    params['fileName'] = params['experimentFolder'] + '//' + params['experimentName']
 
     # if saveFormat is sqlite, initialize the database
     if params['saveFormat'] == 'sqlite':
