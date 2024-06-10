@@ -406,7 +406,7 @@ class MainWindow(QMainWindow):
         self.primaryAxisStepLabel = QLabel("Primary axis step size (mm):")
         self.primaryAxisStepLabel.setToolTip("Distance between each scan point. The scanner limit is 0.1.")
         self.primaryAxisStep = QLineEdit(str(self.params['primaryAxisStep']))
-        self.primaryAxisStep.setValidator(QDoubleValidator(0.1, 100, 1))
+        self.primaryAxisStep.setValidator(QDoubleValidator(-100, 100, 1))
 
         self.secondaryAxisLabel = QLabel("Secondary scan axis:")
         self.secondaryAxisLabel.setToolTip("This is the second axis the scan will move along. 'Z' is recommended.")
@@ -420,7 +420,7 @@ class MainWindow(QMainWindow):
         self.secondaryAxisStepLabel = QLabel("Secondary axis step size (mm):")
         self.secondaryAxisStepLabel.setToolTip("Distance between each scan point. The scanner limit is 0.1.")
         self.secondaryAxisStep = QLineEdit(str(self.params['secondaryAxisStep']))
-        self.secondaryAxisStep.setValidator(QDoubleValidator(0.1, 100, 1))
+        self.secondaryAxisStep.setValidator(QDoubleValidator(-100, 100, 1))
 
         self.nextButtonTime = QPushButton("Next")
         self.nextButtonTime.clicked.connect(self.nextButtonClicked)
@@ -879,6 +879,7 @@ class MainWindow(QMainWindow):
         self.moveButton.repaint()
 
         # gather the input parameters from widgets
+        self.params['experiment'] = 'move'
         self.params['axis'] = self.moveAxis.currentText()
         self.params['distance'] = float(self.distance.text())
 
@@ -947,6 +948,7 @@ class MainWindow(QMainWindow):
         self.executePulseButton.repaint()
 
         # gather parameters
+        self.params['experiment'] = 'single pulse'
         self.params['transducerFrequency'] = float(self.transducerFrequency.text())
         # pulserType must be converted to lower case to be recognized by the Pulser class
         self.params['pulserType'] = self.pulser.currentText().lower()
@@ -980,6 +982,7 @@ class MainWindow(QMainWindow):
         self.executeRepeatPulseButton.repaint()
 
         # gather parameters
+        self.params['experiment'] = 'repeat pulse'
         self.params['transducerFrequency'] = float(self.transducerFrequency.text())
         self.params['pulserType'] = self.pulser.currentText().lower()
         self.params['measureTime'] = float(self.measureTime.text())
@@ -993,6 +996,11 @@ class MainWindow(QMainWindow):
         self.params['experimentFolder'] = self.experimentFolderName.text()
         self.params['experimentName'] = self.experimentName.text()
         self.params['experimentBaseName'] = self.experimentName.text()
+        saveFormat = self.saveFormat.currentText()
+        if saveFormat == 'JSON':
+            self.params['saveFormat'] = 'JSON'
+        else:
+            self.params['saveFormat'] = 'sqlite'
         self.params['saveFormat'] = self.saveFormat.currentText()
         self.params['pickleData'] = self.pickleData.isChecked()
 
@@ -1014,6 +1022,7 @@ class MainWindow(QMainWindow):
         self.executeSingleScanButton.repaint()
 
         # gather parameters
+        self.params['experiment'] = 'single scan'
         self.params['transducerFrequency'] = float(self.transducerFrequency.text())
         self.params['pulserType'] = self.pulser.currentText().lower()
         self.params['measureTime'] = float(self.measureTime.text())
@@ -1027,7 +1036,11 @@ class MainWindow(QMainWindow):
         self.params['experimentFolder'] = self.experimentFolderName.text()
         self.params['experimentName'] = self.experimentName.text()
         self.params['experimentBaseName'] = self.experimentName.text()
-        self.params['saveFormat'] = self.saveFormat.currentText()
+        saveFormat = self.saveFormat.currentText()
+        if saveFormat == 'JSON':
+            self.params['saveFormat'] = 'JSON'
+        else:
+            self.params['saveFormat'] = 'sqlite'
         self.params['pickleData'] = self.pickleData.isChecked()
 
         self.params['primaryAxis'] = self.primaryAxis.currentText()
@@ -1051,6 +1064,7 @@ class MainWindow(QMainWindow):
         self.executeMultiScanButton.repaint()
 
         # gather parameters
+        self.params['experiment'] = 'multi scan'
         self.params['transducerFrequency'] = float(self.transducerFrequency.text())
         self.params['pulserType'] = self.pulser.currentText().lower()
         self.params['measureTime'] = float(self.measureTime.text())
@@ -1064,7 +1078,11 @@ class MainWindow(QMainWindow):
         self.params['experimentFolder'] = self.experimentFolderName.text()
         self.params['experimentName'] = self.experimentName.text()
         self.params['experimentBaseName'] = self.experimentName.text()
-        self.params['saveFormat'] = self.saveFormat.currentText()
+        saveFormat = self.saveFormat.currentText()
+        if saveFormat == 'JSON':
+            self.params['saveFormat'] = 'JSON'
+        else:
+            self.params['saveFormat'] = 'sqlite'
         self.params['pickleData'] = self.pickleData.isChecked()
 
         self.params['primaryAxis'] = self.primaryAxis.currentText()
