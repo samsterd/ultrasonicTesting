@@ -4,6 +4,7 @@ import matplotlib
 matplotlib.use('Qt5Agg')
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
+from matplotlib.pyplot import clf
 import scanSetupFunctions as setup
 import ultrasonicScan as scan
 import multiscan
@@ -739,6 +740,8 @@ class MainWindow(QMainWindow):
             QBtn = QDialogButtonBox.Ok
             self.plotOkButton = QDialogButtonBox(QBtn)
             self.plotOkButton.clicked.connect(self.close)
+            # run matplotlib clf() function on close to prevent the figure from interfering in later plots
+            self.closeEvent(clf)
 
             self.layout = QVBoxLayout()
             self.layout.addWidget(toolbar)
