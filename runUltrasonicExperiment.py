@@ -65,8 +65,8 @@ experimentParams = {
     'experimentName' : 'autorangeTest2',                  # File name for single scan and repeat pulse experiment. Will be appended with .json or .sqlite3
     'experimentBaseName' : 'test_multiscan_data',   # Base filename for multi scan experiment, which will have the scan # appended to it
     'saveFormat' : 'sqlite',                        # Format to save data. Options are sqlite or json. Sqlite is highly recommended
-    'pickleData' : True,                            # An alternate saving format which saves the data as a python dict. Adds ~5 ms overhead per waveform, or ~10 s per scan
-                                                    # Note: This is only supported for saveFormat = 'sqlite' and is in addition to (not replacing) the sqlite file
+    'postAnalysis' : False,                         # Option to run simple post-scan analysis and plotting: calculate max-min, STA/LTA, and Hilbert Envelope, save plots of data and dump CSVs of the raw metrics
+                                                    # NOTE: this is only available if for single or multi scan experiments with saveFormat = 'sqlite'
 
     ################################################################################
     ####################### Scan Parameters ########################################

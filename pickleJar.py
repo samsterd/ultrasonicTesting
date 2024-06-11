@@ -24,7 +24,6 @@
 # }
 
 import pickle
-import sqlite3
 import sqliteUtils as squ
 from typing import Callable
 from tqdm import tqdm
@@ -38,6 +37,7 @@ import bottleneck as bn
 import scipy.signal
 from scipy.optimize import curve_fit
 import math
+import csv
 
 
 ###########################################################################
@@ -226,6 +226,79 @@ def writeDataToDict(dataDict : dict, dat, key, indexMatched = False):
                 dataDict[index][key] = dat
         savePickle(dataDict)
         return dataDict
+
+# Simple post-experiment analysis automation
+# Receives the experiment params dict, converts sqlite to pickle
+# runs max-min, sta/lta, hilbert envelope, generates plots, and dumps coordinates/metrics as a csv
+# todo: remove pickleData option. In gui, change pickleData option to post-analysis, add triggers at end of single and multi scan experiments
+def simplePostAnalysis(params : dict):
+
+    # check that saveFormat == 'sqlite' or abort
+    if params['saveFormat'] != 'sqlite':
+        print("saveFormat must be set to 'sqlite' to perform post-analysis. Analysis aborted.")
+        return -1
+
+    # get filename from params
+    file = params['fileName'] + '.sqlite3'
+
+    # convert sqlite to pickle
+    dataDict = sqliteToPickle(file)
+
+    # generate functionDictList for applyFunctionsToData
+    funcDictList = [
+        {'func' : maxMinusMin, 'dataKeys' : ['voltage'], 'resKey' : 'maxMinusMin'},
+        {'func': staltaFirstBreak, 'dataKeys' : ['voltage', 'time'], 'resKey' : 'staltaTOF_5_50_0d5', 'funcArgs' : [5,50,0.5]},
+        {'func': envelopeThresholdTOF, 'dataKeys' : ['voltage', 'time'], 'resKey' : 'envelopeTOF_0d8', 'funcArgs' : [0.8]}
+    ]
+
+    # run applyFunctionsToData
+    dataDict = applyFunctionsToData(dataDict, funcDictList)
+
+    # generate and save data plots (as png and svg)
+    plotScan(dataDict, 'maxMinusMin', save = True, saveFormat = '.png', show = False)
+    plotScan(dataDict, 'maxMinusMin', save=True, saveFormat='.svg', show=False)
+    plotScan(dataDict, 'staltaTOF_5_50_0d5', save=True, saveFormat='.png', show=False)
+    plotScan(dataDict, 'staltaTOF_5_50_0d5', save=True, saveFormat='.svg', show=False)
+    plotScan(dataDict, 'envelopeTOF_0d8', save=True, saveFormat='.png', show=False)
+    plotScan(dataDict, 'envelopeTOF_0d8', save=True, saveFormat='.svg', show=False)
+
+    # dump data dict as csv
+    dictToCSV(dataDict, ['X', 'Z', 'time_collected', 'maxMinusMin', 'staltaTOF_5_50_0d5', 'envelopeTOF_0d8'])
+
+
+# function to dump all single point data from a datadict to a csv file for outside analysis
+def dictToCSV(dataDict : dict, keysToDump = []):
+
+    # if not input keys, identify keys that contain single point data basd on dataDict[0]
+    if keysToDump == []:
+        keyList = []
+        for key in dataDict[0].keys():
+            val = dataDict[0][key]
+            if type(val) == int or type(val) == float:
+                keyList.append(key)
+    else:
+        keyList = keysToDump
+
+    numberOfCoors = len(dataDict.keys()) - 2
+
+    destinationFile = os.path.splitext(dataDict['fileName'])[0] + '.csv'
+
+    with open(destinationFile, 'w', newline = '') as csvfile:
+
+        csvwriter = csv.writer(csvfile)
+
+        csvwriter.writerow(keyList)
+
+        # iterate through non-parameter keys, create list of values, dump to csv
+        for i in range(numberOfCoors):
+
+            row = [dataDict[i][key] for key in keyList]
+
+            csvwriter.writerow(row)
+
+    return 0
+
+
 
 # apply function to key
 # takes a dataDict, a function, the key to store the result in, a list of keys to use as the function arguments, and a list of additional arguments if needed

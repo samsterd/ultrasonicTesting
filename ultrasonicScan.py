@@ -130,5 +130,6 @@ def runScan(params):
     scanner.close()
     pico.closePicoscope(picoConnection)
 
-    if params['saveFormat'] == 'sqlite' and params['pickleData']:
-        pj.sqliteToPickle(params['fileName'] + '.sqlite3')
+    if params['saveFormat'] == 'sqlite' and params['postAnalysis']:
+        dataDict = pj.sqliteToPickle(params['fileName'] + '.sqlite3')
+        pj.simplePostAnalysis(dataDict)

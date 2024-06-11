@@ -467,11 +467,12 @@ class MainWindow(QMainWindow):
         self.saveFormat = QComboBox()
         self.saveFormat.addItems(["SQLite3 (recommended)", "JSON"])
 
-        self.pickleDataLabel = QLabel("Pickle data after collection (SQLite3 Only):")
-        self.pickleDataLabel.setToolTip("Pickling the data converts the data to a Python dict and saves it directly as a binary.\n"
-                                        "This enables faster downstream analysis but takes more memory and adds ~10 seconds to each scan.")
-        self.pickleData = QCheckBox()
-        self.pickleData.setChecked(False)
+        self.postAnalysisLabel = QLabel("Perform simple analysis and plotting with data (Scans with SQLite3 Only):")
+        self.pickleDataLabel.setToolTip("Performs simple analysis on the scan: calculating max-min, STA/LTA, and envelope arrival time.\n"
+                                        "The data is also pickled, plotted, and then exported as a .csv file in the same directory."
+                                        "This ~10 seconds to each scan.")
+        self.postAnalysis = QCheckBox()
+        self.postAnalysis.setChecked(False)
 
         self.nextButtonSave = QPushButton("Next")
         self.nextButtonSave.clicked.connect(self.nextButtonClicked)
@@ -485,8 +486,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.experimentName, 3, 1)
         layout.addWidget(self.saveFormatLabel, 4, 0)
         layout.addWidget(self.saveFormat, 4, 1)
-        layout.addWidget(self.pickleDataLabel, 5, 0)
-        layout.addWidget(self.pickleData, 5, 1)
+        layout.addWidget(self.postAnalysisLabel, 5, 0)
+        layout.addWidget(self.postAnalysis, 5, 1)
         layout.addWidget(self.nextButtonSave, 6, 1)
 
         widget = QWidget()
@@ -531,8 +532,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.experimentName, 14, 1)
         layout.addWidget(self.saveFormatLabel, 15, 0)
         layout.addWidget(self.saveFormat, 15, 1)
-        layout.addWidget(self.pickleDataLabel, 16, 0)
-        layout.addWidget(self.pickleData, 16, 1)
+        layout.addWidget(self.postAnalysisLabel, 16, 0)
+        layout.addWidget(self.postAnalysis, 16, 1)
 
         if self.experimentType == 'Repeat Pulse Measurement':
 
@@ -1002,7 +1003,7 @@ class MainWindow(QMainWindow):
         else:
             self.params['saveFormat'] = 'sqlite'
         self.params['saveFormat'] = self.saveFormat.currentText()
-        self.params['pickleData'] = self.pickleData.isChecked()
+        self.params['postAnalysis'] = self.postAnalysis.isChecked()
 
         self.params['pulseInterval'] = float(self.pulseInterval.text())
         self.params['experimentTime'] = float(self.experimentTime.text())
@@ -1041,7 +1042,7 @@ class MainWindow(QMainWindow):
             self.params['saveFormat'] = 'JSON'
         else:
             self.params['saveFormat'] = 'sqlite'
-        self.params['pickleData'] = self.pickleData.isChecked()
+        self.params['postAnalysis'] = self.postAnalysis.isChecked()
 
         self.params['primaryAxis'] = self.primaryAxis.currentText()
         self.params['secondaryAxis'] = self.secondaryAxis.currentText()
@@ -1083,7 +1084,7 @@ class MainWindow(QMainWindow):
             self.params['saveFormat'] = 'JSON'
         else:
             self.params['saveFormat'] = 'sqlite'
-        self.params['pickleData'] = self.pickleData.isChecked()
+        self.params['postAnalysis'] = self.postAnalysis.isChecked()
 
         self.params['primaryAxis'] = self.primaryAxis.currentText()
         self.params['secondaryAxis'] = self.secondaryAxis.currentText()
