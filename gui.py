@@ -740,8 +740,6 @@ class MainWindow(QMainWindow):
             QBtn = QDialogButtonBox.Ok
             self.plotOkButton = QDialogButtonBox(QBtn)
             self.plotOkButton.clicked.connect(self.close)
-            # run matplotlib clf() function on close to prevent the figure from interfering in later plots
-            self.closeEvent(clf)
 
             self.layout = QVBoxLayout()
             self.layout.addWidget(toolbar)
@@ -749,6 +747,11 @@ class MainWindow(QMainWindow):
             self.layout.addWidget(self.plotOkButton)
             self.setLayout(self.layout)
             self.exec()
+
+        def closeEvent(self, event):
+
+            # run matplotlib clf() function on close to prevent the figure from interfering in later plots
+            clf()
 
     def dirButtonClicked(self):
 
