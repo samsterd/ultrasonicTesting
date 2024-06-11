@@ -1002,7 +1002,6 @@ class MainWindow(QMainWindow):
             self.params['saveFormat'] = 'JSON'
         else:
             self.params['saveFormat'] = 'sqlite'
-        self.params['saveFormat'] = self.saveFormat.currentText()
         self.params['postAnalysis'] = self.postAnalysis.isChecked()
 
         self.params['pulseInterval'] = float(self.pulseInterval.text())
