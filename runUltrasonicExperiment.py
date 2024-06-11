@@ -65,8 +65,23 @@ experimentParams = {
     'experimentName' : 'autorangeTest2',                  # File name for single scan and repeat pulse experiment. Will be appended with .json or .sqlite3
     'experimentBaseName' : 'test_multiscan_data',   # Base filename for multi scan experiment, which will have the scan # appended to it
     'saveFormat' : 'sqlite',                        # Format to save data. Options are sqlite or json. Sqlite is highly recommended
-    'pickleData' : True,                            # An alternate saving format which saves the data as a python dict. Adds ~5 ms overhead per waveform, or ~10 s per scan
-                                                    # Note: This is only supported for saveFormat = 'sqlite' and is in addition to (not replacing) the sqlite file
+
+    #################################################################################
+    ################### Post-Collection Analysis #####################################
+    ###################################################################################
+
+    'postAnalysis' : True,                          # Should analysis functions (specified later) and plotting be done to the data after it is collected
+                                                    # If this option is True but no analysis or plotting is specified, the data will simply be pickled
+                                                    # NOTE: this option can only be used if saveFormat = sqlite
+    'functionDictList' : [{}],                      # A list of dicts, each of which specify an analysis function and its associated parameters
+                                                    # funcDictList = [{'func': funcName, 'dataKeys' : ['list of data keys to input'], 'resKey' : 'name of key to store func result', 'funcArgs' : [optional key with additional arguments in order], plot : Boolean, plotRange : (min, max)},...]
+                                                    # Further documentation for this can be found by the function applyFunctionsToData in pickleJar.py,
+                                                    # or by going through exampleAnalysis.py
+                                                    # NOTE: the added plot and plotRange key. These optionally specify whether the given function output should be plotted and then specifies the range if the data is auto-plotted
+    'displayPlots' : False,                          # Should the plots generated in functionsToPlot be displayed
+                                                    # NOTE: the program will not continue until each plot is exited. Therefore this feature is highly discouraged for multi scan experiments
+    'plotSaveFormat' : '.png',                      # Format to save the plots. If format = None, plots will not be saved
+                                                    # plots will be saved as 'experimentName_datakey//filename_dataKey.saveFormat'
 
     ################################################################################
     ####################### Scan Parameters ########################################
