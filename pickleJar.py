@@ -230,7 +230,6 @@ def writeDataToDict(dataDict : dict, dat, key, indexMatched = False):
 # Simple post-experiment analysis automation
 # Receives the experiment params dict, converts sqlite to pickle
 # runs max-min, sta/lta, hilbert envelope, generates plots, and dumps coordinates/metrics as a csv
-# todo: remove pickleData option. In gui, change pickleData option to post-analysis, add triggers at end of single and multi scan experiments
 def simplePostAnalysis(params : dict):
 
     # check that saveFormat == 'sqlite' or abort

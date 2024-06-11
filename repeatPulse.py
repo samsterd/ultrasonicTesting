@@ -110,6 +110,3 @@ def repeatPulse(params):
     pulser.pulserOff()
     pulser.closePulser()
     pico.closePicoscope(picoConnection)
-
-    if params['saveFormat'] == 'sqlite' and params['pickleData']:
-        pj.sqliteToPickle(params['fileName'] + '.sqlite3')

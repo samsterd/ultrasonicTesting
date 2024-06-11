@@ -468,7 +468,7 @@ class MainWindow(QMainWindow):
         self.saveFormat.addItems(["SQLite3 (recommended)", "JSON"])
 
         self.postAnalysisLabel = QLabel("Perform simple analysis and plotting with data (Scans with SQLite3 Only):")
-        self.pickleDataLabel.setToolTip("Performs simple analysis on the scan: calculating max-min, STA/LTA, and envelope arrival time.\n"
+        self.postAnalysisLabel.setToolTip("Performs simple analysis on the scan: calculating max-min, STA/LTA, and envelope arrival time.\n"
                                         "The data is also pickled, plotted, and then exported as a .csv file in the same directory."
                                         "This ~10 seconds to each scan.")
         self.postAnalysis = QCheckBox()
