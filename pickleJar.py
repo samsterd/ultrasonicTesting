@@ -38,6 +38,7 @@ import scipy.signal
 from scipy.optimize import curve_fit
 import math
 import csv
+from scipy.optimize import basinhopping, minimize # Import necessary functions
 
 
 ###########################################################################
@@ -1741,12 +1742,8 @@ class DataCube():
         plt.show()
 
 
-    #define fitreferencewaves function that could have maximum five refwaves for targetwave
+#JiYoon03: define fitreferencewaves function that could have maximum five refwaves for targetwave
 
-import numpy as np
-import scipy.optimize # Import the scipy module
-from scipy.optimize import basinhopping, minimize # Import necessary functions
-import math
 def fitReferenceWavesTemp(input_num:int, refWave:np.ndarray, targetWave: np.ndarray, params1:[]=None, bound1:[]=None) -> scipy.optimize.OptimizeResult:
     """
     Fits multiple reference waves to the target wave using the scipy.optimize.basinhopping function.
