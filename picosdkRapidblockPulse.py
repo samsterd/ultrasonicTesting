@@ -1,3 +1,35 @@
+# UPGRADE PLAN
+# Goal is to implement pulse-echo mode while also updating the code
+# Install picoSDK locally
+#   this part sucks
+#   verify with hardware first before overhauling!
+#
+# First overhaul: set up oscilloscope class Picoscope
+#   picoData dict should be stored as class variables
+#   functions should be class functions
+#   openPicoscope and setupPicoMeasurement should be taken over by the __init__ function
+#       __init__ should take the experimental params dict from runUltrasonicExperiment as an input
+#   runPicoMeasurement should be a class function that also takes the params dict as an argument
+#   closePicoscope should be implemented as a class function as well
+#   Replace all previous picoscope functions in other files with the new implementation, test it
+#       these will be in scanSetupFunctions, repeatPulse, and ultrasonicScan
+#   wish list:
+#       better error handling
+#           currently sending errors through assert_pico_ok which raises assertion errors when something breaks
+#           these should be handled through a popup window in the GUI in the executeExperiment windows
+#       better handling of timebase/experiment time interconversion
+
+# Next: refactor code to enable pulse-echo mode
+#   need to read oscilloscope documentation to verify 300V pulse is safe!
+#   rewire things
+#       trigger goes to same channel, but need a BNC junction to connect pulser TX to transducer and picoscope
+#   (if possible) collect data from the trigger channel A
+#       allocate memory buffers for channel A data
+#       allow option of collecting transmission, pulse-echo, or both
+#   add pulse-echo to interface
+#       add option to params dict
+#       add to GUI (relevant experiment windows as well as executeExperiment functions)
+
 # Interface to interact with Picoscope 2208B and collect rapid block data from a simple trigger
 # Intended to replace pulse.py for ultrasonic testing
 # General program flow:
@@ -13,8 +45,6 @@
 import ctypes
 from picosdk.ps2000a import ps2000a as ps
 import numpy as np
-import matplotlib.pyplot as plt
-import time
 import math
 from picosdk.functions import adc2mV, assert_pico_ok
 
@@ -67,6 +97,7 @@ def setupPicoMeasurement(picoData, delay = 3, voltageRange = 1, numberOfSamples 
     cHandle = picoData["cHandle"]
 
     #Raise error if cHandle == 0 or -1
+    # (this was not implemented...)
 
     #Calculate voltage range for channel B (channel A is the trigger and will be kept constant)
     #voltageLimits taken from API ps2000aSetChannel() documentation, they are hard coded in the picoscope
@@ -274,6 +305,7 @@ def runPicoMeasurement(picoData, numberOfWaves = 64):
     waveTime = np.linspace(startTime, stopTime, numberOfSamples)
 
     #Might need to free up memory for longer scans by deleting the buffer arrays
+    # this is probably handled by python garbage collection and is unnecessary
     del bufferArrayChannelB
     # del bufferArrayChannelA
 
