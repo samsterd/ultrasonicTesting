@@ -1741,6 +1741,88 @@ class DataCube():
         plt.show()
 
 
+    #define fitreferencewaves function that could have maximum five refwaves for targetwave
+
+import numpy as np
+import scipy.optimize # Import the scipy module
+from scipy.optimize import basinhopping, minimize # Import necessary functions
+import math
+def fitReferenceWavesTemp(input_num:int, refWave:np.ndarray, targetWave: np.ndarray, params1:[]=None, bound1:[]=None) -> scipy.optimize.OptimizeResult:
+    """
+    Fits multiple reference waves to the target wave using the scipy.optimize.basinhopping function.
+
+    Args:
+        refWaves: A list of reference waves to be fitted.
+        targetWave: The target wave to be matched.
+
+    Returns:
+        A scipy.optimize.OptimizeResult object containing the fitted parameters.
+    """
+    refWaves = []
+    for _ in range(input_num):
+      refWaves.append(refwave)
+    # Define the bounds for the optimization parameters.
+    if bound1 is None:
+      bounds = []
+      for _ in range(input_num):
+        bounds.extend([(0, 1), (-100, 100)])
+    else:
+      bounds = bound1.copy()
+    # bounds.append((0, 1))  # Weighting factor for the first reference wave
+
+    # Define the initial guess for the parameters.
+    if params1 is None:
+        params0 = []
+        for _ in range(input_num):
+          params0.extend([1, 0])
+    else:
+        params0 = params1.copy() 
+    
+    # params0.append(1)  # Weighting factor for the first reference wave
+    # in this case, we do not need to weighting
+
+    # Pass additional arguments to refTargetDiff through the 'args' key in minimizer_kwargs
+    minimizer_kwargs = {'method':'nelder-mead',"args": (refWaves, targetWave), "tol": 0.01, "bounds": bounds}
+
+    # The objective function for basinhopping should only take the optimization variables (x) as input
+    res = basinhopping(refTargetDiffTemp,params0, niter=1000, T=10000.0, stepsize=.5, minimizer_kwargs=minimizer_kwargs,interval=50,target_accept_rate=0.5, stepwise_factor=0.9)
+
+    return res
+
+def refTargetDiffTemp(params, refWaves, targetWave):
+    """
+    Calculates the difference between a linear combination of multiple stretched and shifted reference waves and a target wave.
+
+    Args:
+        params: A list of parameters including amplitudes, shifts, and a weighting factor.
+        refWaves: A list of reference waves to be fitted.
+        targetWave: The target wave to be matched.
+
+    Returns:
+        The sum of squared differences between the combined reference waves and the target wave.
+    """
+
+    combined_wave = 0
+    # np.zeros_like(targetWave)
+    for i in range(len(refWaves)):
+        amp = params[2 * i]
+        shift = params[2 * i + 1]
+        stretched_shifted_ref = shiftAndStretchReferenceTemp(refWaves[i], amp, int(math.floor(shift)), len(targetWave))
+        combined_wave += stretched_shifted_ref
+    return np.sum((combined_wave - targetWave) ** 2)
+
+def shiftAndStretchReferenceTemp(refWave, amp, shift, target_length):
+    # Calculate the stretch factor
+    stretchFactor = target_length / len(refWave)
+
+    # Stretch the reference wave
+    stretchedRefWave = np.interp(np.linspace(0, len(refWave) - 1, target_length), np.arange(len(refWave)), refWave)
+
+    # Shift the reference wave
+    shiftedRefWave = np.roll(stretchedRefWave, shift)
+
+    # Scale the reference wave by the amplitude
+    return shiftedRefWave * amp
 ########################################################################3
 ############# Deprecated Code #########################################
 ######################################################################
