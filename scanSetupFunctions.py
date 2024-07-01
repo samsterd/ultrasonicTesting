@@ -11,6 +11,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+import picosdkRapidblockPulse as picoRapid# edit yet
 
 
 # Function to test collection parameters
@@ -24,8 +25,8 @@ def singlePulseMeasure(params):
     if params['gui'] == False:
         matplotlib.use('TkAgg')
 
-    # Connect to picoscope
-    picoConnection = pico.openPicoscope()
+    # Connect to picoscope & Set up pico measurement
+    picoConnection = picoRapid.picosdkRapidblockPulse(params)
 
     # Open connection to pulser
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
@@ -40,25 +41,25 @@ def singlePulseMeasure(params):
     # Turn on the pulser
     pulser.pulserOn()
 
-    # Set up pico measurement
-    picoConnection = pico.setupPicoMeasurement(picoConnection,
-                                               params['measureDelay'],
-                                               params['voltageRange'],
-                                               params['samples'],
-                                               params['measureTime'])
+    # # Set up pico measurement
+    # picoConnection = picoRapid.setupPicoMeasurement(picoConnection,
+    #                                            params['measureDelay'],
+    #                                            params['voltageRange'],
+    #                                            params['samples'],
+    #                                            params['measureTime'])
     # Run pico measurement
     if params['voltageAutoRange']:
         waveform, params = voltageRangeFinder(picoConnection, params)
         voltages, times = waveform[0], waveform[1]
     else:
-        voltages, times = pico.runPicoMeasurement(picoConnection, params['waves'])
+        voltages, times = picoRapid.runPicoMeasurement(picoConnection, params['waves'])
 
     # Turn off pulser
     pulser.pulserOff()
 
     # Close connection to pulser and picoscope
     pulser.closePulser()
-    pico.closePicoscope(picoConnection)
+    picoRapid.closePicoscope(picoConnection)
 
     # Plot data
     fig = plt.plot(times, voltages)
@@ -95,7 +96,7 @@ def voltageRangeFinder(picoConnection, params):
     currentTolerance = tolerance * currentLimit
 
     # collect initial waveform
-    waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
+    waveform = picoRapid.runPicoMeasurement(picoConnection, params['waves'])
 
     # find max of the waveform, divide by 1000 to convert to V
     maxV = np.max(abs(waveform[0]))/1000
@@ -124,12 +125,12 @@ def voltageRangeFinder(picoConnection, params):
         # if not, setup a new measurement with the tighter voltage limit and return that data
         else:
             params['voltageRange'] = limit
-            picoConnection = pico.setupPicoMeasurement(picoConnection,
+            picoConnection = picoRapid.setupPicoMeasurement(picoConnection,
                                                params['measureDelay'],
                                                params['voltageRange'],
                                                params['samples'],
                                                params['measureTime'])
-            waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
+            waveform = picoRapid.runPicoMeasurement(picoConnection, params['waves'])
             return waveform, params
 
     # recursion case : max > current tolerance. try again at the next highest voltage limit
@@ -145,7 +146,7 @@ def voltageRangeFinder(picoConnection, params):
         # move to the next higher voltage limit and try again
         else:
             params['voltageRange'] = voltageLimits[rangeIndex + 1]
-            picoConnection = pico.setupPicoMeasurement(picoConnection,
+            picoConnection = picoRapid.setupPicoMeasurement(picoConnection,
                                                        params['measureDelay'],
                                                        params['voltageRange'],
                                                        params['samples'],

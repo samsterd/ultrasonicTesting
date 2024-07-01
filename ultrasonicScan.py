@@ -10,7 +10,7 @@ import json
 from tqdm import tqdm
 from database import Database
 import pickleJar as pj
-
+import picosdkRapidblockPulse as picoRapid
 
 # Runs a 2D scan, taking ultrasonic pulse data at every point, and saves to the specified folder
 # Inputs: parameters specified above
@@ -23,17 +23,21 @@ def runScan(params):
     if params['saveFormat'] == 'sqlite':
         database = Database(params)
 
-    #Connect to picoscope, ender, pulser
-    picoConnection = pico.openPicoscope()
+    #Connect to picoscope, ender, pulser#here
+    # picoConnection = picoRapid.openPicoscope()
+    
+    #openPicoscope and setupPicoMeasurement
+    picoConnection=picoRapid.picosdkRapidblockPulse(params)
+    
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
     scanner = sc.Scanner(params)
 
-    #Setup picoscope
-    picoConnection = pico.setupPicoMeasurement(picoConnection,
-                                               params['measureDelay'],
-                                               params['voltageRange'],
-                                               params['samples'],
-                                               params['measureTime'])
+    # #Setup picoscope#here
+    # picoConnection = picoRapid.setupPicoMeasurement(picoConnection,
+    #                                            params['measureDelay'],
+    #                                            params['voltageRange'],
+    #                                            params['samples'],
+    #                                            params['measureTime'])
 
     # Adjust pulser pulsewidth
     pulser.setFrequency(params['transducerFrequency'])
@@ -64,7 +68,7 @@ def runScan(params):
             if params['voltageAutoRange']:
                 waveform, params = voltageRangeFinder(picoConnection, params)
             else:
-                waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
+                waveform = picoRapid.runPicoMeasurement(picoConnection,params['waves'])
 
             #Make a data dict for saving
             pixelData = {}
@@ -128,7 +132,7 @@ def runScan(params):
     #Close connection to pulser, picoscope, and ender
     pulser.closePulser()
     scanner.close()
-    pico.closePicoscope(picoConnection)
+    picoRapid.closePicoscope(picoConnection)
 
     if params['saveFormat'] == 'sqlite' and params['postAnalysis']:
         pj.simplePostAnalysis(params)

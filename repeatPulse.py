@@ -9,12 +9,15 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from database import Database
 import pickleJar as pj
+import picosdkRapidblockPulse as picoRapid
 
 
 def repeatPulse(params):
 
+    # Connect to picoscope & Set up pico measurement
+    picoConnection = picoRapid.picosdkRapidblockPulse(params)
     # Connect to picoscope, ender, pulser
-    picoConnection = pico.openPicoscope()
+    # picoConnection = picoRapid.openPicoscope()
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
 
     # generate filename for current scan
@@ -24,12 +27,12 @@ def repeatPulse(params):
     if params['saveFormat'] == 'sqlite':
         database = Database(params)
 
-    # Setup picoscope
-    picoConnection = pico.setupPicoMeasurement(picoConnection,
-                                               params['measureDelay'],
-                                               params['voltageRange'],
-                                               params['samples'],
-                                               params['measureTime'])
+    # # Setup picoscope
+    # picoConnection = pico.setupPicoMeasurement(picoConnection,
+    #                                            params['measureDelay'],
+    #                                            params['voltageRange'],
+    #                                            params['samples'],
+    #                                            params['measureTime'])
     # Adjust pulser pulsewidth
     pulser.setFrequency(params['transducerFrequency'])
 
@@ -61,7 +64,7 @@ def repeatPulse(params):
         if params['voltageAutoRange']:
             waveform, params = voltageRangeFinder(picoConnection, params)
         else:
-            waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
+            waveform = picoRapid.runPicoMeasurement(picoConnection, params['waves'])
 
         # Make a data dict for saving
         waveData = {}
@@ -109,4 +112,4 @@ def repeatPulse(params):
 
     pulser.pulserOff()
     pulser.closePulser()
-    pico.closePicoscope(picoConnection)
+    picoRapid.closePicoscope(picoConnection)
