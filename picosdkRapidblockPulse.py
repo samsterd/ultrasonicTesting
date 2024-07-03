@@ -57,9 +57,6 @@ import matplotlib.pyplot as plt
 # Returns a picoData dict with the cHandle and openUnit keys added
 # TODO: add tests (check cHandle is generated, errors are properly raised)
 class picosdkRapidblockPulse():
-    # picoData dict should be stored as class variables: class_picoData
-    # class variable not reset when the class restart so pervious solution is better
-    # class_picoData ={}
     
     def openPicoscope(self):
 
@@ -85,7 +82,7 @@ class picosdkRapidblockPulse():
         # Add cHandle to picoData
         initPicoData["cHandle"] = cHandle
         # self.class_picoData = initPicoData
-        return initPicoData
+        self.picoData = initPicoData
 
     # setupPicoMeasurement takes experimental parameters and picoData dict and converts it to picoscope-readable data
     #   More specifically, this sets up a measurement with a simple trigger on channel A and ultrasonic data collected on channel B
@@ -99,10 +96,10 @@ class picosdkRapidblockPulse():
     #   duration - the duration of the measurement, in microseconds. Defaults to 10 us. The time interval between data points is duration / numberOfSamples
     #       Note that minimum time interval for measurements with 2 channels is 2 ns
 
-    def setupPicoMeasurement(self, picoData, measureDelay = 3, voltageRange = 1, samples = 512, measureTime = 10):
+    def setupPicoMeasurement(self, measureDelay = 3, voltageRange = 1, samples = 512, measureTime = 10):
 
         #Retrieve cHandle and make sure it is properly assigned
-        cHandle = picoData["cHandle"]
+        cHandle = self.picoData["cHandle"]
 
         #Raise error if cHandle == 0 or -1
         # (this was not implemented...)
@@ -122,7 +119,7 @@ class picosdkRapidblockPulse():
         #now get the index of the voltageLimit, which is what actually gets passed to the scope
         # Note that this is 1-indexed rather than 0, so +1 is added
         voltageIndex =voltageLimits.index(voltageLimit) + 1
-        picoData["voltageIndex"] = voltageIndex
+        self.picoData["voltageIndex"] = voltageIndex
 
         # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now
         # handle = chandle
@@ -135,7 +132,7 @@ class picosdkRapidblockPulse():
 
         #Error check channel A
         if setChA == "PICO_OK":
-            picoData["setChA"] = setChA
+            self.picoData["setChA"] = setChA
         else:
             # print("Error: Problem connecting to picoscope channel A: " + setChA)
             #Raise error and break
@@ -152,7 +149,7 @@ class picosdkRapidblockPulse():
 
         #Error check channel B
         if setChB == "PICO_OK":
-            picoData["setChB"] = setChB
+            self.picoData["setChB"] = setChB
         else:
             # print("Error: Problem connecting to picoscope channel B: " + setChB)
             #Raise error and break
@@ -162,13 +159,13 @@ class picosdkRapidblockPulse():
         timebase, timeInterval = self.timebaseFromDurationSamples(samples, measureTime)
 
         #Record timebase, timeInterval and numberOfSamples in picoData
-        picoData["timebase"] = timebase
-        picoData["timeInterval"] = timeInterval
-        picoData["numberOfSamples"] = samples
+        self.picoData["timebase"] = timebase
+        self.picoData["timeInterval"] = timeInterval
+        self.picoData["numberOfSamples"] = samples
 
         # Convert delay time (in us) to delay samples
         delayIntervals = math.floor((measureDelay * 1000) / timeInterval)
-        picoData["delayIntervals"] = delayIntervals
+        self.picoData["delayIntervals"] = delayIntervals
 
         # Setup trigger on channel A
         # cHandle = cHandle
@@ -183,7 +180,7 @@ class picosdkRapidblockPulse():
 
         # Error check trigger
         if trigger == "PICO_OK":
-            picoData["trigger"] = trigger
+            self.picoData["trigger"] = trigger
         else:
             # print("Error: Problem setting trigger on channel A: " + trigger)
             #Raise error and break
@@ -192,22 +189,21 @@ class picosdkRapidblockPulse():
         # TODO: separate everything below (running the measurement) into a separate function?
         #  #add getTimebase2 call so that memory can be allocated properly
         # actually, this may need to be added to the run call rather than the set up call - i don't know if the ctypes memory allocation moves between functions?
-        # self.class_picoData = picoData
-        return picoData
+        # self.class_picoData = self.picoData
 
     # runPicoMeasurement runs a rapidblock measurement on the picoscope and returns the waveform data
     #   Inputs are the picoData dict. Note that setupPicoMeasurement must have been run or the dict will not have necessary fields informed and errors will occur
     #   Second input is the number of waveforms to collect in rapid block. Choosing a larger number will result in more waves to average,
     #       but may use up memory. The Picoscope2208B has 64MS buffer memory w/ 2 channels, meaning it can store ~64000 waves with 1000 samples/wave
     #   Returns a numpy array of the average of the numberOfWaves
-    def runPicoMeasurement(self,picoData, numberOfWaves = 64):
+    def runPicoMeasurement(self, numberOfWaves = 64):
 
-        #TODO: add error checking here, need to assert that all necessary picoData fields are informed
+        #TODO: add error checking here, need to assert that all necessary self.picoData fields are informed
         #these include: cHandle, timebase, numberOfSamples, all channel and trigger statuses
-        #Gather important parameters from picoData dict
-        cHandle = picoData["cHandle"]
-        timebase = picoData["timebase"]
-        numberOfSamples = picoData["numberOfSamples"]
+        #Gather important parameters from self.picoData dict
+        cHandle = self.picoData["cHandle"]
+        timebase = self.picoData["timebase"]
+        numberOfSamples = self.picoData["numberOfSamples"]
 
         #Create a c type for numberOfSamples that can be passed to the ps2000a functions
         cNumberOfSamples = ctypes.c_int32(numberOfSamples)
@@ -225,7 +221,7 @@ class picosdkRapidblockPulse():
 
         #Error check set captures
         if setCaptures == "PICO_OK":
-            picoData["setCaptures"] = setCaptures
+            self.picoData["setCaptures"] = setCaptures
         else:
             # print("Error: Problem setting number of captures on picoscope: " + setCaptures)
             assert_pico_ok(setCaptures)
@@ -269,9 +265,9 @@ class picosdkRapidblockPulse():
         # Segment index = 0 (start at beginning of memory)
         # LpReady = None (not used)
         # pParameter = None (not used)
-        picoData["runblock"] = ps.ps2000aRunBlock(cHandle, 0, numberOfSamples, timebase, 0, None, 0, None, None)
+        self.picoData["runblock"] = ps.ps2000aRunBlock(cHandle, 0, numberOfSamples, timebase, 0, None, 0, None, None)
         #TODO: add better error handling
-        assert_pico_ok(picoData["runblock"])
+        assert_pico_ok(self.picoData["runblock"])
 
         #Wait until data collection is finished
         ready = ctypes.c_int16(0)
@@ -287,28 +283,28 @@ class picosdkRapidblockPulse():
         # DownSampleRatio = 0
         # DownSampleRatioMode = 0
         # Overflow = ctypes.byref(overflow)
-        picoData["GetValuesBulk"] = ps.ps2000aGetValuesBulk(cHandle, ctypes.byref(cNumberOfSamples), 0, numberOfWaves- 1, 0, 0, ctypes.byref(overflow))
-        assert_pico_ok(picoData["GetValuesBulk"])
+        self.picoData["GetValuesBulk"] = ps.ps2000aGetValuesBulk(cHandle, ctypes.byref(cNumberOfSamples), 0, numberOfWaves- 1, 0, 0, ctypes.byref(overflow))
+        assert_pico_ok(self.picoData["GetValuesBulk"])
 
         #Calculate the average of the waveform values stored in the buffer
         bufferMean = np.mean(bufferArrayChannelB, axis = 0)
 
         # Make sure the picoscope is stopped
-        picoData["stop"] = ps.ps2000aStop(cHandle)
-        assert_pico_ok(picoData["stop"])
+        self.picoData["stop"] = ps.ps2000aStop(cHandle)
+        assert_pico_ok(self.picoData["stop"])
 
         # # Convert waveform values from ADC to mV
         # # First find the maxADC value
         maxADC = ctypes.c_int16()
-        picoData["maximumValue"] = ps.ps2000aMaximumValue(cHandle, ctypes.byref(maxADC))
-        assert_pico_ok(picoData["maximumValue"])
+        self.picoData["maximumValue"] = ps.ps2000aMaximumValue(cHandle, ctypes.byref(maxADC))
+        assert_pico_ok(self.picoData["maximumValue"])
 
         # Then convert the mean data array from ADC to mV using the sdk function
-        buffermV = np.array(adc2mV(bufferMean, picoData["voltageIndex"], maxADC))
+        buffermV = np.array(adc2mV(bufferMean, self.picoData["voltageIndex"], maxADC))
 
         #Create the time data (i.e. the x-axis) using the time intervals, numberOfSamples, and delay time
-        timeInterval = picoData["timeInterval"]
-        startTime = picoData["delayIntervals"] * timeInterval
+        timeInterval = self.picoData["timeInterval"]
+        startTime = self.picoData["delayIntervals"] * timeInterval
         stopTime = startTime + (timeInterval * (numberOfSamples - 1))
         waveTime = np.linspace(startTime, stopTime, numberOfSamples)
 
@@ -322,15 +318,15 @@ class picosdkRapidblockPulse():
     #ends the connection to the picoscope
     #Input: picoData with the cHandle field filled
     #Returns picoData with the "close" field informed
-    def closePicoscope(self,picoData):
-        picoData["close"] = ps.ps2000aCloseUnit(picoData["cHandle"])
-        assert_pico_ok(picoData["close"])
-        return picoData
+    def closePicoscope(self):
+        self.picoData["close"] = ps.ps2000aCloseUnit(self.picoData["cHandle"])
+        assert_pico_ok(self.picoData["close"])
 
     #A helper function to calculation the oscilloscope timebase based on desired measurement duration and number of samples
     # Inputs are the numberOfSamples and the desired duration (in us)
     # Returns a timebase integer that most closely follows the input and the timeInterval that corresponds to. numberOfSamples will not change, but duration may be rounded depending on possible timebases
     #Calculates based on formula in p28 of picoscope2000a API for a 1 GS/s scope with 2 channels
+    @staticmethod
     def timebaseFromDurationSamples(numberOfSamples, duration):
 
         #First calculate a naive time interval (in ns) of measurement based on the inputs
@@ -367,6 +363,80 @@ class picosdkRapidblockPulse():
         else:
             print("Warning: Requested time interval is too long for picoscope. Use a stopwatch instead.")
             return (2**32)-1, 34000000000
+
+    # Recursively determines the minimum voltage range needed to capture data at the current location
+    # Returns the waveform data at the proper rang and the updated params dict
+    # This should only add extra time if the voltage range has changed from the previous pixel
+    def voltageRangeFinder(self, params : dict):
+
+        # hardcoded voltage limits
+        voltageLimits = np.array([0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20])
+
+        # hardcoded tolerance limit - change limit if max is within 5%
+        tolerance = 0.95
+        voltageTolerances = tolerance * voltageLimits
+
+        currentLimit = params['voltageRange']
+        currentTolerance = tolerance * currentLimit
+
+        # collect initial waveform
+        waveform = self.runPicoMeasurement(params['waves'])
+
+        # find max of the waveform, divide by 1000 to convert to V
+        maxV = np.max(abs(waveform[0])) / 1000
+
+        # base case 1 : currentLimit == lowest limit and max < current limit. return waveform
+        if currentLimit == voltageLimits[0] and maxV < currentLimit:
+            return waveform, params
+
+        # base case 2 : currentLimit == highest limit and max > highest tolerance. return waveform and print a warning
+        elif currentLimit == voltageLimits[-1] and maxV >= currentTolerance:
+            print(
+                "Warning: voltageRangeFinder- waveform voltage exceeds oscilloscope maximum. Peaks are likely to be cutoff.")
+            return waveform, params
+
+        # base case 3 : max < current limit. set voltage range to be lowest range within tolerance, rerun measurement and return waveform, params
+        elif maxV <= currentTolerance:
+
+            # return index of first (lowest) tolerance that is >= maxV
+            # taking [0][0] of the result is safe since maxV < currentTolerance implies the condition is met at least once
+            rangeIndex = np.nonzero(voltageTolerances >= maxV)[0][0]
+            limit = voltageLimits[rangeIndex]
+
+            # if that tolerance is the current tolerance, return waveform, params
+            if limit == currentLimit:
+                return waveform, params
+
+            # if not, setup a new measurement with the tighter voltage limit and return that data
+            else:
+                params['voltageRange'] = limit
+                self.setupPicoMeasurement(
+                    params['measureDelay'],
+                    params['voltageRange'],
+                    params['samples'],
+                    params['measureTime'])
+                waveform = self.runPicoMeasurement(params['waves'])
+                return waveform, params
+
+        # recursion case : max > current tolerance. try again at the next highest voltage limit
+        else:
+
+            # get the index of the current limit
+            rangeIndex = np.nonzero(voltageLimits == currentLimit)[0][0]
+
+            # just for safety, check that range index is not the last index. this shouldn't be possible, but just in case I'm missing a case
+            if rangeIndex == len(voltageLimits) - 1:
+                return waveform, params
+
+            # move to the next higher voltage limit and try again
+            else:
+                params['voltageRange'] = voltageLimits[rangeIndex + 1]
+                self.setupPicoMeasurement(params['measureDelay'],
+                                                           params['voltageRange'],
+                                                           params['samples'],
+                                                           params['measureTime'])
+                return self.voltageRangeFinder(params)
+
     def __init__(self,params: dict):
         #openPicoscope and setupPicoMeasurement should be taken over by the __init__ function
         # __init__ should take the experimental params dict from runUltrasonicExperiment as an input
@@ -376,9 +446,8 @@ class picosdkRapidblockPulse():
         voltageRange = params['voltageRange']
         samples = params['samples']
         measureTime = params['measureTime']
-        picoData = picosdkRapidblockPulse.openPicoscope()
-        picoData= picosdkRapidblockPulse.setupPicoMeasurement(picoData,measureDelay, voltageRange, samples, measureTime )
-        return picoData
+        self.openPicoscope()
+        self.setupPicoMeasurement(measureDelay, voltageRange, samples, measureTime )
             
         
 
