@@ -1,6 +1,7 @@
 import json
 import picosdkRapidblockPulse as pico
 import ultratekPulser as utp
+from scanSetupFunctions import voltageRangeFinder
 import time
 import tqdm
 import matplotlib
@@ -8,6 +9,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from database import Database
 from mqtt import *
+import pickleJar as pj
 
 mqtt_client = mqtt_connect("pulser")
 mqtt_publish_properties = create_publish_properties()
@@ -18,7 +20,7 @@ def repeatPulse(params):
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
 
     # generate filename for current scan
-    scanFileName = params['experimentFolder'] + params['experimentName']
+    params['fileName'] = params['experimentFolder'] + '//' + params['experimentName']
 
     # if saveFormat is sqlite, initialize the database
     if params['saveFormat'] == 'sqlite':
@@ -60,7 +62,10 @@ def repeatPulse(params):
         pulseStartTime = time.time()
 
         # collect data
-        waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
+        if params['voltageAutoRange']:
+            waveform, params = voltageRangeFinder(picoConnection, params)
+        else:
+            waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
 
         # Make a data dict for saving
         waveData = {}
@@ -79,6 +84,9 @@ def repeatPulse(params):
         # Save data to the Mac Mini
         mqtt_quick_pub(mqtt_client, mqtt_publish_properties, keys, "key", "WaveDataRaw",  "/pulser/WaveData/")
         mqtt_quick_pub(mqtt_client, mqtt_publish_properties, data, "data", "WaveDataRaw",  "/pulser/WaveData/")
+        # CURRENTLY NOT SUPPORTED
+        # if params['voltageAutoRange']:
+        #     waveData['voltageRange'] = params['voltageRange']
 
         # save data as sqlite database
         if params['saveFormat'] == 'sqlite':
@@ -87,7 +95,7 @@ def repeatPulse(params):
 
         # save data as json
         else:
-            with open(scanFileName, 'a') as file:
+            with open(params['fileName'], 'a') as file:
                 json.dump(waveData, file)
                 file.write('\n')
 

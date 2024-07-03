@@ -81,7 +81,8 @@ def setupPicoMeasurement(picoData, delay = 3, voltageRange = 1, numberOfSamples 
         voltageLimit = voltageLimits[-1]
 
     #now get the index of the voltageLimit, which is what actually gets passed to the scope
-    voltageIndex =voltageLimits.index(voltageLimit)
+    # Note that this is 1-indexed rather than 0, so +1 is added
+    voltageIndex =voltageLimits.index(voltageLimit) + 1
     picoData["voltageIndex"] = voltageIndex
 
     # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now

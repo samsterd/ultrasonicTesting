@@ -39,7 +39,8 @@ class usbut350Server(Server32):
     # Returns 1 if succesful
     def setPRF(self, freq):
 
-        prf = self.lib.USBUTParms(1038, self.usbPort, freq)
+        # int() used to ensure we aren't passing freq.0 due to accidental conversion to float upstream
+        prf = self.lib.USBUTParms(1038, self.usbPort, int(freq))
 
         if prf != 1:
             print("setPRF not successful. Check connection to pulser.")
@@ -62,7 +63,8 @@ class usbut350Server(Server32):
     # Default is 2.25 MHz with positive polarity
     def setFrequency(self, freq = 2250, polarity = 0):
 
-        return self.lib.USBUTParms(1046, self.usbPort, freq, polarity)
+        # freq must be rounded and converted back to an int due to prevent accidental passing of a float (freq.0)
+        return self.lib.USBUTParms(1046, self.usbPort, int(round(freq)), polarity)
 
     def setHalfCycles(self, halfCycles = 16):
 

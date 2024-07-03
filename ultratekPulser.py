@@ -22,7 +22,7 @@ class Pulser():
         self.connection = self.openPulser(pulserType, kwargs)
 
     # creates the connection object based on the pulserType, either a pyserial instance or a win64 server
-    def openPulser(self, pulserType, **kwargs):
+    def openPulser(self, pulserType, kwargs):
 
         if pulserType == 'standard':
 
@@ -35,7 +35,7 @@ class Pulser():
             # stopbits = STOPBITS_ONE
             # xonxoff = False
             try:
-                pulserSerial = serial.Serial(kwargs['portName'])
+                pulserSerial = serial.Serial(kwargs['pulserPort'])
 
             except serial.SerialException as error:
                 print(f"Error opening pulser: {error}")
@@ -95,7 +95,8 @@ class Pulser():
         elif self.type == "tone burst":
 
             # convert frequency to kHz
-            freqkhz = freq * 1000
+            # math.floor is used to round to nearest integer
+            freqkhz = math.floor(freq * 1000)
 
             # send command
             self.connection.setFrequency(freqkhz)

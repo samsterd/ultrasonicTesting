@@ -115,6 +115,7 @@ class Database:
 
         keys: str = ', '.join([key for key in payload.keys()])
 
+        #todo: this should be updated. json.dumps might be a universal solution here
         values_parsed: list = [f'"{str(val)}"' if isinstance(val, list) else str(val) for val in payload.values()]
         values: str = ', '.join(values_parsed)
 

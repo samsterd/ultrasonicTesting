@@ -20,6 +20,10 @@ tqdm (progress bar)
 
 bottleneck
 
+impedance
+
+msl-loadlib
+
 if using USB-UT350 Tone Burst pulser: msl-loadlib and installation of required drivers. Make sure to add the location of
 the SDK dll file USBUT.dll to the file usbut350Server.py
 
@@ -29,7 +33,7 @@ Running on Linux may require adjusting USB port permissions. The following seems
 
 sudo chmod 666 /dev/ttyUSB#
 
-Also needed to install Tkinter on python: sudo apt-get install python3-tk
+Also needed to install Tkinter on Python if using Linux: sudo apt-get install python3-tk
 
 Then make sure the matplotlib backend is set to Tkinter:
 

@@ -1,27 +1,18 @@
 import sqlite3
 import numpy as np
+from scipy.signal import hilbert
 from typing import Callable
 from tqdm import tqdm
 import bottleneck as bn
 import os
 import time
 import math
+import json
 from matplotlib import pyplot as plt
 from matplotlib import colormaps as cmp
 
 #Roadmap:
-#xmulti column update
-#xmulti function analysis
-#xselect pixel range
-#xplot pixel range
-#xgrab pixel data
-#xgrab pixel data over time
-#xsave plots without show()
-#xanalyze multiple files
-#xanalyze folder
-#speed up multiscan by consolidating into one file?
-# - speed benchmark pixel selection
-#fft
+
 #change over to ? from string formatting
 
 ###############################################################
@@ -98,22 +89,65 @@ def retrieveParameters(cursor, table = 'parameters'):
 def updateCol(cur, column : str, table : str, value, keyCol, keyVal):
 
     # Generate the UPDATE query
-    updateQuery = "UPDATE " + table + " SET " + column + " = " + str(value) + " WHERE " + keyCol + " = " + str(keyVal)
+    updateQuery = "UPDATE " + table + " SET " + column + " = ? WHERE " + keyCol + " = ?"
 
     # Execute and commit the result
-    cur.execute(updateQuery)
+    cur.execute(updateQuery, (value, keyVal))
 
-# Adds multiple values to multiple columns within a row. Executes the UPDATE query but does not commit
-# Inputs cursor, a list of columns, a table name, a list of values, and a key columns and value to identify the row (should use PRIMARY KEY as the keyCol)
-def updateCols(cur, columns : list, table : str, values : list, keyCol : str, keyVal):
+# Faster function to update columns using a list of values and their corresponding PRIMARY KEY values
+# Works by setting some memory parameters that increase speed (at the risk of corruption)
+# Then it manually opens a transaction, executes the update query, and closes the transation
+# Should be a MASSIVE performance improvement
+def fastUpdateCol(cur, column : str, table : str, values, keyCol : str, keyValues):
+
+    if len(values) != len(keyValues):
+        print("Error (fastUpdateCol): values and keyValues lists must have equal length")
+        return -1
+
+    # First we convert the values and keyValues into paired sequences
+    insertSeq = ((v, kv) for v, kv in zip(values, keyValues))
+
+    # speed boost from using ram as temp memory and not waiting for write confirmation
+    cur.execute("PRAGMA synchronous = OFF")
+    cur.execute("PRAGMA temp_store = MEMORY")
+    cur.execute("PRAGMA journal_mode = MEMORY")
+
+    # Manually opening and closing the transaction gives a large speed increase
+    cur.execute("BEGIN TRANSACTION")
+
+    updateQuery = "UPDATE " + table + " SET " + column + " = ? WHERE " + keyCol + " = ?"
+    cur.executemany(updateQuery, insertSeq)
+
+    cur.execute("END TRANSACTION")
+
+# Adds multiple values to multiple columns within a row. Runs many UPDATE queries in an optimized manner
+# columns is a list of column names as string. values is a list of tuples. The final member of each tuple must be the key value, the others are the column values
+#   the length of each tuple is then len(columns) + 1. keyCol is the name of the PRIMARY KEY used for updating. Code will work if it is not the primary key but it
+#   will be signicantly slower
+def updateCols(cur, columns : list, values : list, keyCol : str, table  = 'acoustics'):
 
     # convert the columns and values lists into properly formatted strings
     formattedColumns = "(" +  ", ".join(columns) + ")"
-    formattedValues = str(tuple(values))
 
-    # Generate UPDATE query, execute
-    updateQuery = "UPDATE " + table + " SET " + formattedColumns + " = " + formattedValues + " WHERE " + keyCol + " = " + str(keyVal)
-    cur.execute(updateQuery)
+    # generate a string (?,?,...?) that is as long as len(columns)
+    qMarks = "(" + ("?," * (len(columns)-1)) + "?)"
+
+    # Generate UPDATE query
+    # UPDATE table SET (column0,column1,...) = (?,?,...) WHERE keyCol = ?
+    updateQuery = "UPDATE " + table + " SET " + formattedColumns + " = " + qMarks + " WHERE " + keyCol + " = ?"
+
+    # speed boost from using ram as temp memory and not waiting for write confirmation
+    # NOTE: this is mildly unsafe and could result in corrupted data if the program crashes mid-write
+    cur.execute("PRAGMA synchronous = OFF")
+    cur.execute("PRAGMA temp_store = MEMORY")
+    cur.execute("PRAGMA journal_mode = MEMORY")
+
+    # Manually opening and closing the transaction gives a large speed increase
+    cur.execute("BEGIN TRANSACTION")
+
+    cur.executemany(updateQuery, values)
+
+    cur.execute("END TRANSACTION")
 
 
 # Create a new column within a table
@@ -211,7 +245,7 @@ def stringConverter(string : str):
             data = stringListToArray(string)
             return data
         # it isn't a list either. return the string unchanged
-        except ValueError:
+        except json.decoder.JSONDecodeError:
             return string
 
 # Helper function to convert a 'stringified' list ('[1.1, 3.2, 4.3]') into a numpy array ([1.1, 3.2, 4.3])
@@ -220,10 +254,8 @@ def stringConverter(string : str):
 # TODO: in the future, saving and loading can be made smarter - save the data as binary and directly load it into an array
 def stringListToArray(strList : str):
 
-    # Reformat the string by removing brackets and splitting along the ','
-    strFormatted = strList.strip('[]')
-
-    return np.fromstring(strFormatted, sep = ', ')
+    # For some reason it is faster to use json.loads rather than np.fromstring
+    return np.array(json.loads(strList))
 
 
 ##########################################################################
@@ -249,11 +281,11 @@ def applyFunctionToData(connection, cursor, func : Callable, resName : str, data
 
     res = cursor.execute(selectQuery)
 
-    writeCursor = connection.cursor()
-
+    # Track the function results and their corresponding PRIMARY KEY values in index-matched lists
     funcResultList = []
+    keyList = []
 
-    # Iterate through the result, convert the data to numpy arrays, apply the function, and save the result
+    # Iterate through the result, convert the data to numpy arrays, apply the function, record in a list with keys
     for i in tqdm(range(numRows)):
 
         row = res.fetchone()
@@ -271,13 +303,21 @@ def applyFunctionToData(connection, cursor, func : Callable, resName : str, data
 
         funcResult = func(arrayList, *funcArgs)
 
-        updateCol(writeCursor, resName, table, funcResult, keyColumn[0], keyValue)
-
         funcResultList.append(funcResult)
+        keyList.append(keyValue)
 
-    connection.commit()
+    # Write the results within a single transaction
+    # First open a db transaction
+    writeCursor = connection.cursor()
+    # fastUpdateCol(writeCursor, resName, table, funcResultList, keyColumn[0], keyList)
+    # connection.commit()
+
+    fastUpdateCol(writeCursor, resName, table, funcResultList, keyColumn[0], keyList)
+
+    # connection.commit()
 
     return funcResultList
+
 
 # Version of applyFunctionToData that applies muliple functions to the same data set and saves it
 #   This version should be significantly faster vs calling applyFunctionToData multiple times
@@ -302,7 +342,9 @@ def applyFunctionsToData(connection, cursor, funcs : list, resNames : list, data
 
     res = cursor.execute(selectQuery)
 
-    writeCursor = connection.cursor()
+    # create a list to track the values and associate keyValue for each row
+    # This list will be populated with tuples which will be fed to updateCols
+    funcResultsList = []
 
     # Iterate through the result, convert the data to numpy arrays, apply the functions, and save the results
     for i in tqdm(range(numRows)):
@@ -333,8 +375,17 @@ def applyFunctionsToData(connection, cursor, funcs : list, resNames : list, data
             else:
                 funcResults.append(func(arrayList))
 
-        # write func results into current row
-        updateCols(writeCursor, resNames, table, funcResults, keyColumn[0], keyValue)
+        #add the keyValue to the end of funcResults, convert it to a tuple, then append it to funcResultList
+        #This puts the results in the format [(func0(row0), func1(row0), .., key(row0)), (func0(row1), func1....]
+        # which is nice for sql queries
+        funcResults.append(keyValue)
+        funcResTuple = tuple(funcResults)
+
+        funcResultsList.append(funcResTuple)
+
+    writeCursor = connection.cursor()
+    # write func results into current row
+    updateCols(writeCursor, resNames, funcResultsList, keyColumn[0], table)
 
     connection.commit()
 
@@ -352,7 +403,10 @@ def analyzeDatabases(fileNames : list, funcs : list, resNames : list, dataColumn
         con, cur = openDB(file)
 
         #Run applyFunctionsToData
-        applyFunctionsToData(con, cur, funcs, resNames, dataColumns, keyColumn, table, funcArgs)
+        if len(funcs) > 1:
+            applyFunctionsToData(con, cur, funcs, resNames, dataColumns, keyColumn, table, funcArgs)
+        else:
+            applyFunctionToData(con, cur, funcs[0], resNames[0], dataColumns, keyColumn, table)
 
         #Close connection
         con.close()
@@ -375,7 +429,7 @@ def analyzeDirectory(dir, funcs : list, resNames : list, dataColumns = ['time', 
 def defaultMultiScanAnalysis(dir, plot = True):
 
     # list functions and dict their optional parameters
-    funcList = [absoluteSum, arrayMax, staltaFirstBreak]
+    funcList = [absoluteSum, arrayMax, staltaFirstBreak, envelopeThresholdTOF]
     funcParams = {staltaFirstBreak : (5, 30, 0.75)}
 
     # Convert function and parameter information into column names
@@ -396,6 +450,7 @@ def defaultMultiScanAnalysis(dir, plot = True):
     # generate plots
     if plot:
         generate2DScansDirectory(dir, 'X', 'Z', colNames)
+
 
 # Retrieves the values in dataColumns at a given pixel coordinate
 # Returns the values as an dict with dataColumns as the keys and the float-converted data as values
@@ -656,6 +711,7 @@ def plotRepeatPulseData(cursor, xCol : str, yCol : str, table = 'acoustics'):
 #     plt.show()
 
 
+
 # Plots the waveform at a specific single pixel
 def plotPixelWaveform(cursor, primaryCoor, secondaryCoor, primaryAxis = 'X', secondaryAxis = 'Z', xCol = 'time', yCol = 'voltage', table = 'acoustics'):
 
@@ -708,6 +764,25 @@ def plotPixelsWaveform(cursor, primaryCoors : list, secondaryCoors : list, prima
     plt.legend()
     plt.show()
 
+# Plots waveforms from repeatPulse experiments a single colormapped stack
+def plotRepeatWaveforms(cursor, xCol='time', yCol='voltage', colorCol = 'time_collected', table='acoustics'):
+
+    # gather the data
+    xData = fetchData(cursor, xCol, table)
+    yData = fetchData(cursor, yCol, table)
+    cData = fetchData(cursor, colorCol, table)
+
+    # shift the color data so it is zero-referenced and then normalize it for color mapping
+    minTime = np.min(cData)
+    cDatZero = (cData - minTime) / 3600
+    maxTime = np.max(cDatZero)
+    normDat = cDatZero/maxTime
+
+    for i in range(len(cData)):
+        plt.plot(xData[i], yData[i], c = cmp['viridis'](normDat[i]))
+
+    plt.show()
+
 # Plots the waveform at a specific single pixel
 def plotPixelWaveformOverTime(dir, primaryCoor, secondaryCoor, primaryAxis = 'X', secondaryAxis = 'Z', xCol = 'time', yCol = 'voltage', table = 'acoustics'):
 
@@ -733,8 +808,9 @@ def plotPixelWaveformOverTime(dir, primaryCoor, secondaryCoor, primaryAxis = 'X'
 # Generates a plot of the given data column at certain coordinate values for all databases in a directory
 # Plot x-axis is the first entry in dataColumns, y-axis is the second
 # useful for multiscans
+# If the normalized option is set to True, all values in dataColumns[1] will be divided by the value at the first coordinate
 # If the
-def plotScanDataAtPixels(dir : str, dataColumns : list, primaryCoors : list, secondaryCoors : list, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics', verbose = True):
+def plotScanDataAtPixels(dir : str, dataColumns : list, primaryCoors : list, secondaryCoors : list, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics', verbose = True, normalized = False):
 
     dataDict = directoryScanDataAtPixels(dir, dataColumns, primaryCoors, secondaryCoors, primaryAxis, secondaryAxis, table, verbose)
 
@@ -749,6 +825,14 @@ def plotScanDataAtPixels(dir : str, dataColumns : list, primaryCoors : list, sec
         # Find the experiment start time by taking the min of the mins
         t0 = min(minTimes)
 
+    if normalized == True:
+        # grab values from first coordinate
+        normValue = dataDict[(primaryCoors[0], secondaryCoors[0])][dataColumns[1]]
+        # iterate through all coors and divide by first coordinate
+        for coor in dataDict.keys():
+            # be wary of issues with copy and references here - may need to revise
+            dataDict[coor][dataColumns[1]] = dataDict[coor][dataColumns[1]]/normValue
+
     for coor in dataDict.keys():
         if dataColumns[0] == 'time_collected':
             # Convert to common 0 by subtracting start time. Divide by 3600 to display in hours instead of seconds
@@ -759,6 +843,38 @@ def plotScanDataAtPixels(dir : str, dataColumns : list, primaryCoors : list, sec
     plt.legend()
     plt.show()
 
+def baselineTest(dir : str, dataColumns : list, primaryCoors : list, secondaryCoors : list, primaryAxis = 'X',  secondaryAxis = 'Z', table = 'acoustics', verbose = True, normalized = False):
+
+    dataDict = directoryScanDataAtPixels(dir, dataColumns, primaryCoors, secondaryCoors, primaryAxis, secondaryAxis, table, verbose)
+
+    # Convert time axis to a common zero if the x-axis is experiment time'
+    if dataColumns[0] == 'time_collected':
+        minTimes = []
+        for coor in dataDict:
+            times = dataDict[coor]['time_collected']
+            # Collect the first time (which should be the minimum)
+            minTimes.append(times[0])
+
+        # Find the experiment start time by taking the min of the mins
+        t0 = min(minTimes)
+
+    if normalized == True:
+        # grab values from first coordinate
+        normValue = dataDict[(primaryCoors[0], secondaryCoors[0])][dataColumns[1]]
+        # iterate through all coors and divide by first coordinate
+        for coor in dataDict.keys():
+            # be wary of issues with copy and references here - may need to revise
+            dataDict[coor][dataColumns[1]] = dataDict[coor][dataColumns[1]]/normValue
+
+    for coor in dataDict.keys():
+        if dataColumns[0] == 'time_collected':
+            # Convert to common 0 by subtracting start time. Divide by 3600 to display in hours instead of seconds
+            plt.scatter((dataDict[coor][dataColumns[0]] - t0)/3600, dataDict[coor][dataColumns[1]] -  dataDict[coor][dataColumns[2]], label = str(coor))
+        else:
+            plt.scatter(dataDict[coor][dataColumns[0]], dataDict[coor][dataColumns[1]], label=str(coor))
+
+    plt.legend()
+    plt.show()
 
 # plot a map
 # xCol, yCol, datCol - names of the table columns for the xy coordinates and the data to colormap to
@@ -855,6 +971,19 @@ def absoluteSum(arrList):
 def arrayMax(arrList):
     return bn.nanmax(arrList[1])
 
+# Return the maximum minus the minimum. This value should indicated changes in attenuation without influence of baseline
+#   drift
+def maxMinusMin(arrList):
+    return bn.nanmax(arrList[1]) - bn.nanmin(arrList[1])
+
+# Calculate the mean of the last n y-values. Used to estimate the baseline for correcting oscilloscope wandering
+def endMean(arrList, n = 5):
+
+    # take last n values
+    lastN = arrList[1][-n:]
+
+    return np.mean(lastN)
+
 # Calculate the time of the first break using STA/LTA algorithm
 # Inputs the arrayList from applyFunctionToData, the length (in number of elements, NOT time) of the short and long averaging window,
 #   and tresholdRatio, a number in (0,1) that determines what fraction of the maximum STA/LTA counts as the first break
@@ -875,6 +1004,28 @@ def staltaFirstBreak(arrayList, shortWindow : int, longWindow : int, thresholdRa
 
     # No value was found above threshold. Return -1
     return -1
+
+def hilbertEnvelope(arrList):
+
+    hilbertTransform = hilbert(arrList[1])
+
+    return np.abs(hilbertTransform)
+
+# method to calculate the time of flight by calculating the function envelope using a
+# hilbert transform and finding the time where the envelope reaches a certain fraction of
+# its max value
+def envelopeThresholdTOF(arrList, threshold = 0.1):
+
+    envelope = hilbertEnvelope(arrList)
+
+    thresh = threshold * bn.nanmax(envelope)
+
+    for i in range(len(envelope)):
+        if envelope[i] > thresh:
+            return arrList[0][i]
+
+    print("envelopeThresholdTOF: no value was found above the threshold. Check that 0 < threshold < 1")
+    return 0
 
 # return absolute value of the real fast Fourier Transform
 # def fft(arrList):
@@ -918,3 +1069,25 @@ def generateCoordinateGrid(corner, lengths, steps):
     x, y = np.meshgrid(xLinspace, yLinspace)
 
     return x.flatten(), y.flatten()
+
+######################################################################
+#### DEPRECATED CODE GRAVEYARD #################################
+
+# code fragments from a prior write speed experiment
+# wrote columns by creating a temporary table and merging it
+    # # Create the temporary table
+    # cur.execute("CREATE TABLE temp (" + column + " REAL, " + keyCol + " INTEGER PRIMARY KEY)")
+    #
+    # # Insert our values into the temp table
+    # cur.executemany("INSERT INTO temp VALUES(?,?)", insertSeq)
+    #
+    # # Merge temp table into target table
+    # # Example: table = acoustics, data column is absoluteSum and keyCol is collection_index
+    # # "UPDATE acoustics SET(absoluteSum)=(temp.absoluteSum) FROM temp WHERE acoustics.collection_index = temp.collection_index
+    # mergeQuery = "UPDATE " + table + " SET(" + column + ")=(temp." + column + ") FROM temp WHERE " + table + "." + keyCol + " = temp." + keyCol
+    # cur.execute(mergeQuery)
+    #
+    # # delete the temp table
+    # cur.execute("DROP TABLE temp")
+    #
+    # cur.execute("END TRANSACTION")

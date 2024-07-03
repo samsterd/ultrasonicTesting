@@ -2,13 +2,14 @@
 
 import picosdkRapidblockPulse as pico
 import ultratekPulser as utp
-import enderControl as ender
+import scanner as sc
+from scanSetupFunctions import voltageRangeFinder
 import math
 import time
-import matplotlib.pyplot as plt
 import json
 from tqdm import tqdm
 from database import Database
+import pickleJar as pj
 
 
 # Runs a 2D scan, taking ultrasonic pulse data at every point, and saves to the specified folder
@@ -25,7 +26,7 @@ def runScan(params):
     #Connect to picoscope, ender, pulser
     picoConnection = pico.openPicoscope()
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
-    enderConnection = ender.openEnder(params['enderPort'])
+    scanner = sc.Scanner(params)
 
     #Setup picoscope
     picoConnection = pico.setupPicoMeasurement(picoConnection,
@@ -58,8 +59,12 @@ def runScan(params):
 
         for j in range(primaryAxisSteps):
 
+
             #collect data
-            waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
+            if params['voltageAutoRange']:
+                waveform, params = voltageRangeFinder(picoConnection, params)
+            else:
+                waveform = pico.runPicoMeasurement(picoConnection, params['waves'])
 
             #Make a data dict for saving
             pixelData = {}
@@ -84,6 +89,11 @@ def runScan(params):
             pixelData[iKey] = iLoc
             pixelData[jKey] = jLoc
 
+            #if voltage auto range is on, record the voltage range for this pixel
+            #CURRENTLY NOT SUPPORTED
+            # if params['voltageAutoRange']:
+            #     pixelData['voltageRange'] = params['voltageRange']
+
             # save data as sqlite database
             if params['saveFormat'] == 'sqlite':
                 query = database.parse_query(pixelData)
@@ -97,25 +107,28 @@ def runScan(params):
                     file.write('\n')
 
             #Increment position along primary axis
-            ender.moveEnder(enderConnection, params['primaryAxis'], params['primaryAxisStep'])
+            scanner.move(params['primaryAxis'], params['primaryAxisStep'])
 
 
         # Move back to origin of primary axis
-        ender.moveEnder(enderConnection, params['primaryAxis'], -1 * primaryAxisSteps * params['primaryAxisStep'])
+        scanner.move(params['primaryAxis'], -1 * primaryAxisSteps * params['primaryAxisStep'])
 
         # Increment position on secondary axis
-        ender.moveEnder(enderConnection, params['secondaryAxis'], params['secondaryAxisStep'])
+        scanner.move(params['secondaryAxis'], params['secondaryAxisStep'])
 
         # Wait 2 seconds for motion to finish
         time.sleep(2)
 
     #Return to the start position. Only needs to be done on the secondary axis since the parimary axis resets at the end of the loop
-    ender.moveEnder(enderConnection, params['secondaryAxis'], -1 * secondaryAxisSteps * params['secondaryAxisStep'])
+    scanner.move(params['secondaryAxis'], -1 * secondaryAxisSteps * params['secondaryAxisStep'])
 
     #Turn off pulser
     pulser.pulserOff()
 
     #Close connection to pulser, picoscope, and ender
     pulser.closePulser()
-    ender.closeEnder(enderConnection)
+    scanner.close()
     pico.closePicoscope(picoConnection)
+
+    if params['saveFormat'] == 'sqlite' and params['postAnalysis']:
+        pj.simplePostAnalysis(params)
