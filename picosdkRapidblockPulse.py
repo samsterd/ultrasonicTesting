@@ -1,3 +1,4 @@
+# 
 # UPGRADE PLAN
 # Goal is to implement pulse-echo mode while also updating the code
 # Install picoSDK locally
@@ -158,7 +159,7 @@ class picosdkRapidblockPulse():
             assert_pico_ok(setChB)
 
         # Calculate timebase and timeInterval (in ns) by making a call to a helper function
-        timebase, timeInterval = timebaseFromDurationSamples(samples, measureTime)
+        timebase, timeInterval = self.timebaseFromDurationSamples(samples, measureTime)
 
         #Record timebase, timeInterval and numberOfSamples in picoData
         picoData["timebase"] = timebase
