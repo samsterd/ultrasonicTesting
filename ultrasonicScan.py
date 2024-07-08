@@ -3,7 +3,6 @@
 import picosdkRapidblockPulse as pico
 import ultratekPulser as utp
 import scanner as sc
-from scanSetupFunctions import voltageRangeFinder
 import math
 import time
 import json
@@ -27,17 +26,10 @@ def runScan(params):
     # picoConnection = picoRapid.openPicoscope()
     
     #openPicoscope and setupPicoMeasurement
-    picoConnection=picoRapid.picosdkRapidblockPulse(params)
+    pico = picoRapid.picosdkRapidblockPulse(params)
     
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
     scanner = sc.Scanner(params)
-
-    # #Setup picoscope#here
-    # picoConnection = picoRapid.setupPicoMeasurement(picoConnection,
-    #                                            params['measureDelay'],
-    #                                            params['voltageRange'],
-    #                                            params['samples'],
-    #                                            params['measureTime'])
 
     # Adjust pulser pulsewidth
     pulser.setFrequency(params['transducerFrequency'])
@@ -66,9 +58,9 @@ def runScan(params):
 
             #collect data
             if params['voltageAutoRange']:
-                waveform, params = voltageRangeFinder(picoConnection, params)
+                waveform, params = pico.voltageRangeFinder(params)
             else:
-                waveform = picoRapid.runPicoMeasurement(picoConnection,params['waves'])
+                waveform = pico.runPicoMeasurement(params['waves'])
 
             #Make a data dict for saving
             pixelData = {}
@@ -132,7 +124,7 @@ def runScan(params):
     #Close connection to pulser, picoscope, and ender
     pulser.closePulser()
     scanner.close()
-    picoRapid.closePicoscope(picoConnection)
+    pico.closePicoscope()
 
     if params['saveFormat'] == 'sqlite' and params['postAnalysis']:
         pj.simplePostAnalysis(params)

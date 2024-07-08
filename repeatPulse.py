@@ -1,7 +1,6 @@
 import json
 import picosdkRapidblockPulse as pico
 import ultratekPulser as utp
-from scanSetupFunctions import voltageRangeFinder
 import time
 import tqdm
 import matplotlib
@@ -15,7 +14,7 @@ import picosdkRapidblockPulse as picoRapid
 def repeatPulse(params):
 
     # Connect to picoscope & Set up pico measurement
-    picoConnection = picoRapid.picosdkRapidblockPulse(params)
+    pico = picoRapid.picosdkRapidblockPulse(params)
     # Connect to picoscope, ender, pulser
     # picoConnection = picoRapid.openPicoscope()
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
@@ -62,9 +61,9 @@ def repeatPulse(params):
 
         # collect data
         if params['voltageAutoRange']:
-            waveform, params = voltageRangeFinder(picoConnection, params)
+            waveform, params = pico.voltageRangeFinder(params)
         else:
-            waveform = picoRapid.runPicoMeasurement(picoConnection, params['waves'])
+            waveform = pico.runPicoMeasurement(params['waves'])
 
         # Make a data dict for saving
         waveData = {}
@@ -112,4 +111,4 @@ def repeatPulse(params):
 
     pulser.pulserOff()
     pulser.closePulser()
-    picoRapid.closePicoscope(picoConnection)
+    pico.closePicoscope()
