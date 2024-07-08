@@ -55,7 +55,7 @@ experimentParams = {
     'waves' : 1000,                                  # Number of waves to collect and average
     'samples': 1000,                                  # Number of data points per wave
     'halfCycles' : 16,                               # Tone burst pulser only. Number of half-cycles in a tone burst pulse. Minimum 1, maximum 32
-    'experimentType': 'transmission'                #transmission/pulseEcho
+    'collectionMode': 'transmission',                #transmission/pulseEcho/both
 
     ################################################################################
     ########################### Saving Names ##########################################

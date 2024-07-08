@@ -1,4 +1,3 @@
-# 
 # UPGRADE PLAN
 # Goal is to implement pulse-echo mode while also updating the code
 # Install picoSDK locally
@@ -46,10 +45,10 @@
 import ctypes
 import time
 from picosdk.ps2000a import ps2000a as ps
-import numpy as np 
+import numpy as np
 import math
 from picosdk.functions import adc2mV, assert_pico_ok
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
 
 
 # Function to open connection to a picoscope
@@ -57,7 +56,7 @@ import matplotlib.pyplot as plt
 # Returns a picoData dict with the cHandle and openUnit keys added
 # TODO: add tests (check cHandle is generated, errors are properly raised)
 class picosdkRapidblockPulse():
-    
+
     def openPicoscope(self):
 
         #initialize dict for picoData
@@ -177,13 +176,13 @@ class picosdkRapidblockPulse():
             # Delay = delayIntervals
             # autoTrigger_ms = 1
         trigger = ps.ps2000aSetSimpleTrigger(cHandle, 1, 0, 10000, 0, delayIntervals, 100)
-                        
+
         #WHEN the experiment tyep is pulseEcho
-        if self.picoData['experimentType'] == 'pulseEcho':       
+        if self.picoData['experimentType'] == 'pulseEcho':
             # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now
             # handle = chandle
             # channel = ps2000a_CHANNEL_A = 0
-            # enabled = 0 Off 
+            # enabled = 0 Off
             # coupling type = ps2000a_DC = 1
             # range = ps2000a_1V = 6 --> (upated)voltageIndex
             # analogue offset = 0 V
@@ -255,7 +254,7 @@ class picosdkRapidblockPulse():
     #   Second input is the number of waveforms to collect in rapid block. Choosing a larger number will result in more waves to average,
     #       but may use up memory. The Picoscope2208B has 64MS buffer memory w/ 2 channels, meaning it can store ~64000 waves with 1000 samples/wave
     #   Returns a numpy array of the average of the numberOfWaves
-    def runPicoMeasurement(self, numberOfWaves = 64):
+    def runPicoMeasurement(self, numberOfWaves = 64, collectionMode = 'transmission'):
 
         #TODO: add error checking here, need to assert that all necessary self.picoData fields are informed
         #these include: cHandle, timebase, numberOfSamples, all channel and trigger statuses
@@ -290,9 +289,9 @@ class picosdkRapidblockPulse():
         #Convert bufferArrayChannelB to a ctype
         bufferArrayChannelBCtype = np.ctypeslib.as_ctypes(bufferArrayChannelB)
 
-        #Set up memory buffers for channel A. This step may not be necessary
-        # bufferArrayChannelA = np.empty((numberOfWaves, numberOfSamples), dtype = ctypes.c_int16)
-        # bufferArrayChannelACtype = np.ctypeslib.as_ctypes(bufferArrayChannelA)
+        #Set up memory buffers for channel A.
+        bufferArrayChannelA = np.empty((numberOfWaves, numberOfSamples), dtype = ctypes.c_int16)
+        bufferArrayChannelACtype = np.ctypeslib.as_ctypes(bufferArrayChannelA)
 
         # bufferArrayChannelBPointer = bufferArrayChannelB.ctypes.data_as(c_int16_pointer)
         for wave in range(numberOfWaves):
@@ -309,10 +308,10 @@ class picosdkRapidblockPulse():
 
             dataBufferB = ps.ps2000aSetDataBuffer(cHandle, 1, ctypes.byref(bufferArrayChannelBCtype[wave]), numberOfSamples, waveC, 0)
             assert_pico_ok(dataBufferB)
-
             #repeat above for channel A
-            # dataBufferA = ps.ps2000aSetDataBuffer(cHandle, 0, ctypes.byref(bufferArrayChannelACtype[wave]), numberOfSamples, waveC, 0)
-            # assert_pico_ok(dataBufferA)
+            dataBufferA = ps.ps2000aSetDataBuffer(cHandle, 0, ctypes.byref(bufferArrayChannelACtype[wave]), numberOfSamples, waveC, 0)
+            assert_pico_ok(dataBufferA)
+
 
         # Start block capture
         # handle = cHandle
@@ -342,11 +341,12 @@ class picosdkRapidblockPulse():
         # DownSampleRatio = 0
         # DownSampleRatioMode = 0
         # Overflow = ctypes.byref(overflow)
-        self.picoData["GetValuesBulk"] = ps.ps2000aGetValuesBulk(cHandle, ctypes.byref(cNumberOfSamples), 0, numberOfWaves- 1, 0, 0, ctypes.byref(overflow))
+        self.picoData["GetValuesBulk"] = ps.ps2000aGetValuesBulk(cHandle, ctypes.byref(cNumberOfSamples), 0, 2*numberOfWaves- 1, 0, 0, ctypes.byref(overflow))
         assert_pico_ok(self.picoData["GetValuesBulk"])
 
         #Calculate the average of the waveform values stored in the buffer
-        bufferMean = np.mean(bufferArrayChannelB, axis = 0)
+        bufferMeanA = np.mean(bufferArrayChannelA, axis = 0)
+        bufferMeanB = np.mean(bufferArrayChannelB, axis = 0)
 
         # Make sure the picoscope is stopped
         self.picoData["stop"] = ps.ps2000aStop(cHandle)
@@ -359,7 +359,8 @@ class picosdkRapidblockPulse():
         assert_pico_ok(self.picoData["maximumValue"])
 
         # Then convert the mean data array from ADC to mV using the sdk function
-        buffermV = np.array(adc2mV(bufferMean, self.picoData["voltageIndex"], maxADC))
+        buffermVA = np.array(adc2mV(bufferMeanA, self.picoData["voltageIndex"], maxADC))
+        buffermVB = np.array(adc2mV(bufferMeanB, self.picoData["voltageIndex"], maxADC))
 
         #Create the time data (i.e. the x-axis) using the time intervals, numberOfSamples, and delay time
         timeInterval = self.picoData["timeInterval"]
@@ -370,9 +371,19 @@ class picosdkRapidblockPulse():
         #Might need to free up memory for longer scans by deleting the buffer arrays
         # this is probably handled by python garbage collection and is unnecessary
         del bufferArrayChannelB
-        # del bufferArrayChannelA
+        del bufferArrayChannelA
 
-        return buffermV, waveTime
+        # return data based on experiment type
+        match collectionMode:
+            case 'transmission':
+                return buffermVB, waveTime
+            case 'pulse-echo':
+                return buffermVA, waveTime
+            case 'both':
+                return buffermVA, buffermVB, waveTime
+            case _:
+                print("Invalid collection mode. Make sure collectionMode is set to 'transmission', 'pulse-echo', or 'both' and retry.")
+                return None, None
 
     #ends the connection to the picoscope
     #Input: picoData with the cHandle field filled
@@ -499,7 +510,7 @@ class picosdkRapidblockPulse():
     def __init__(self,params: dict):
         #openPicoscope and setupPicoMeasurement should be taken over by the __init__ function
         # __init__ should take the experimental params dict from runUltrasonicExperiment as an input
-        # ASK: not sure what does mean experimetal params dict as input 
+        # ASK: not sure what does mean experimetal params dict as input
         # experimental_input= runUlt.setDicPara()
         measureDelay = params['measureDelay']
         voltageRange = params['voltageRange']
@@ -507,8 +518,8 @@ class picosdkRapidblockPulse():
         measureTime = params['measureTime']
         self.openPicoscope()
         self.setupPicoMeasurement(measureDelay, voltageRange, samples, measureTime )
-            
-        
+
+
 
 ############################################
 ####Example scripts########
