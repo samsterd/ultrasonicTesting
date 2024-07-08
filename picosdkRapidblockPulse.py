@@ -92,11 +92,11 @@ class picosdkRapidblockPulse():
     #       ps2000aSetChannel is run for both channels, the timebase is calculated, and ps2000aSetSimpleTrigger is run. Statuses are recorded in picoData
     # setupPicoMeasurement(delay, voltageRange, timeResolution, duration, numberToAverage, picoData)
     #   picoData - dict containing picoscope info and statuses. Note that the "cHandle" key must be filled for this function to run!
-    #   delay - the delay, in microseconds, between receiving the trigger and starting data collection. Default is 3 us.
+    #   measureDelay - the delay, in microseconds, between receiving the trigger and starting data collection. Default is 3 us.
     #   voltageRange - the maximum voltage, in V, to be read in the measurement. Default is 1 V
     #       The oscilloscope has 10 discrete settings for voltage range. This script will choose the smallest range is larger than the input
-    #   numberOfSamples - the number of data points per waveform
-    #   duration - the duration of the measurement, in microseconds. Defaults to 10 us. The time interval between data points is duration / numberOfSamples
+    #   samples - the number of data points per waveform
+    #   measureTime - the duration of the measurement, in microseconds. Defaults to 10 us. The time interval between data points is duration / numberOfSamples
     #       Note that minimum time interval for measurements with 2 channels is 2 ns
 
     def setupPicoMeasurement(self, picoData, measureDelay = 3, voltageRange = 1, samples = 512, measureTime = 10):
@@ -123,63 +123,121 @@ class picosdkRapidblockPulse():
         # Note that this is 1-indexed rather than 0, so +1 is added
         voltageIndex =voltageLimits.index(voltageLimit) + 1
         picoData["voltageIndex"] = voltageIndex
+        if picoData['experimentType'] == 'transmission':
+            # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now
+            # handle = chandle
+            # channel = ps2000a_CHANNEL_A = 0
+            # enabled = 1
+            # coupling type = ps2000a_DC = 1
+            # range = ps2000a_1V = 6
+            # analogue offset = 0 V
+            setChA = ps.ps2000aSetChannel(cHandle, 0, 1, 1, 6, 0)
 
-        # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now
-        # handle = chandle
-        # channel = ps2000a_CHANNEL_A = 0
-        # enabled = 1
-        # coupling type = ps2000a_DC = 1
-        # range = ps2000a_1V = 6
-        # analogue offset = 0 V
-        setChA = ps.ps2000aSetChannel(cHandle, 0, 1, 1, 6, 0)
+            #Error check channel A
+            if setChA == "PICO_OK":
+                picoData["setChA"] = setChA
+            else:
+                # print("Error: Problem connecting to picoscope channel A: " + setChA)
+                #Raise error and break
+                assert_pico_ok(setChA)
 
-        #Error check channel A
-        if setChA == "PICO_OK":
-            picoData["setChA"] = setChA
-        else:
-            # print("Error: Problem connecting to picoscope channel A: " + setChA)
-            #Raise error and break
-            assert_pico_ok(setChA)
+            #Setup channel B. B records the transducer data and its range is set by the user
+            # handle = chandle
+            # channel = ps2000a_CHANNEL_B = 1
+            # enabled = 1
+            # coupling type = ps2000a_DC = 1
+            # range = ps2000a_1V = voltageIndex
+            # analogue offset = 0 V
+            setChB = ps.ps2000aSetChannel(cHandle, 1, 1, 1, voltageIndex, 0)
 
-        #Setup channel B. B records the transducer data and its range is set by the user
-        # handle = chandle
-        # channel = ps2000a_CHANNEL_B = 1
-        # enabled = 1
-        # coupling type = ps2000a_DC = 1
-        # range = ps2000a_1V = voltageIndex
-        # analogue offset = 0 V
-        setChB = ps.ps2000aSetChannel(cHandle, 1, 1, 1, voltageIndex, 0)
+            #Error check channel B
+            if setChB == "PICO_OK":
+                picoData["setChB"] = setChB
+            else:
+                # print("Error: Problem connecting to picoscope channel B: " + setChB)
+                #Raise error and break
+                assert_pico_ok(setChB)
+            # Calculate timebase and timeInterval (in ns) by making a call to a helper function
+            timebase, timeInterval = self.timebaseFromDurationSamples(samples, measureTime)
 
-        #Error check channel B
-        if setChB == "PICO_OK":
-            picoData["setChB"] = setChB
-        else:
-            # print("Error: Problem connecting to picoscope channel B: " + setChB)
-            #Raise error and break
-            assert_pico_ok(setChB)
+            #Record timebase, timeInterval and numberOfSamples in picoData
+            picoData["timebase"] = timebase
+            picoData["timeInterval"] = timeInterval
+            picoData["numberOfSamples"] = samples
 
-        # Calculate timebase and timeInterval (in ns) by making a call to a helper function
-        timebase, timeInterval = self.timebaseFromDurationSamples(samples, measureTime)
+            # Convert delay time (in us) to delay samples
+            delayIntervals = math.floor((measureDelay * 1000) / timeInterval)
+            picoData["delayIntervals"] = delayIntervals
 
-        #Record timebase, timeInterval and numberOfSamples in picoData
-        picoData["timebase"] = timebase
-        picoData["timeInterval"] = timeInterval
-        picoData["numberOfSamples"] = samples
+            # Setup trigger on channel A
+            # cHandle = cHandle
+            # Enable = 1
+            # Source = ps2000a_channel_A = 0
+            # Note on threshold: must be greater than 1024. 10000 chosen because it works, but this will vary depending on the voltage range
+            # Threshold = 10000 ADC counts
+            # Direction = ps2000a_Above = 0
+            # Delay = delayIntervals
+            # autoTrigger_ms = 1
+            trigger = ps.ps2000aSetSimpleTrigger(cHandle, 1, 0, 10000, 0, delayIntervals, 100)
+                        
+        #WHEN the experiment tyep is pulseEcho
+        if picoData['experimentType'] == 'pulseEcho':       
+            # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now
+            # handle = chandle
+            # channel = ps2000a_CHANNEL_A = 0
+            # enabled = 0 Off 
+            # coupling type = ps2000a_DC = 1
+            # range = ps2000a_1V = 6 --> (upated)voltageIndex
+            # analogue offset = 0 V
+            setChA = ps.ps2000aSetChannel(cHandle, 0, 0, 1, voltageIndex, 0)
 
-        # Convert delay time (in us) to delay samples
-        delayIntervals = math.floor((measureDelay * 1000) / timeInterval)
-        picoData["delayIntervals"] = delayIntervals
+            #Error check channel A
+            if setChA == "PICO_OK":
+                picoData["setChA"] = setChA
+            else:
+                # print("Error: Problem connecting to picoscope channel A: " + setChA)
+                #Raise error and break
+                assert_pico_ok(setChA)
 
-        # Setup trigger on channel A
-        # cHandle = cHandle
-        # Enable = 1
-        # Source = ps2000a_channel_A = 0
-        # Note on threshold: must be greater than 1024. 10000 chosen because it works, but this will vary depending on the voltage range
-        # Threshold = 10000 ADC counts
-        # Direction = ps2000a_Above = 0
-        # Delay = delayIntervals
-        # autoTrigger_ms = 1
-        trigger = ps.ps2000aSetSimpleTrigger(cHandle, 1, 0, 10000, 0, delayIntervals, 100)
+            #Setup channel B. B records the transducer data and its range is set by the user
+            # handle = chandle
+            # channel = ps2000a_CHANNEL_B = 1
+            # enabled = 1
+            # coupling type = ps2000a_DC = 1
+            # range = ps2000a_1V = voltageIndex
+            # analogue offset = 0 V
+            setChB = ps.ps2000aSetChannel(cHandle, 1, 1, 1, voltageIndex, 0)
+
+            #Error check channel B
+            if setChB == "PICO_OK":
+                picoData["setChB"] = setChB
+            else:
+                # print("Error: Problem connecting to picoscope channel B: " + setChB)
+                #Raise error and break
+                assert_pico_ok(setChB)
+
+            # Calculate timebase and timeInterval (in ns) by making a call to a helper function
+            timebase, timeInterval = self.timebaseFromDurationSamples(samples, measureTime)
+
+            #Record timebase, timeInterval and numberOfSamples in picoData
+            picoData["timebase"] = timebase
+            picoData["timeInterval"] = timeInterval
+            picoData["numberOfSamples"] = samples
+
+            # Convert delay time (in us) to delay samples
+            delayIntervals = math.floor((measureDelay * 1000) / timeInterval)
+            picoData["delayIntervals"] = delayIntervals
+
+            # Setup trigger on channel B
+            # cHandle = cHandle
+            # Enable = 1
+            # Source = ps2000a_channel_B = 0
+            # Note on threshold: must be greater than 1024. 10000 chosen because it works, but this will vary depending on the voltage range
+            # Threshold = 10000 ADC counts
+            # Direction = ps2000a_Above = 0
+            # Delay = delayIntervals
+            # autoTrigger_ms = 1
+            trigger = ps.ps2000aSetSimpleTrigger(cHandle, 1, 1, 10000, 0, delayIntervals, 100)
 
         # Error check trigger
         if trigger == "PICO_OK":
