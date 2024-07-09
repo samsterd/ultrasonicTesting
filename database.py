@@ -65,6 +65,7 @@ class Database:
         return initTable + ')'
 
     # initialize table to record oscilloscope parameters
+    #TODO: add separate column for pulse-echo. only create it if collectionMode== 'pulse-echo' or 'both'
     def parameter_table_initializer(self, params : dict):
         initTable = '''CREATE TABLE IF NOT EXISTS parameters (
             time_started REAL PRIMARY KEY,

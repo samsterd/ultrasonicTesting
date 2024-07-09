@@ -219,6 +219,7 @@ class MainWindow(QMainWindow):
 
 
     # pulse window specifies scope and pulser paramters
+    #TODO: add collectionMode widget as a QComboBox
     def pulseWindow(self):
 
         if self.experimentType == 'Setup':
@@ -955,6 +956,7 @@ class MainWindow(QMainWindow):
         self.executePulseButton.repaint()
 
         # gather parameters
+        #TODO: add collectionMode to the parameters
         self.params['experiment'] = 'single pulse'
         self.params['transducerFrequency'] = float(self.transducerFrequency.text())
         # pulserType must be converted to lower case to be recognized by the Pulser class
@@ -972,6 +974,7 @@ class MainWindow(QMainWindow):
             self.params['dllFile'] = self.dllFile.text()
 
         # todo: add error handling and timeout
+        #TODO: add handling for pulse-echo plotting here
         voltages, times = setup.singlePulseMeasure(self.params)
         fig = MplCanvas(width = 7.5, height = 6)
         fig.axes.plot(times, voltages)
@@ -989,6 +992,8 @@ class MainWindow(QMainWindow):
         self.executeRepeatPulseButton.repaint()
 
         # gather parameters
+
+        #TODO: add collectionMode to the parameters
         self.params['experiment'] = 'repeat pulse'
         self.params['transducerFrequency'] = float(self.transducerFrequency.text())
         self.params['pulserType'] = self.pulser.currentText().lower()
@@ -999,6 +1004,7 @@ class MainWindow(QMainWindow):
         self.params['waves'] = int(self.waves.text())
         self.params['samples'] = int(self.samples.text())
         self.params['halfCycles'] = int(self.halfCycles.text())
+
 
         self.params['experimentFolder'] = self.experimentFolderName.text()
         self.params['experimentName'] = self.experimentName.text()
@@ -1028,6 +1034,7 @@ class MainWindow(QMainWindow):
         self.executeSingleScanButton.repaint()
 
         # gather parameters
+        #TODO: add collectionMode to the parameters
         self.params['experiment'] = 'single scan'
         self.params['transducerFrequency'] = float(self.transducerFrequency.text())
         self.params['pulserType'] = self.pulser.currentText().lower()
@@ -1070,6 +1077,7 @@ class MainWindow(QMainWindow):
         self.executeMultiScanButton.repaint()
 
         # gather parameters
+        #TODO: add collectionMode to the parameters
         self.params['experiment'] = 'multi scan'
         self.params['transducerFrequency'] = float(self.transducerFrequency.text())
         self.params['pulserType'] = self.pulser.currentText().lower()
