@@ -119,8 +119,8 @@ def repeatPulse(params):
             pbar.update(iterationTime)
 
     pbar.close()
-
-    mqtt_close(mqtt_client)
+    if params['remoteSaveOption']:
+        mqtt_close(mqtt_client)
 
     pulser.pulserOff()
     pulser.closePulser()
