@@ -53,7 +53,8 @@ def repeatPulse(params):
     # initialize progress bar
     pbar = tqdm.tqdm(total=experimentTime)
 
-    mqtt_handle_params(mqtt_client, params)
+    if (params['remoteSaveOption']):
+        mqtt_handle_params(mqtt_client, params)
 
     #start pulse collection loop. Run until end of experiment
     while time.time() < endTime:
@@ -82,8 +83,9 @@ def repeatPulse(params):
         collectionIndex += 1
 
         # Save data to the Mac Mini
-        mqtt_quick_pub(mqtt_client, mqtt_publish_properties, keys, "key", "WaveDataRaw",  "/pulser/WaveData/")
-        mqtt_quick_pub(mqtt_client, mqtt_publish_properties, data, "data", "WaveDataRaw",  "/pulser/WaveData/")
+        if (params['remoteSaveOption']):
+            mqtt_quick_pub(mqtt_client, mqtt_publish_properties, keys, "key", params['experimentName'],  "/pulser/WaveData/")
+            mqtt_quick_pub(mqtt_client, mqtt_publish_properties, data, "data", params['experimentName'],  "/pulser/WaveData/")
         # CURRENTLY NOT SUPPORTED
         # if params['voltageAutoRange']:
         #     waveData['voltageRange'] = params['voltageRange']

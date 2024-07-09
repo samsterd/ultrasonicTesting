@@ -67,6 +67,9 @@ experimentParams = {
     'saveFormat' : 'sqlite',                        # Format to save data. Options are sqlite or json. Sqlite is highly recommended
     'postAnalysis' : False,                         # Option to run simple post-scan analysis and plotting: calculate max-min, STA/LTA, and Hilbert Envelope, save plots of data and dump CSVs of the raw metrics
                                                     # NOTE: this is only available if for single or multi scan experiments with saveFormat = 'sqlite'
+    'remoteSaveOption' : True,                      # Option to automatically transfer data to the Chang Lab Mac Mini
+                                                    # NOTE: If you are not a member of Wes Chang's lab or you do not want others to access your data, set this to false.
+    'remoteSaveLocation' : '/pulser/',              # Location on the remote server to save to. Starts in the Data directory.
 
     ################################################################################
     ####################### Scan Parameters ########################################
