@@ -55,7 +55,7 @@ experimentParams = {
     'waves' : 1000,                                  # Number of waves to collect and average
     'samples': 1000,                                  # Number of data points per wave
     'halfCycles' : 16,                               # Tone burst pulser only. Number of half-cycles in a tone burst pulse. Minimum 1, maximum 32
-    'collectionMode': 'transmission',                #transmission/pulseEcho/both
+    'collectionMode': 'pulse-echo',                #transmission/pulse-echo/both
 
     ################################################################################
     ########################### Saving Names ##########################################
@@ -95,7 +95,7 @@ experimentParams = {
     ########################## Port Names ###########################################
     ######### Only change if instrument USB ports are changed! ######################
     #################################################################################
-    'pulserPort' : 'COM5',                          # Ultratek pulser port name
+    'pulserPort' : '/dev/ttyUSB0',                          # Ultratek pulser port name
     'scannerPort' : '/dev/ttyUSB1',                         # Ender port name
     'dllFile' : 'C://USUTSDK//USBUTSDKC//USBUT.dll',        # Only used for 'pulserType' : 'tone burst'. Location of USBUT350 pulser SDK
 
