@@ -45,8 +45,9 @@ def singlePulseMeasure(params):
         waveform, params = pico.voltageRangeFinder(params)
         voltages, times = waveform[0], waveform[1]
     else:
-        voltages, times = pico.runPicoMeasurement(params['waves'])
-
+        voltages, times = pico.runPicoMeasurement(params['waves'],params['collectionMode'])
+    if params['collectionMode'] == 'both':
+        volA, volB, times = pico.runPicoMeasurement(params['waves'], params['collectionMode'])
     # Turn off pulser
     pulser.pulserOff()
 
@@ -55,9 +56,18 @@ def singlePulseMeasure(params):
     pico.closePicoscope()
 
     # Plot data
-    fig = plt.plot(times, voltages)
-    plt.xlabel('Time (us)')
-    plt.ylabel('Voltage (mV)')
+    if params['collectionMode'] == 'both':
+        # fig = plt.plot(times, volA)
+        fig,ax = plt.subplots()
+        ax.plot(times,volA,color='r',label='pulse-echo')
+        ax.plot(times,volB,color='b',label='transmission')
+        plt.xlabel('Time (us)')
+        plt.ylabel('Voltage (mV)')
+        plt.legend()
+    else:
+        fig = plt.plot(times, voltages)
+        plt.xlabel('Time (us)')
+        plt.ylabel('Voltage (mV)')
 
     if params['gui']:
         return voltages, times

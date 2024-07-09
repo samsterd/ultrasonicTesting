@@ -137,14 +137,14 @@ class picosdkRapidblockPulse():
             #Raise error and break
             assert_pico_ok(setChA)
 
-            #Setup channel B. B records the transducer data and its range is set by the user
-            # handle = chandle
-            # channel = ps2000a_CHANNEL_B = 1
-            # enabled = 1
-            # coupling type = ps2000a_DC = 1
-            # range = ps2000a_1V = voltageIndex
-            # analogue offset = 0 V
-            setChB = ps.ps2000aSetChannel(cHandle, 1, 1, 1, voltageIndex, 0)
+        #Setup channel B. B records the transducer data and its range is set by the user
+        # handle = chandle
+        # channel = ps2000a_CHANNEL_B = 1
+        # enabled = 1
+        # coupling type = ps2000a_DC = 1
+        # range = ps2000a_1V = voltageIndex
+        # analogue offset = 0 V
+        setChB = ps.ps2000aSetChannel(cHandle, 1, 1, 1, voltageIndex, 0)
 
         #Error check channel B
         if setChB == "PICO_OK":
@@ -160,7 +160,7 @@ class picosdkRapidblockPulse():
         #Record timebase, timeInterval and numberOfSamples in picoData
         self.picoData["timebase"] = timebase
         self.picoData["timeInterval"] = timeInterval
-        self.picoData["numberOfSamples"] = samples
+        self.picoData["samples"] = samples
 
         # Convert delay time (in us) to delay samples
         delayIntervals = math.floor((measureDelay * 1000) / timeInterval)
@@ -176,65 +176,62 @@ class picosdkRapidblockPulse():
             # Delay = delayIntervals
             # autoTrigger_ms = 1
         trigger = ps.ps2000aSetSimpleTrigger(cHandle, 1, 0, 10000, 0, delayIntervals, 100)
+        #
+        # # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now
+        # # handle = chandle
+        # # channel = ps2000a_CHANNEL_A = 0
+        # # enabled = 0 Off
+        # # coupling type = ps2000a_DC = 1
+        # # range = ps2000a_1V = 6 --> (upated)voltageIndex
+        # # analogue offset = 0 V
+        # setChA = ps.ps2000aSetChannel(cHandle, 0, 1, 1, voltageIndex, 0)
+        #
+        # #Error check channel A
+        # if setChA == "PICO_OK":
+        #     self.picoData["setChA"] = setChA
+        # else:
+        #     # print("Error: Problem connecting to picoscope channel A: " + setChA)
+        #     #Raise error and break
+        #     assert_pico_ok(setChA)
+        #
+        # #Setup channel B. B records the transducer data and its range is set by the user
+        # # handle = chandle
+        # # channel = ps2000a_CHANNEL_B = 1
+        # # enabled = 1
+        # # coupling type = ps2000a_DC = 1
+        # # range = ps2000a_1V = voltageIndex
+        # # analogue offset = 0 V
+        # setChB = ps.ps2000aSetChannel(cHandle, 1, 1, 1, voltageIndex, 0)
+        #
+        # #Error check channel B
+        # if setChB == "PICO_OK":
+        #     self.picoData["setChB"] = setChB
+        # else:
+        #     # print("Error: Problem connecting to picoscope channel B: " + setChB)
+        #     #Raise error and break
+        #     assert_pico_ok(setChB)
 
-        #WHEN the experiment tyep is pulseEcho
-        if self.picoData['experimentType'] == 'pulseEcho':
-            # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now
-            # handle = chandle
-            # channel = ps2000a_CHANNEL_A = 0
-            # enabled = 0 Off
-            # coupling type = ps2000a_DC = 1
-            # range = ps2000a_1V = 6 --> (upated)voltageIndex
-            # analogue offset = 0 V
-            setChA = ps.ps2000aSetChannel(cHandle, 0, 0, 1, voltageIndex, 0)
+        # Calculate timebase and timeInterval (in ns) by making a call to a helper function
+        # timebase, timeInterval = self.timebaseFromDurationSamples(samples, measureTime)
+        # #Record timebase, timeInterval and numberOfSamples in picoData
+        # self.picoData["timebase"] = timebase
+        # self.picoData["timeInterval"] = timeInterval
+        # self.picoData["samples"] = samples
+        #
+        # # Convert delay time (in us) to delay samples
+        # delayIntervals = math.floor((measureDelay * 1000) / timeInterval)
+        # self.picoData["delayIntervals"] = delayIntervals
 
-            #Error check channel A
-            if setChA == "PICO_OK":
-                self.picoData["setChA"] = setChA
-            else:
-                # print("Error: Problem connecting to picoscope channel A: " + setChA)
-                #Raise error and break
-                assert_pico_ok(setChA)
-
-            #Setup channel B. B records the transducer data and its range is set by the user
-            # handle = chandle
-            # channel = ps2000a_CHANNEL_B = 1
-            # enabled = 1
-            # coupling type = ps2000a_DC = 1
-            # range = ps2000a_1V = voltageIndex
-            # analogue offset = 0 V
-            setChB = ps.ps2000aSetChannel(cHandle, 1, 1, 1, voltageIndex, 0)
-
-            #Error check channel B
-            if setChB == "PICO_OK":
-                self.picoData["setChB"] = setChB
-            else:
-                # print("Error: Problem connecting to picoscope channel B: " + setChB)
-                #Raise error and break
-                assert_pico_ok(setChB)
-
-            # Calculate timebase and timeInterval (in ns) by making a call to a helper function
-            timebase, timeInterval = self.timebaseFromDurationSamples(samples, measureTime)
-
-            #Record timebase, timeInterval and numberOfSamples in picoData
-            self.picoData["timebase"] = timebase
-            self.picoData["timeInterval"] = timeInterval
-            self.picoData["numberOfSamples"] = samples
-
-            # Convert delay time (in us) to delay samples
-            delayIntervals = math.floor((measureDelay * 1000) / timeInterval)
-            self.picoData["delayIntervals"] = delayIntervals
-
-            # Setup trigger on channel B
-            # cHandle = cHandle
-            # Enable = 1
-            # Source = ps2000a_channel_B = 0
-            # Note on threshold: must be greater than 1024. 10000 chosen because it works, but this will vary depending on the voltage range
-            # Threshold = 10000 ADC counts
-            # Direction = ps2000a_Above = 0
-            # Delay = delayIntervals
-            # autoTrigger_ms = 1
-            trigger = ps.ps2000aSetSimpleTrigger(cHandle, 1, 1, 10000, 0, delayIntervals, 100)
+        # Setup trigger on channel B
+        # cHandle = cHandle
+        # Enable = 1
+        # Source = ps2000a_channel_B = 0
+        # Note on threshold: must be greater than 1024. 10000 chosen because it works, but this will vary depending on the voltage range
+        # Threshold = 10000 ADC counts
+        # Direction = ps2000a_Above = 0
+        # Delay = delayIntervals
+        # autoTrigger_ms = 1
+        # trigger = ps.ps2000aSetSimpleTrigger(cHandle, 1, 1, 10000, 0, delayIntervals, 100)
 
         # Error check trigger
         if trigger == "PICO_OK":
@@ -261,17 +258,17 @@ class picosdkRapidblockPulse():
         #Gather important parameters from self.picoData dict
         cHandle = self.picoData["cHandle"]
         timebase = self.picoData["timebase"]
-        numberOfSamples = self.picoData["numberOfSamples"]
+        samples = self.picoData["samples"]
 
         #Create a c type for numberOfSamples that can be passed to the ps2000a functions
-        cNumberOfSamples = ctypes.c_int32(numberOfSamples)
+        cNumberOfSamples = ctypes.c_int32(samples)
 
         #Create overflow . Note: overflow is a flag for whether overvoltage occured on a given channel during measurement
         #For 2 channel measurements, each channel needs an overflow flag so we allocate 2 * numberOfWaves
-        overflow = (ctypes.c_int16 * numberOfWaves * 2)()
+        overflow = (ctypes.c_int16 * numberOfWaves )()
 
         #Divide picoscope memory into segments for rapidblock capture(Important)
-        memorySegments = ps.ps2000aMemorySegments(cHandle, numberOfWaves * 2, ctypes.byref(cNumberOfSamples))
+        memorySegments = ps.ps2000aMemorySegments(cHandle, numberOfWaves, ctypes.byref(cNumberOfSamples))
         assert_pico_ok(memorySegments)
 
         #Set the number of captures (=wavesToCollect) on the picoscope
@@ -285,12 +282,12 @@ class picosdkRapidblockPulse():
             assert_pico_ok(setCaptures)
 
         #Set up memory buffers to receive data from channel B
-        bufferArrayChannelB = np.empty((numberOfWaves, numberOfSamples), dtype = ctypes.c_int16)
+        bufferArrayChannelB = np.empty((numberOfWaves, samples), dtype = ctypes.c_int16)
         #Convert bufferArrayChannelB to a ctype
         bufferArrayChannelBCtype = np.ctypeslib.as_ctypes(bufferArrayChannelB)
 
         #Set up memory buffers for channel A.
-        bufferArrayChannelA = np.empty((numberOfWaves, numberOfSamples), dtype = ctypes.c_int16)
+        bufferArrayChannelA = np.empty((numberOfWaves, samples), dtype = ctypes.c_int16)
         bufferArrayChannelACtype = np.ctypeslib.as_ctypes(bufferArrayChannelA)
 
         # bufferArrayChannelBPointer = bufferArrayChannelB.ctypes.data_as(c_int16_pointer)
@@ -305,12 +302,11 @@ class picosdkRapidblockPulse():
             # Segment index = wave
             # Ratio mode = ps2000a_Ratio_Mode_None = 0 (we are not downsampling)
             waveC = ctypes.c_uint32(wave)
-
-            dataBufferB = ps.ps2000aSetDataBuffer(cHandle, 1, ctypes.byref(bufferArrayChannelBCtype[wave]), numberOfSamples, waveC, 0)
+            dataBufferB = ps.ps2000aSetDataBuffer(cHandle, 1, ctypes.byref(bufferArrayChannelBCtype[wave]), samples, waveC, 0)
             assert_pico_ok(dataBufferB)
-            #repeat above for channel A
-            dataBufferA = ps.ps2000aSetDataBuffer(cHandle, 0, ctypes.byref(bufferArrayChannelACtype[wave]), numberOfSamples, waveC, 0)
+            dataBufferA = ps.ps2000aSetDataBuffer(cHandle, 0, ctypes.byref(bufferArrayChannelACtype[wave]), samples,waveC, 0)
             assert_pico_ok(dataBufferA)
+
 
 
         # Start block capture
@@ -323,7 +319,7 @@ class picosdkRapidblockPulse():
         # Segment index = 0 (start at beginning of memory)
         # LpReady = None (not used)
         # pParameter = None (not used)
-        self.picoData["runblock"] = ps.ps2000aRunBlock(cHandle, 0, numberOfSamples, timebase, 0, None, 0, None, None)
+        self.picoData["runblock"] = ps.ps2000aRunBlock(cHandle, 0, samples, timebase, 0, None, 0, None, None)
         #TODO: add better error handling
         assert_pico_ok(self.picoData["runblock"])
 
@@ -341,7 +337,7 @@ class picosdkRapidblockPulse():
         # DownSampleRatio = 0
         # DownSampleRatioMode = 0
         # Overflow = ctypes.byref(overflow)
-        self.picoData["GetValuesBulk"] = ps.ps2000aGetValuesBulk(cHandle, ctypes.byref(cNumberOfSamples), 0, 2*numberOfWaves- 1, 0, 0, ctypes.byref(overflow))
+        self.picoData["GetValuesBulk"] = ps.ps2000aGetValuesBulk(cHandle, ctypes.byref(cNumberOfSamples), 0, (numberOfWaves)-1, 0, 0, ctypes.byref(overflow))
         assert_pico_ok(self.picoData["GetValuesBulk"])
 
         #Calculate the average of the waveform values stored in the buffer
@@ -365,8 +361,8 @@ class picosdkRapidblockPulse():
         #Create the time data (i.e. the x-axis) using the time intervals, numberOfSamples, and delay time
         timeInterval = self.picoData["timeInterval"]
         startTime = self.picoData["delayIntervals"] * timeInterval
-        stopTime = startTime + (timeInterval * (numberOfSamples - 1))
-        waveTime = np.linspace(startTime, stopTime, numberOfSamples)
+        stopTime = startTime + (timeInterval * (samples - 1))
+        waveTime = np.linspace(startTime, stopTime, samples)
 
         #Might need to free up memory for longer scans by deleting the buffer arrays
         # this is probably handled by python garbage collection and is unnecessary
@@ -450,7 +446,7 @@ class picosdkRapidblockPulse():
         currentTolerance = tolerance * currentLimit
 
         # collect initial waveform
-        waveform = self.runPicoMeasurement(params['waves'])
+        waveform = self.runPicoMeasurement(params['waves'],params['collectionMode'])
 
         # find max of the waveform, divide by 1000 to convert to V
         maxV = np.max(abs(waveform[0])) / 1000
@@ -485,7 +481,7 @@ class picosdkRapidblockPulse():
                     params['voltageRange'],
                     params['samples'],
                     params['measureTime'])
-                waveform = self.runPicoMeasurement(params['waves'])
+                waveform = self.runPicoMeasurement(params['waves'],params['collectionMode'])
                 return waveform, params
 
         # recursion case : max > current tolerance. try again at the next highest voltage limit
