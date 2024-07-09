@@ -62,7 +62,7 @@ experimentParams = {
     ################################################################################
 
     'experimentFolder': r'C:\Users\changlab\Desktop\UT Data',                     # Name of folder to dump data
-    'experimentName' : 'Al_T-24hr_dT-30min_halfcy-2_waves-1000_samps-20000_delay-50_measure-480',                  # File name for single scan and repeat pulse experiment. Will be appended with .json or .sqlite3
+    'experimentName' : 'mqttTestWhatever3',                  # File name for single scan and repeat pulse experiment. Will be appended with .json or .sqlite3
     'experimentBaseName' : 'test_multiscan_data',   # Base filename for multi scan experiment, which will have the scan # appended to it
     'saveFormat' : 'sqlite',                        # Format to save data. Options are sqlite or json. Sqlite is highly recommended
     'postAnalysis' : False,                         # Option to run simple post-scan analysis and plotting: calculate max-min, STA/LTA, and Hilbert Envelope, save plots of data and dump CSVs of the raw metrics
