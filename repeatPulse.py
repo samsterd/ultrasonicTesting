@@ -84,7 +84,7 @@ def repeatPulse(params):
 
         # Save data to the Mac Mini
         if (params['remoteSaveOption']):
-            mqtt_quick_pub(mqtt_client, mqtt_publish_properties, keys, "key", params['experimentName'],  "/pulser/WaveData/")
+            mqtt_quick_pub(mqtt_client, mqtt_publish_properties, keys, "key", params['remoteSaveLocation'] + params['experimentName'],  "/pulser/WaveData/")
             mqtt_quick_pub(mqtt_client, mqtt_publish_properties, data, "data", params['experimentName'],  "/pulser/WaveData/")
         # CURRENTLY NOT SUPPORTED
         # if params['voltageAutoRange']:
