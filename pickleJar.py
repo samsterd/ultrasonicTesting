@@ -833,7 +833,8 @@ def plotWaveformOverTimeAtCoor(dirName : str, coor : tuple, xDat = 'time', yDat 
     for wave in range(len(dataDict['time_collected'])):
         plt.plot(dataDict[xDat][wave], dataDict[yDat][wave], c = cmp['viridis'](normTime[wave]), label = round(timesCollectZeroRef[wave]/3600, 2))
 
-    plt.legend()
+    # legend becomes too crowded for 100+ curves
+    # plt.legend()
     plt.show()
 
 
@@ -1055,7 +1056,12 @@ def timeCollectedToExperimentHours(timeCollected):
 # function for use in applyFunctionToData that calculates the maximum minus minimum value
 def maxMinusMin(voltages):
 
-    return bn.nanmax(voltages) - bn.nanmin(voltages)
+    return np.max(voltages) - np.min(voltages)
+
+# returns the x-value where ydat array is at its maximum
+def maxXVal(xdat, ydat):
+
+    return xdat[ydat.argmax()]
 
 # returns the sum of the absolute value of an input array. This value is directly proportional to the integral of the signal
 def absoluteSum(voltages):
