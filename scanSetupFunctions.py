@@ -29,7 +29,8 @@ def singlePulseMeasure(params):
 
     # Open connection to pulser
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
-
+    # between -120 and 840
+    pulser.setGain(500)
     # Adjust pulser pulsewidth
     pulser.setFrequency(params['transducerFrequency'])
 

@@ -157,11 +157,17 @@ class Pulser():
             return self.connection.shutdown_server32()
     def readGain(self):
         #start with self.writeToPulser('G?'), but then you need to read the value that comes out
-        getValue = self.connection.read().decode('ascii')
+        self.writeToPulser('G?')
+        getValue = self.connection.read_until('\r'.encode('ascii'))
+        # print(getValue)
+        getValue=str(getValue)
         if "G" in getValue:
-            getValue=getValue.replace('G','')
-            getValue= int(getValue)
-            return getValue
+            getValue=getValue.replace("'",'')
+            getValue=getValue.replace('bG=','')
+            getValue=getValue.replace('\\r','')
+            return int(getValue)
+        else:
+            return 0
 
     def setGain(self, gainValue : int):
         #It needs to check that it is between -120 and 840 (the upper and lower limits on the pulser), 
@@ -205,8 +211,8 @@ class usbut350Client(Client64):
     def setVoltage(self):
         return self.request32('setVoltage')
 
-import ultratekPulser as utp
 
-pulser = utp.Pulser('standard', '/dev/tty/USB1')
-
-print(pulser.readGain())
+#
+# pulser = Pulser('standard', pulserPort='/dev/ttyUSB0')
+# pulser.setGain(200)
+# print(pulser.readGain())
