@@ -119,6 +119,8 @@ class picosdkRapidblockPulse():
         # Note that this is 1-indexed rather than 0, so +1 is added
         voltageIndex =voltageLimits.index(voltageLimit) + 1
         self.picoData["voltageIndex"] = voltageIndex
+        #Channel A is used for pulse-echo
+        #edit the voltageRange def for setchanel could get input as like channel B
 
         # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now
         # handle = chandle
