@@ -42,7 +42,7 @@ def singlePulseMeasure(params):
     pulser.pulserOn()
 
     # Run pico measurement
-    if params['voltageAutoRange']:
+    if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
         waveform, params = pico.voltageRangeFinder(params)
         if params['collectionMode'] == 'both':
             volA, volB, times = waveform[0], waveform[1], waveform[2]
