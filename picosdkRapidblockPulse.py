@@ -458,173 +458,69 @@ class picosdkRapidblockPulse():
         # hardcoded tolerance limit - change limit if max is within 5%
         tolerance = 0.95
         voltageTolerances = tolerance * voltageLimits
-        collectionMode = params['collectionMode']
-        if collectionMode != 'both':#voltageRangeFinder for transmission and pulse-echo
-            match collectionMode:
-                case 'transmission':
-                    voltagerange = 'voltageRangeT'
-                case 'pulse-echo':
-                    voltagerange = 'voltageRangeP'
-            currentLimit = params[voltagerange]
-            currentTolerance = tolerance * currentLimit
 
-            # collect initial waveform
-            waveform = self.runPicoMeasurement(params['waves'],params['collectionMode'])
+        currentLimit = params['voltageRangeT']
+        currentTolerance = tolerance * currentLimit
 
-            # find max of the waveform, divide by 1000 to convert to V
-            maxV = np.max(abs(waveform[0])) / 1000
-            
-            # base case 1 : currentLimit == lowest limit and max < current limit. return waveform
-            if currentLimit == voltageLimits[0] and maxV < currentLimit:
+        # collect initial waveform
+        waveform = self.runPicoMeasurement(params['waves'],params['collectionMode'])
+
+        # find max of the waveform, divide by 1000 to convert to V
+        maxV = np.max(abs(waveform[0])) / 1000
+
+        # base case 1 : currentLimit == lowest limit and max < current limit. return waveform
+        if currentLimit == voltageLimits[0] and maxV < currentLimit:
+            return waveform, params
+
+        # base case 2 : currentLimit == highest limit and max > highest tolerance. return waveform and print a warning
+        elif currentLimit == voltageLimits[-1] and maxV >= currentTolerance:
+            print(
+                "Warning: voltageRangeFinder- waveform voltage exceeds oscilloscope maximum. Peaks are likely to be cutoff.")
+            return waveform, params
+
+        # base case 3 : max < current limit. set voltage range to be lowest range within tolerance, rerun measurement and return waveform, params
+        elif maxV <= currentTolerance:
+
+            # return index of first (lowest) tolerance that is >= maxV
+            # taking [0][0] of the result is safe since maxV < currentTolerance implies the condition is met at least once
+            rangeIndex = np.nonzero(voltageTolerances >= maxV)[0][0]
+            limit = voltageLimits[rangeIndex]
+
+            # if that tolerance is the current tolerance, return waveform, params
+            if limit == currentLimit:
                 return waveform, params
 
-            # base case 2 : currentLimit == highest limit and max > highest tolerance. return waveform and print a warning
-            elif currentLimit == voltageLimits[-1] and maxV >= currentTolerance:
-                print(
-                    "Warning: voltageRangeFinder- waveform voltage exceeds oscilloscope maximum. Peaks are likely to be cutoff.")
+            # if not, setup a new measurement with the tighter voltage limit and return that data
+            else:
+                params['voltageRangeT'] = limit
+                self.setupPicoMeasurement(
+                    params['measureDelay'],
+                    params['voltageRangeT'],
+                    params['voltageRangeP'],
+                    params['samples'],
+                    params['measureTime'])
+                waveform = self.runPicoMeasurement(params['waves'],params['collectionMode'])
                 return waveform, params
 
-            # base case 3 : max < current limit. set voltage range to be lowest range within tolerance, rerun measurement and return waveform, params
-            elif maxV <= currentTolerance:
+        # recursion case : max > current tolerance. try again at the next highest voltage limit
+        else:
 
-                # return index of first (lowest) tolerance that is >= maxV
-                # taking [0][0] of the result is safe since maxV < currentTolerance implies the condition is met at least once
-                rangeIndex = np.nonzero(voltageTolerances >= maxV)[0][0]
-                limit = voltageLimits[rangeIndex]
+            # get the index of the current limit
+            rangeIndex = np.nonzero(voltageLimits == currentLimit)[0][0]
 
-                # if that tolerance is the current tolerance, return waveform, params
-                if limit == currentLimit:
-                    return waveform, params
+            # just for safety, check that range index is not the last index. this shouldn't be possible, but just in case I'm missing a case
+            if rangeIndex == len(voltageLimits) - 1:
+                return waveform, params
 
-                # if not, setup a new measurement with the tighter voltage limit and return that data
-                else:
-                    params[voltagerange] = limit
-                    self.setupPicoMeasurement(
-                        params['measureDelay'],
-                        params['voltageRangeT'],
-                        params['voltageRangeP'],
-                        params['samples'],
-                        params['measureTime'])
-                    waveform = self.runPicoMeasurement(params['waves'],params['collectionMode'])
-                    return waveform, params
-            #여기까지 copy1
-            # recursion case : max > current tolerance. try again at the next highest voltage limit
+            # move to the next higher voltage limit and try again
             else:
-
-                # get the index of the current limit
-                rangeIndex = np.nonzero(voltageLimits == currentLimit)[0][0]
-
-                # just for safety, check that range index is not the last index. this shouldn't be possible, but just in case I'm missing a case
-                if rangeIndex == len(voltageLimits) - 1:
-                    return waveform, params
-
-                # move to the next higher voltage limit and try again
-                else:
-                    params[voltagerange] = voltageLimits[rangeIndex + 1]
-                    self.setupPicoMeasurement(params['measureDelay'],
-                                                            params['voltageRangeT'],
-                                                            params['voltageRangeP'],
-                                                            params['samples'],
-                                                            params['measureTime'])
-                    return self.voltageRangeFinder(params)
-        
-        #when collectionMode is both****************************************************
-        else: 
-            currentLimitP = params["voltagerangeP"]
-            currentLimitT = params["voltagerangeT"]
-            currentToleranceP = tolerance * currentLimitP
-            currentToleranceT = tolerance * currentLimitT
-            # collect initial waveform
-            #return buffermVA(pulse-echo), buffermVB(transmission), waveTime
-            waveform = self.runPicoMeasurement(params['waves'],params['collectionMode'])
-
-            # find max of the waveform, divide by 1000 to convert to V
-            maxV_P = np.max(abs(waveform[0])) / 1000
-            maxV_T = np.max(abs(waveform[1])) / 1000
-            # base case 1 : both Transmission & pulse-echo currentLimit == lowest limit and max < current limit. return waveform
-            if currentLimitP == voltageLimits[0] and maxV_P < currentLimitP and currentLimitT == voltageLimits[0] and maxV_T < currentLimitT:
-                return waveform[0],waveform[1], params
-
-            # base case 2 : both Transmission & pulse-echo currentLimit == highest limit and max > highest tolerance. return waveform and print a warning
-            elif currentLimitP == voltageLimits[-1] and maxV_P >= currentToleranceP or currentLimitT == voltageLimits[-1] and maxV_T >= currentToleranceT:
-                print(
-                    "Warning: either Transmission or Pulse-echo, voltageRangeFinder- waveform voltage exceeds oscilloscope maximum. Peaks are likely to be cutoff.")
-                return waveform[0],waveform[1], params
-            # base case 3 FOR Transmission : max < current limit. set voltage range to be lowest range within tolerance, rerun measurement and return waveform, params
-            elif maxV_T <= currentToleranceT:
-
-                # return index of first (lowest) tolerance that is >= maxV
-                # taking [0][0] of the result is safe since maxV < currentTolerance implies the condition is met at least once
-                rangeIndexT = np.nonzero(voltageTolerances >= maxV_T)[0][0]
-                limitT = voltageLimits[rangeIndexT]
-
-                # if that tolerance is the current tolerance, return waveform, params
-                if limitT == currentLimitT:
-                    return waveform[0],waveform[1], params
-
-                # if not, setup a new measurement with the tighter voltage limit and return that data
-                else:
-                    params["voltagerangeT"] = limitT
-                    self.setupPicoMeasurement(
-                        params['measureDelay'],
-                        params['voltageRangeT'],
-                        params['voltageRangeP'],
-                        params['samples'],
-                        params['measureTime'])
-                    waveform = self.runPicoMeasurement(params['waves'],params['collectionMode'])
-                    return waveform[0],waveform[1], params
-            # base case 3 FOR Pulse-echo : max < current limit. set voltage range to be lowest range within tolerance, rerun measurement and return waveform, params
-            elif maxV_P <= currentToleranceP:
-
-                # return index of first (lowest) tolerance that is >= maxV
-                # taking [0][0] of the result is safe since maxV < currentTolerance implies the condition is met at least once
-                rangeIndexP = np.nonzero(voltageTolerances >= maxV_P)[0][0]
-                limitP = voltageLimits[rangeIndexP]
-
-                # if that tolerance is the current tolerance, return waveform, params
-                if limitP == currentLimit:
-                    return waveform[0],waveform[1], params
-
-                # if not, setup a new measurement with the tighter voltage limit and return that data
-                else:
-                    params['voltagerangeP'] = limitP
-                    self.setupPicoMeasurement(
-                        params['measureDelay'],
-                        params['voltageRangeT'],
-                        params['voltageRangeP'],
-                        params['samples'],
-                        params['measureTime'])
-                    waveform = self.runPicoMeasurement(params['waves'],params['collectionMode'])
-                    return waveform[0],waveform[1], params
-            # recursion case : max > current tolerance. try again at the next highest voltage limit
-            else:
-                # get the index of the current limit
-                rangeIndexP = np.nonzero(voltageLimits == currentLimitP)[0][0]
-                rangeIndexT = np.nonzero(voltageLimits == currentLimitT)[0][0]
-                # just for safety, check that range index is not the last index. this shouldn't be possible, but just in case I'm missing a case
-                if rangeIndexP == len(voltageLimits) - 1 or rangeIndexT == len(voltageLimits) - 1 :
-                    return waveform[0],waveform[1], params
-
-                # move to the next higher voltage limit and try again For Pulse-echo
-                elif maxV_P > currentToleranceP:
-                    params['voltagerangeP'] = voltageLimits[rangeIndexP + 1]
-                    self.setupPicoMeasurement(params['measureDelay'],
-                                                            params['voltageRangeT'],
-                                                            params['voltageRangeP'],
-                                                            params['samples'],
-                                                            params['measureTime'])
-                    return self.voltageRangeFinder(params)
-                elif maxV_T > currentToleranceT:
-                    params['voltagerangeT'] = voltageLimits[rangeIndexT + 1]
-                    self.setupPicoMeasurement(params['measureDelay'],
-                                                            params['voltageRangeT'],
-                                                            params['voltageRangeP'],
-                                                            params['samples'],
-                                                            params['measureTime'])
-                    return self.voltageRangeFinder(params)
-
-
-            
+                params['voltageRangeT'] = voltageLimits[rangeIndex + 1]
+                self.setupPicoMeasurement(params['measureDelay'],
+                                                           params['voltageRangeT'],
+                                                           params['voltageRangeP'],
+                                                           params['samples'],
+                                                           params['measureTime'])
+                return self.voltageRangeFinder(params)
 
     def __init__(self,params: dict):
         #openPicoscope and setupPicoMeasurement should be taken over by the __init__ function
