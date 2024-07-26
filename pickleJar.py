@@ -864,8 +864,21 @@ def plotScan(dataDict, colorKey, colorRange = [None, None], save = False, fileNa
             yDat = np.append(yDat, dataDict[index][axisKeys[1]])
             cDat = np.append(cDat, dataDict[index][colorKey])
 
+    # need to reshape the cDat into an x by y array to use as input in pcolormesh
+    # do this by gathering the array indices of the final scan point and use that to reshape cDat
+    nRows, nCols = collectionIndexToArrayIndex(dataDict, len(cDat) - 1)
+    cMesh = cDat.reshape((nCols + 1, nRows + 1))
+
+    # need to convert x- and y- into column vectors for generating the mesh
+    # also need to invert the order if the scan goes into negative coordinates since
+    # np.unique will sort them in the opposite order of collection
+    # note: there is likely a more efficient way to do this, but probably not worth optimizing this too much
+    xCol = reverseNegativeCoordinates(np.unique(xDat))
+    yCol = reverseNegativeCoordinates(np.unique(yDat))
+
     # plot
-    plt.scatter(xDat, yDat, c = cDat, vmin = colorRange[0], vmax = colorRange[1])
+    plt.pcolormesh(xCol, yCol, cMesh, vmin=colorRange[0], vmax=colorRange[1])
+
     plt.colorbar()
 
     if show == True:
@@ -882,6 +895,15 @@ def plotScan(dataDict, colorKey, colorRange = [None, None], save = False, fileNa
             saveFile = fileName
         plt.savefig(saveFile)
         plt.close()
+
+# helper function for plotScan that reverses coordinate lists that start negative
+# inputs an array. Outputs an array that is reversed if the input started negative
+def reverseNegativeCoordinates(arr):
+
+    if arr[0] < 0:
+        return np.flip(arr)
+    else:
+        return arr
 
 # runs plotScan on a list of filenames with show = False and save = True, for use in mass figure generation.
 #  Saves the figures in a subfolder named colorKey with the name dataDict['fileName'] + _colorKey + format
