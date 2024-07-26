@@ -936,7 +936,7 @@ def generateScanPlots(fileNames : list, colorKey, colorRange = [None, None], sav
         saveName = os.path.basename(os.path.splitext(file)[0]) + '_' + str(colorKey) + saveFormat
         saveFile = saveDir + saveName
 
-        plotScan(data, colorKey, colorRange, save = True, fileName = saveFile, show = False)
+        plotScan(data, colorKey, colorRange = colorRange, save = True, fileName = saveFile, show = False)
 
     # return to previous backend
     plt.switch_backend(backend)
@@ -946,7 +946,7 @@ def generateScanPlotsInDirectory(dirName : str, colorKey, colorRange = [None, No
 
    fileNames = listFilesInDirectory(dirName)
 
-   generateScanPlots(fileNames, colorKey, colorRange, saveFormat)
+   generateScanPlots(fileNames, colorKey, colorRange = colorRange, saveFormat = saveFormat)
 
 # Plot the evolution of the value of dataKey vs time at a given list of coordinates
 # If normalized = True, the data will be divided by the corresponding value in the first coordinate
