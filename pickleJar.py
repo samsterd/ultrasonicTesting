@@ -840,10 +840,11 @@ def plotWaveformOverTimeAtCoor(dirName : str, coor : tuple, xDat = 'time', yDat 
 
 # Plots a 2D scan as a scatter plot. XY data is the scan coordinate, colorKey determines parameters used to color the map
 # Optional inputs: the range for the coloring parameter (values outside the range will be set to the max/min of the range)
+# scalePlot sets the plot scales equal (plt.axis('scaled')). Defaults to False, which outputs square plots
 # save = True will save the file, with the optional fileName string used to name it.
 #       file name will be automatically generated based as dataDict['fileName'] + '_colorKey' + saveFormat
 # show = True will show the plot when the function is run. This is useful for single uses, but slows down mass plot saving
-def plotScan(dataDict, colorKey, colorRange = [None, None], save = False, fileName = '', saveFormat = '.png', show = True):
+def plotScan(dataDict, colorKey, colorRange = [None, None], scalePlot = False, save = False, fileName = '', saveFormat = '.png', show = True):
 
     # determine which axes are used in dataDict (2 out of 'X', 'Y', and 'Z')
     axes = ['X', 'Y', 'Z']
@@ -878,7 +879,8 @@ def plotScan(dataDict, colorKey, colorRange = [None, None], save = False, fileNa
 
     # plot
     plt.pcolormesh(xCol, yCol, cMesh, vmin=colorRange[0], vmax=colorRange[1])
-
+    if scalePlot:
+        plt.axis('scaled')
     plt.colorbar()
 
     if show == True:
