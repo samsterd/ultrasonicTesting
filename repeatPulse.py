@@ -110,3 +110,5 @@ def repeatPulse(params):
     pulser.pulserOff()
     pulser.closePulser()
     pico.closePicoscope(picoConnection)
+    if params['saveFormat'] == 'sqlite':
+        database.connection.close()
