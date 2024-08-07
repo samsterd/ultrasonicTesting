@@ -60,11 +60,12 @@ class picosdkRapidblockPulse():
     def __init__(self,params: dict):
 
         measureDelay = params['measureDelay']
-        voltageRange = params['voltageRange']
+        voltageRangeT = params['voltageRangeT']
+        voltageRangeP = params['voltageRangeP']
         samples = params['samples']
         measureTime = params['measureTime']
         self.openPicoscope()
-        self.setupPicoMeasurement(measureDelay, voltageRange, samples, measureTime)
+        self.setupPicoMeasurement(measureDelay, voltageRangeT, voltageRangeP, samples, measureTime)
 
     # opens connection to the picoscope, generates cHandle
     def openPicoscope(self):
@@ -124,7 +125,7 @@ class picosdkRapidblockPulse():
         #now get the index of the voltageLimit, which is what actually gets passed to the scope
         # Note that this is 1-indexed rather than 0, so +1 is added
         voltageIndexT =voltageLimits.index(voltageLimitT) + 1
-        self.picoData["voltageIndexT"] = voltageIndexT
+        self.voltageIndexT = voltageIndexT
 
         # checking the voltage range for pulse-echo
         # get the first voltage that is above the voltageRange input
@@ -138,7 +139,7 @@ class picosdkRapidblockPulse():
         # now get the index of the voltageLimit, which is what actually gets passed to the scope
         # Note that this is 1-indexed rather than 0, so +1 is added
         voltageIndexP = voltageLimits.index(voltageLimitP) + 1
-        self.picoData["voltageIndexP"] = voltageIndexP
+        self.voltageIndexP = voltageIndexP
         #Channel A is used for pulse-echo
         #edit the voltageRange def for setchanel could get input as like channel B
 
@@ -274,9 +275,9 @@ class picosdkRapidblockPulse():
         #TODO: add error checking here, need to assert that all necessary self.picoData fields are informed
         #these include: cHandle, timebase, numberOfSamples, all channel and trigger statuses
         #Gather important parameters from self.picoData dict
-        cHandle = self.picoData["cHandle"]
-        timebase = self.picoData["timebase"]
-        samples = self.picoData["samples"]
+        cHandle = self.cHandle
+        timebase = self.timebase
+        samples = self.samples
 
         #Create a c type for numberOfSamples that can be passed to the ps2000a functions
         cNumberOfSamples = ctypes.c_int32(self.samples)
@@ -373,8 +374,8 @@ class picosdkRapidblockPulse():
         assert_pico_ok(self.maximumValue)
 
         # Then convert the mean data array from ADC to mV using the sdk function
-        buffermVA = np.array(adc2mV(bufferMeanA, self.picoData["voltageIndexP"], maxADC))
-        buffermVB = np.array(adc2mV(bufferMeanB, self.picoData["voltageIndexT"], maxADC))
+        buffermVA = np.array(adc2mV(bufferMeanA, self.voltageIndexP, maxADC))
+        buffermVB = np.array(adc2mV(bufferMeanB, self.voltageIndexT, maxADC))
 
         #Create the time data (i.e. the x-axis) using the time intervals, numberOfSamples, and delay time
         timeInterval = self.timeInterval
