@@ -60,7 +60,7 @@ def repeatPulse(params):
         pulseStartTime = time.time()
 
         # collect data
-        if params['voltageAutoRange']:
+        if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
             waveform, params = pico.voltageRangeFinder(params)
         else:
             waveform = pico.runPicoMeasurement(params['waves'])

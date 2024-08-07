@@ -54,7 +54,6 @@ import matplotlib.pyplot as plt
 # Control of picoscope handled by a custom class
 # Connection data is stored as class variables and connection/setup/running are handled by class functions
 # TODO: add tests (check cHandle is generated, errors are properly raised)
-# TODO: convert self.picoData dict to pure class variables for better syntax
 class picosdkRapidblockPulse():
 
     # initializing object requires experimental parameters as input
@@ -101,7 +100,7 @@ class picosdkRapidblockPulse():
     #   measureTime - the duration of the measurement, in microseconds. Defaults to 10 us. The time interval between data points is duration / numberOfSamples
     #       Note that minimum time interval for measurements with 2 channels is 2 ns
 
-    def setupPicoMeasurement(self, measureDelay = 3, voltageRange = 1, samples = 512, measureTime = 10):
+    def setupPicoMeasurement(self, measureDelay = 3, voltageRangeT = 1, voltageRangeP = 1,samples = 512, measureTime = 10):
 
         #Retrieve cHandle and make sure it is properly assigned
         cHandle = self.cHandle
@@ -113,27 +112,44 @@ class picosdkRapidblockPulse():
         #voltageLimits taken from API ps2000aSetChannel() documentation, they are hard coded in the picoscope
         voltageLimits = [0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20]
 
+        # checking the voltage range for transmission
         #get the first voltage that is above the voltageRange input
         try:
-            voltageLimit = next(v for v in voltageLimits if v >= voltageRange)
+            voltageLimitT = next(v for v in voltageLimits if v >= voltageRangeT)
         # next raises StopIteration if the criteria is not met. In that case print a warning and use the maximum range
         except StopIteration:
             print("Warning: Input voltageRange is greater than the maximum Picoscope range (" + str(voltageLimits[-1]) + " V). Voltage range is set to the maximum value, but be careful not to overload the scope!")
-            voltageLimit = voltageLimits[-1]
+            voltageLimitT = voltageLimits[-1]
 
         #now get the index of the voltageLimit, which is what actually gets passed to the scope
         # Note that this is 1-indexed rather than 0, so +1 is added
-        voltageIndex =voltageLimits.index(voltageLimit) + 1
-        self.voltageIndex = voltageIndex
+        voltageIndexT =voltageLimits.index(voltageLimitT) + 1
+        self.picoData["voltageIndexT"] = voltageIndexT
+
+        # checking the voltage range for pulse-echo
+        # get the first voltage that is above the voltageRange input
+        try:
+            voltageLimitP = next(v for v in voltageLimits if v >= voltageRangeP)
+        # next raises StopIteration if the criteria is not met. In that case print a warning and use the maximum range
+        except StopIteration:
+            print("Warning: Input voltageRange is greater than the maximum Picoscope range (" + str(voltageLimits[-1]) + " V). Voltage range is set to the maximum value, but be careful not to overload the scope!")
+            voltageLimitP = voltageLimits[-1]
+
+        # now get the index of the voltageLimit, which is what actually gets passed to the scope
+        # Note that this is 1-indexed rather than 0, so +1 is added
+        voltageIndexP = voltageLimits.index(voltageLimitP) + 1
+        self.picoData["voltageIndexP"] = voltageIndexP
+        #Channel A is used for pulse-echo
+        #edit the voltageRange def for setchanel could get input as like channel B
 
         # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now
         # handle = chandle
         # channel = ps2000a_CHANNEL_A = 0
         # enabled = 1
         # coupling type = ps2000a_DC = 1
-        # range = ps2000a_1V = 6
+        # range = ps2000a_1V = 6==>voltageIndexP
         # analogue offset = 0 V
-        setChA = ps.ps2000aSetChannel(cHandle, 0, 1, 1, 6, 0)
+        setChA = ps.ps2000aSetChannel(cHandle, 0, 1, 1, voltageIndexP, 0)
 
         #Error check channel A
         if setChA == "PICO_OK":
@@ -148,9 +164,9 @@ class picosdkRapidblockPulse():
         # channel = ps2000a_CHANNEL_B = 1
         # enabled = 1
         # coupling type = ps2000a_DC = 1
-        # range = ps2000a_1V = voltageIndex
+        # range = ps2000a_1V = voltageIndexT
         # analogue offset = 0 V
-        setChB = ps.ps2000aSetChannel(cHandle, 1, 1, 1, voltageIndex, 0)
+        setChB = ps.ps2000aSetChannel(cHandle, 1, 1, 1, voltageIndexT, 0)
 
         #Error check channel B
         if setChB == "PICO_OK":
@@ -258,6 +274,9 @@ class picosdkRapidblockPulse():
         #TODO: add error checking here, need to assert that all necessary self.picoData fields are informed
         #these include: cHandle, timebase, numberOfSamples, all channel and trigger statuses
         #Gather important parameters from self.picoData dict
+        cHandle = self.picoData["cHandle"]
+        timebase = self.picoData["timebase"]
+        samples = self.picoData["samples"]
 
         #Create a c type for numberOfSamples that can be passed to the ps2000a functions
         cNumberOfSamples = ctypes.c_int32(self.samples)
@@ -354,8 +373,8 @@ class picosdkRapidblockPulse():
         assert_pico_ok(self.maximumValue)
 
         # Then convert the mean data array from ADC to mV using the sdk function
-        buffermVA = np.array(adc2mV(bufferMeanA, self.voltageIndex, maxADC))
-        buffermVB = np.array(adc2mV(bufferMeanB, self.voltageIndex, maxADC))
+        buffermVA = np.array(adc2mV(bufferMeanA, self.picoData["voltageIndexP"], maxADC))
+        buffermVB = np.array(adc2mV(bufferMeanB, self.picoData["voltageIndexT"], maxADC))
 
         #Create the time data (i.e. the x-axis) using the time intervals, numberOfSamples, and delay time
         timeInterval = self.timeInterval
@@ -441,7 +460,7 @@ class picosdkRapidblockPulse():
         tolerance = 0.95
         voltageTolerances = tolerance * voltageLimits
 
-        currentLimit = params['voltageRange']
+        currentLimit = params['voltageRangeT']
         currentTolerance = tolerance * currentLimit
 
         # collect initial waveform
@@ -474,10 +493,11 @@ class picosdkRapidblockPulse():
 
             # if not, setup a new measurement with the tighter voltage limit and return that data
             else:
-                params['voltageRange'] = limit
+                params['voltageRangeT'] = limit
                 self.setupPicoMeasurement(
                     params['measureDelay'],
-                    params['voltageRange'],
+                    params['voltageRangeT'],
+                    params['voltageRangeP'],
                     params['samples'],
                     params['measureTime'])
                 waveform = self.runPicoMeasurement(params['waves'],params['collectionMode'])
@@ -495,9 +515,10 @@ class picosdkRapidblockPulse():
 
             # move to the next higher voltage limit and try again
             else:
-                params['voltageRange'] = voltageLimits[rangeIndex + 1]
+                params['voltageRangeT'] = voltageLimits[rangeIndex + 1]
                 self.setupPicoMeasurement(params['measureDelay'],
-                                                           params['voltageRange'],
+                                                           params['voltageRangeT'],
+                                                           params['voltageRangeP'],
                                                            params['samples'],
                                                            params['measureTime'])
                 return self.voltageRangeFinder(params)
