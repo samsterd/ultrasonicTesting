@@ -51,37 +51,43 @@ from picosdk.functions import adc2mV, assert_pico_ok
 import matplotlib.pyplot as plt
 
 
-# Function to open connection to a picoscope
-# Takes no argument, it will connect to the first scope it finds if more than one is connected
-# Returns a picoData dict with the cHandle and openUnit keys added
+# Control of picoscope handled by a custom class
+# Connection data is stored as class variables and connection/setup/running are handled by class functions
 # TODO: add tests (check cHandle is generated, errors are properly raised)
+# TODO: convert self.picoData dict to pure class variables for better syntax
 class picosdkRapidblockPulse():
 
+    # initializing object requires experimental parameters as input
+    def __init__(self,params: dict):
+
+        measureDelay = params['measureDelay']
+        voltageRange = params['voltageRange']
+        samples = params['samples']
+        measureTime = params['measureTime']
+        self.openPicoscope()
+        self.setupPicoMeasurement(measureDelay, voltageRange, samples, measureTime)
+
+    # opens connection to the picoscope, generates cHandle
     def openPicoscope(self):
 
         #initialize dict for picoData
         initPicoData = {}
 
-        #Create cHandle for referring to opened scope and add it to the data dict
-        cHandle = ctypes.c_int16()
+        #Create cHandle for referring to opened scope
+        self.cHandle = ctypes.c_int16()
 
         #Open the unit with the cHandle ref. None for second argument means it will return the first scope found
         #The outcome of the operation is recorded in cHandle
-        initPicoData["openUnit"] = ps.ps2000aOpenUnit(ctypes.byref(cHandle), None)
+        self.openUnit = ps.ps2000aOpenUnit(ctypes.byref(self.cHandle), None)
 
         #Print plain explanations of errors
-        if cHandle == -1:
+        if self.cHandle == -1:
             print("Picoscope failed to open. Check that it is plugged in and not in use by another program.")
-        elif cHandle == 0:
+        elif self.cHandle == 0:
             print("No Picoscope found. Check that it is plugged in and not in use by another program.")
 
         #Raise errors and stop code
-        assert_pico_ok(initPicoData["openUnit"])
-
-        # Add cHandle to picoData
-        initPicoData["cHandle"] = cHandle
-        # self.class_picoData = initPicoData
-        self.picoData = initPicoData
+        assert_pico_ok(self.openUnit)
 
     # setupPicoMeasurement takes experimental parameters and picoData dict and converts it to picoscope-readable data
     #   More specifically, this sets up a measurement with a simple trigger on channel A and ultrasonic data collected on channel B
@@ -98,7 +104,7 @@ class picosdkRapidblockPulse():
     def setupPicoMeasurement(self, measureDelay = 3, voltageRange = 1, samples = 512, measureTime = 10):
 
         #Retrieve cHandle and make sure it is properly assigned
-        cHandle = self.picoData["cHandle"]
+        cHandle = self.cHandle
 
         #Raise error if cHandle == 0 or -1
         # (this was not implemented...)
@@ -118,7 +124,7 @@ class picosdkRapidblockPulse():
         #now get the index of the voltageLimit, which is what actually gets passed to the scope
         # Note that this is 1-indexed rather than 0, so +1 is added
         voltageIndex =voltageLimits.index(voltageLimit) + 1
-        self.picoData["voltageIndex"] = voltageIndex
+        self.voltageIndex = voltageIndex
 
         # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now
         # handle = chandle
@@ -131,7 +137,7 @@ class picosdkRapidblockPulse():
 
         #Error check channel A
         if setChA == "PICO_OK":
-            self.picoData["setChA"] = setChA
+            self.setChA = setChA
         else:
             # print("Error: Problem connecting to picoscope channel A: " + setChA)
             #Raise error and break
@@ -148,23 +154,19 @@ class picosdkRapidblockPulse():
 
         #Error check channel B
         if setChB == "PICO_OK":
-            self.picoData["setChB"] = setChB
+            self.setChB = setChB
         else:
             # print("Error: Problem connecting to picoscope channel B: " + setChB)
             #Raise error and break
             assert_pico_ok(setChB)
 
+        # calculate and save measurement parameters (timebase, timeinterval, samples, delayintervals)
         # Calculate timebase and timeInterval (in ns) by making a call to a helper function
-        timebase, timeInterval = self.timebaseFromDurationSamples(samples, measureTime)
-
-        #Record timebase, timeInterval and numberOfSamples in picoData
-        self.picoData["timebase"] = timebase
-        self.picoData["timeInterval"] = timeInterval
-        self.picoData["samples"] = samples
+        self.timebase, self.timeInterval = self.timebaseFromDurationSamples(samples, measureTime)
+        self.samples = samples
 
         # Convert delay time (in us) to delay samples
-        delayIntervals = math.floor((measureDelay * 1000) / timeInterval)
-        self.picoData["delayIntervals"] = delayIntervals
+        self.delayIntervals = math.floor((measureDelay * 1000) / self.timeInterval)
 
             # Setup trigger on channel A
             # cHandle = cHandle
@@ -175,7 +177,7 @@ class picosdkRapidblockPulse():
             # Direction = ps2000a_Above = 0
             # Delay = delayIntervals
             # autoTrigger_ms = 1
-        trigger = ps.ps2000aSetSimpleTrigger(cHandle, 1, 0, 10000, 0, delayIntervals, 100)
+        trigger = ps.ps2000aSetSimpleTrigger(cHandle, 1, 0, 10000, 0, self.delayIntervals, 100)
         #
         # # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now
         # # handle = chandle
@@ -235,11 +237,11 @@ class picosdkRapidblockPulse():
 
         # Error check trigger
         if trigger == "PICO_OK":
-            self.picoData["trigger"] = trigger
+            self.trigger = trigger
         else:
             # print("Error: Problem setting trigger on channel A: " + trigger)
             #Raise error and break
-            assert_pico_ok(trigger)
+            assert_pico_ok(self.trigger)
 
         # TODO: separate everything below (running the measurement) into a separate function?
         #  #add getTimebase2 call so that memory can be allocated properly
@@ -256,38 +258,35 @@ class picosdkRapidblockPulse():
         #TODO: add error checking here, need to assert that all necessary self.picoData fields are informed
         #these include: cHandle, timebase, numberOfSamples, all channel and trigger statuses
         #Gather important parameters from self.picoData dict
-        cHandle = self.picoData["cHandle"]
-        timebase = self.picoData["timebase"]
-        samples = self.picoData["samples"]
 
         #Create a c type for numberOfSamples that can be passed to the ps2000a functions
-        cNumberOfSamples = ctypes.c_int32(samples)
+        cNumberOfSamples = ctypes.c_int32(self.samples)
 
         #Create overflow . Note: overflow is a flag for whether overvoltage occured on a given channel during measurement
         #For 2 channel measurements, each channel needs an overflow flag so we allocate 2 * numberOfWaves
         overflow = (ctypes.c_int16 * numberOfWaves )()
 
         #Divide picoscope memory into segments for rapidblock capture(Important)
-        memorySegments = ps.ps2000aMemorySegments(cHandle, numberOfWaves, ctypes.byref(cNumberOfSamples))
+        memorySegments = ps.ps2000aMemorySegments(self.cHandle, numberOfWaves, ctypes.byref(cNumberOfSamples))
         assert_pico_ok(memorySegments)
 
         #Set the number of captures (=wavesToCollect) on the picoscope
-        setCaptures = ps.ps2000aSetNoOfCaptures(cHandle, numberOfWaves)
+        self.setCaptures = ps.ps2000aSetNoOfCaptures(self.cHandle, numberOfWaves)
 
         #Error check set captures
-        if setCaptures == "PICO_OK":
-            self.picoData["setCaptures"] = setCaptures
+        if self.setCaptures == "PICO_OK":
+            pass
         else:
-            # print("Error: Problem setting number of captures on picoscope: " + setCaptures)
-            assert_pico_ok(setCaptures)
+            print("Error: Problem setting number of captures on picoscope: " + self.setCaptures)
+            assert_pico_ok(self.setCaptures)
 
         #Set up memory buffers to receive data from channel B
-        bufferArrayChannelB = np.empty((numberOfWaves, samples), dtype = ctypes.c_int16)
+        bufferArrayChannelB = np.empty((numberOfWaves, self.samples), dtype = ctypes.c_int16)
         #Convert bufferArrayChannelB to a ctype
         bufferArrayChannelBCtype = np.ctypeslib.as_ctypes(bufferArrayChannelB)
 
         #Set up memory buffers for channel A.
-        bufferArrayChannelA = np.empty((numberOfWaves, samples), dtype = ctypes.c_int16)
+        bufferArrayChannelA = np.empty((numberOfWaves, self.samples), dtype = ctypes.c_int16)
         bufferArrayChannelACtype = np.ctypeslib.as_ctypes(bufferArrayChannelA)
 
         # bufferArrayChannelBPointer = bufferArrayChannelB.ctypes.data_as(c_int16_pointer)
@@ -302,9 +301,9 @@ class picosdkRapidblockPulse():
             # Segment index = wave
             # Ratio mode = ps2000a_Ratio_Mode_None = 0 (we are not downsampling)
             waveC = ctypes.c_uint32(wave)
-            dataBufferB = ps.ps2000aSetDataBuffer(cHandle, 1, ctypes.byref(bufferArrayChannelBCtype[wave]), samples, waveC, 0)
+            dataBufferB = ps.ps2000aSetDataBuffer(self.cHandle, 1, ctypes.byref(bufferArrayChannelBCtype[wave]), self.samples, waveC, 0)
             assert_pico_ok(dataBufferB)
-            dataBufferA = ps.ps2000aSetDataBuffer(cHandle, 0, ctypes.byref(bufferArrayChannelACtype[wave]), samples,waveC, 0)
+            dataBufferA = ps.ps2000aSetDataBuffer(self.cHandle, 0, ctypes.byref(bufferArrayChannelACtype[wave]), self.samples, waveC, 0)
             assert_pico_ok(dataBufferA)
 
 
@@ -319,15 +318,15 @@ class picosdkRapidblockPulse():
         # Segment index = 0 (start at beginning of memory)
         # LpReady = None (not used)
         # pParameter = None (not used)
-        self.picoData["runblock"] = ps.ps2000aRunBlock(cHandle, 0, samples, timebase, 0, None, 0, None, None)
+        self.runblock = ps.ps2000aRunBlock(self.cHandle, 0, self.samples, self.timebase, 0, None, 0, None, None)
         #TODO: add better error handling
-        assert_pico_ok(self.picoData["runblock"])
+        assert_pico_ok(self.runblock)
 
         #Wait until data collection is finished
         ready = ctypes.c_int16(0)
         check = ctypes.c_int16(0)
         while ready.value == check.value:
-            ps.ps2000aIsReady(cHandle, ctypes.byref(ready))
+            ps.ps2000aIsReady(self.cHandle, ctypes.byref(ready))
 
         # Retrieve values from picoscope
         # handle = cHandle
@@ -337,32 +336,32 @@ class picosdkRapidblockPulse():
         # DownSampleRatio = 0
         # DownSampleRatioMode = 0
         # Overflow = ctypes.byref(overflow)
-        self.picoData["GetValuesBulk"] = ps.ps2000aGetValuesBulk(cHandle, ctypes.byref(cNumberOfSamples), 0, (numberOfWaves)-1, 0, 0, ctypes.byref(overflow))
-        assert_pico_ok(self.picoData["GetValuesBulk"])
+        self.getValuesBulk = ps.ps2000aGetValuesBulk(self.cHandle, ctypes.byref(cNumberOfSamples), 0, (numberOfWaves)-1, 0, 0, ctypes.byref(overflow))
+        assert_pico_ok( self.getValuesBulk)
 
         #Calculate the average of the waveform values stored in the buffer
         bufferMeanA = np.mean(bufferArrayChannelA, axis = 0)
         bufferMeanB = np.mean(bufferArrayChannelB, axis = 0)
 
         # Make sure the picoscope is stopped
-        self.picoData["stop"] = ps.ps2000aStop(cHandle)
-        assert_pico_ok(self.picoData["stop"])
+        self.stop = ps.ps2000aStop(self.cHandle)
+        assert_pico_ok(self.stop)
 
         # # Convert waveform values from ADC to mV
         # # First find the maxADC value
         maxADC = ctypes.c_int16()
-        self.picoData["maximumValue"] = ps.ps2000aMaximumValue(cHandle, ctypes.byref(maxADC))
-        assert_pico_ok(self.picoData["maximumValue"])
+        self.maximumValue = ps.ps2000aMaximumValue(self.cHandle, ctypes.byref(maxADC))
+        assert_pico_ok(self.maximumValue)
 
         # Then convert the mean data array from ADC to mV using the sdk function
-        buffermVA = np.array(adc2mV(bufferMeanA, self.picoData["voltageIndex"], maxADC))
-        buffermVB = np.array(adc2mV(bufferMeanB, self.picoData["voltageIndex"], maxADC))
+        buffermVA = np.array(adc2mV(bufferMeanA, self.voltageIndex, maxADC))
+        buffermVB = np.array(adc2mV(bufferMeanB, self.voltageIndex, maxADC))
 
         #Create the time data (i.e. the x-axis) using the time intervals, numberOfSamples, and delay time
-        timeInterval = self.picoData["timeInterval"]
-        startTime = self.picoData["delayIntervals"] * timeInterval
-        stopTime = startTime + (timeInterval * (samples - 1))
-        waveTime = np.linspace(startTime, stopTime, samples)
+        timeInterval = self.timeInterval
+        startTime = self.delayIntervals * timeInterval
+        stopTime = startTime + (timeInterval * (self.samples - 1))
+        waveTime = np.linspace(startTime, stopTime, self.samples)
 
         #Might need to free up memory for longer scans by deleting the buffer arrays
         # this is probably handled by python garbage collection and is unnecessary
@@ -385,8 +384,8 @@ class picosdkRapidblockPulse():
     #Input: picoData with the cHandle field filled
     #Returns picoData with the "close" field informed
     def closePicoscope(self):
-        self.picoData["close"] = ps.ps2000aCloseUnit(self.picoData["cHandle"])
-        assert_pico_ok(self.picoData["close"])
+        self.close = ps.ps2000aCloseUnit(self.cHandle)
+        assert_pico_ok(self.close)
 
     #A helper function to calculation the oscilloscope timebase based on desired measurement duration and number of samples
     # Inputs are the numberOfSamples and the desired duration (in us)
@@ -503,17 +502,7 @@ class picosdkRapidblockPulse():
                                                            params['measureTime'])
                 return self.voltageRangeFinder(params)
 
-    def __init__(self,params: dict):
-        #openPicoscope and setupPicoMeasurement should be taken over by the __init__ function
-        # __init__ should take the experimental params dict from runUltrasonicExperiment as an input
-        # ASK: not sure what does mean experimetal params dict as input
-        # experimental_input= runUlt.setDicPara()
-        measureDelay = params['measureDelay']
-        voltageRange = params['voltageRange']
-        samples = params['samples']
-        measureTime = params['measureTime']
-        self.openPicoscope()
-        self.setupPicoMeasurement(measureDelay, voltageRange, samples, measureTime )
+
 
 
 
