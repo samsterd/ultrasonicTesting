@@ -1,7 +1,6 @@
 import json
 import picosdkRapidblockPulse as pico
 import ultratekPulser as utp
-from scanSetupFunctions import voltageRangeFinder
 import time
 import tqdm
 import matplotlib
