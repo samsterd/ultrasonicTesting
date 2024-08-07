@@ -1,6 +1,7 @@
 import json
 import picosdkRapidblockPulse as pico
 import ultratekPulser as utp
+from scanSetupFunctions import voltageRangeFinder
 import time
 import tqdm
 import matplotlib
@@ -112,3 +113,5 @@ def repeatPulse(params):
     pulser.pulserOff()
     pulser.closePulser()
     pico.closePicoscope()
+    if params['saveFormat'] == 'sqlite':
+        database.connection.close()

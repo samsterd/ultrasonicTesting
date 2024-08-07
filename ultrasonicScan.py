@@ -121,10 +121,12 @@ def runScan(params):
     #Turn off pulser
     pulser.pulserOff()
 
-    #Close connection to pulser, picoscope, and ender
+    #Close connection to pulser, picoscope, database and ender
     pulser.closePulser()
     scanner.close()
     pico.closePicoscope()
 
-    if params['saveFormat'] == 'sqlite' and params['postAnalysis']:
-        pj.simplePostAnalysis(params)
+    if params['saveFormat'] == 'sqlite':
+        database.connection.close()
+        if params['postAnalysis']:
+            pj.simplePostAnalysis(params)

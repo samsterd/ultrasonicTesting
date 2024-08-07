@@ -227,6 +227,44 @@ def writeDataToDict(dataDict : dict, dat, key, indexMatched = False):
         savePickle(dataDict)
         return dataDict
 
+# stitches together data from multiple repeat pulse experiments in chronological order
+# used to combine experimental data that got separated due to e.g. power surges
+# inputs a list of data dict objects and a name to save the combined pickle as
+# outputs a data dict of the combined pickles and also saves the file
+def combineRepeatPulseData(dataList, saveName : str):
+
+    # determine the order of the pickles
+    startTimes = [data[0]['time_collected'] for data in dataList]
+    orderedData = [data for _,data in sorted(zip(startTimes, dataList), key = lambda pair: pair[0])]
+
+    # determine the last collection_index of each pickle
+    # -3 is because the indices are 0-indexed and there are two non-index keys (fileName and parameters)
+    endIndices = [len(data.keys()) - 3 for data in orderedData]
+
+    # calculate the starting index of each dict once they are combined
+    # i.e. if the data have endIndices=[200,300,400], the startingIndices=[0, 201, 502]
+    startIndices = [sum(endIndices[:i]) + i for i in range(len(endIndices))]
+
+    # determine the max index for the combined data. len(indices)-1 is added to account for all data being 0-indexed
+    maxIndex = sum(endIndices) + len(endIndices) - 1
+
+    # initialize the new data dict. Since we are not verifying the parameters are the same for all data, this will not be copied
+    newData = {}
+
+    # iterate through pickles
+    for i in range(len(orderedData)):
+
+        # write new dict by updating the indices
+        # the collection_index of newData is extended by the value of startIndices
+        for j in range(endIndices[i]):
+            newData[startIndices[i] + j] = orderedData[i][j]
+
+    # generate fileName for the new pickle
+    fileName = os.path.dirname(orderedData[0]['fileName']) + '//' + saveName
+    newData['fileName'] = fileName
+    savePickle(newData)
+    return newData
+
 # Simple post-experiment analysis automation
 # Receives the experiment params dict, converts sqlite to pickle
 # runs max-min, sta/lta, hilbert envelope, generates plots, and dumps coordinates/metrics as a csv
@@ -833,16 +871,18 @@ def plotWaveformOverTimeAtCoor(dirName : str, coor : tuple, xDat = 'time', yDat 
     for wave in range(len(dataDict['time_collected'])):
         plt.plot(dataDict[xDat][wave], dataDict[yDat][wave], c = cmp['viridis'](normTime[wave]), label = round(timesCollectZeroRef[wave]/3600, 2))
 
-    plt.legend()
+    # legend becomes too crowded for 100+ curves
+    # plt.legend()
     plt.show()
 
 
 # Plots a 2D scan as a scatter plot. XY data is the scan coordinate, colorKey determines parameters used to color the map
 # Optional inputs: the range for the coloring parameter (values outside the range will be set to the max/min of the range)
+# scalePlot sets the plot scales equal (plt.axis('scaled')). Defaults to False, which outputs square plots
 # save = True will save the file, with the optional fileName string used to name it.
 #       file name will be automatically generated based as dataDict['fileName'] + '_colorKey' + saveFormat
 # show = True will show the plot when the function is run. This is useful for single uses, but slows down mass plot saving
-def plotScan(dataDict, colorKey, colorRange = [None, None], save = False, fileName = '', saveFormat = '.png', show = True):
+def plotScan(dataDict, colorKey, colorRange = [None, None], scalePlot = False, save = False, fileName = '', saveFormat = '.png', show = True):
 
     # determine which axes are used in dataDict (2 out of 'X', 'Y', and 'Z')
     axes = ['X', 'Y', 'Z']
@@ -863,8 +903,22 @@ def plotScan(dataDict, colorKey, colorRange = [None, None], save = False, fileNa
             yDat = np.append(yDat, dataDict[index][axisKeys[1]])
             cDat = np.append(cDat, dataDict[index][colorKey])
 
+    # need to reshape the cDat into an x by y array to use as input in pcolormesh
+    # do this by gathering the array indices of the final scan point and use that to reshape cDat
+    nRows, nCols = collectionIndexToArrayIndex(dataDict, len(cDat) - 1)
+    cMesh = cDat.reshape((nCols + 1, nRows + 1))
+
+    # need to convert x- and y- into column vectors for generating the mesh
+    # also need to invert the order if the scan goes into negative coordinates since
+    # np.unique will sort them in the opposite order of collection
+    # note: there is likely a more efficient way to do this, but probably not worth optimizing this too much
+    xCol = reverseNegativeCoordinates(np.unique(xDat))
+    yCol = reverseNegativeCoordinates(np.unique(yDat))
+
     # plot
-    plt.scatter(xDat, yDat, c = cDat, vmin = colorRange[0], vmax = colorRange[1])
+    plt.pcolormesh(xCol, yCol, cMesh, vmin=colorRange[0], vmax=colorRange[1])
+    if scalePlot:
+        plt.axis('scaled')
     plt.colorbar()
 
     if show == True:
@@ -881,6 +935,15 @@ def plotScan(dataDict, colorKey, colorRange = [None, None], save = False, fileNa
             saveFile = fileName
         plt.savefig(saveFile)
         plt.close()
+
+# helper function for plotScan that reverses coordinate lists that start negative
+# inputs an array. Outputs an array that is reversed if the input started negative
+def reverseNegativeCoordinates(arr):
+
+    if arr[0] < 0:
+        return np.flip(arr)
+    else:
+        return arr
 
 # runs plotScan on a list of filenames with show = False and save = True, for use in mass figure generation.
 #  Saves the figures in a subfolder named colorKey with the name dataDict['fileName'] + _colorKey + format
@@ -911,7 +974,7 @@ def generateScanPlots(fileNames : list, colorKey, colorRange = [None, None], sav
         saveName = os.path.basename(os.path.splitext(file)[0]) + '_' + str(colorKey) + saveFormat
         saveFile = saveDir + saveName
 
-        plotScan(data, colorKey, colorRange, save = True, fileName = saveFile, show = False)
+        plotScan(data, colorKey, colorRange = colorRange, save = True, fileName = saveFile, show = False)
 
     # return to previous backend
     plt.switch_backend(backend)
@@ -921,7 +984,7 @@ def generateScanPlotsInDirectory(dirName : str, colorKey, colorRange = [None, No
 
    fileNames = listFilesInDirectory(dirName)
 
-   generateScanPlots(fileNames, colorKey, colorRange, saveFormat)
+   generateScanPlots(fileNames, colorKey, colorRange = colorRange, saveFormat = saveFormat)
 
 # Plot the evolution of the value of dataKey vs time at a given list of coordinates
 # If normalized = True, the data will be divided by the corresponding value in the first coordinate
@@ -1048,6 +1111,23 @@ def timeCollectedToExperimentHours(timeCollected):
 
     return zeroRefArr/3600
 
+# generate repeat pulse plot
+# inputs: dataDict from a pickle and the key for the data to plot
+# generates a scatter plot of the dataKey data vs time (in hours)
+def plotRepeatPulseDataVsTime(dataDict, dataKey):
+
+    rawTime = np.array([])
+    data = np.array([])
+    # gather timeCollected and data
+    for index in dataDict.keys():
+        if type(index) == int:
+            rawTime = np.append(rawTime, dataDict[index]['time_collected'])
+            data = np.append(data, dataDict[index][dataKey])
+
+    time = timeCollectedToExperimentHours(rawTime)
+    plt.scatter(time, data)
+    plt.show()
+
 ##############################################################################3
 ############ Analysis and Data Correction Functions ############################33
 ################################################################################
@@ -1055,7 +1135,12 @@ def timeCollectedToExperimentHours(timeCollected):
 # function for use in applyFunctionToData that calculates the maximum minus minimum value
 def maxMinusMin(voltages):
 
-    return bn.nanmax(voltages) - bn.nanmin(voltages)
+    return np.max(voltages) - np.min(voltages)
+
+# returns the x-value where ydat array is at its maximum
+def maxXVal(xdat, ydat):
+
+    return xdat[ydat.argmax()]
 
 # returns the sum of the absolute value of an input array. This value is directly proportional to the integral of the signal
 def absoluteSum(voltages):
@@ -1134,6 +1219,30 @@ def listExtrema(yDat, deriv, xDat):
 
     return np.array(extremaList)
 
+# A simple ToF algorithm that gets most of the functionality of the hilbert threshold method without the edge artifacts of the
+# hilber transform. Should also be much faster
+# Takes in the y (voltage) data (hopefully baseline corrected) and the x (time) data. OPtional threshold argument determines
+# the fraction of max to determine arrival
+# Algorithm takes the absolute value of the yData, determines the threshold from the max(abs(y))
+# and then returns the x-value that first exceeds this threshold
+def simpleThresholdTOF(yDat, xDat, threshold = 0.1):
+
+    if len(yDat) != len(xDat):
+        print("simpleThresholdTOF Error: x- and y- data must be the same length. Check that the correct keys are being used.")
+        return -1
+
+    if threshold <=0 or threshold >=1:
+        print("simpleThresholdTOF Error: input threshold is out of bounds. Threshold must be >0 and <1.")
+        return -1
+
+    absY = abs(yDat)
+
+    thresholdValue = threshold * np.max(absY)
+
+    firstBreakIndex = firstIndexAboveThreshold(absY, thresholdValue)
+
+    return xDat[firstBreakIndex]
+
 # Calculate the time of flight for a signal by calculating the Hilbert envelope and returning the time value where it reaches
 # a certain fraction of its max value
 # Inputs y-data of the signal ('voltage'), x-data ('time') and the fraction of maximum for the threshold (number in (0,1))
@@ -1151,7 +1260,7 @@ def envelopeThresholdTOF(yDat, xDat, threshold = 0.5):
     envelope = hilbertEnvelope(yDat)
 
     # Calculate the actual value of the threshold
-    thresholdValue = threshold * bn.nanmax(envelope)
+    thresholdValue = threshold * np.max(envelope)
 
     firstBreakIndex = firstIndexAboveThreshold(envelope, thresholdValue)
 
@@ -1212,6 +1321,34 @@ def baselineCorrectByStartingValues(voltage, startWindow):
     meanV = np.mean(voltage[0:startWindow])
 
     return voltage - meanV
+
+# Calculate the noise level as the square of the standard deviation of the first values of the waveform
+# inputs a voltage array (should baseline corrected so the mean value can be assumed to be 0)
+# outputs the standard deviation squared
+def noiseLevelByStartingValues(voltage, startWindow):
+
+    stdV = np.std(voltage[0:startWindow])
+
+    return stdV**2
+
+# Calculate the time of flight of a wave based on when the wave's value rises above a certain signal to noise threshold (wave voltage **2 / noise standard deviation **2)
+# inputs the (baseline-corrected) voltage and time data, as well as the window length in the beginning to calculate the noise floor,
+#   and the target signal to noise ratio. Returns the time when the wave first exceeds the signalToNoiseRatio
+# returns the time that first exceeds the target signal to noise. If no point exceeds the signal to noise, returns -1
+def signalToNoiseTOF(voltage, time, startWindow = 50, signalToNoiseRatio = 50):
+
+    # calculate noise std
+    noise = noiseLevelByStartingValues(voltage, startWindow)
+
+    # calculate signal to noise of each point in wave
+    snr = np.square(voltage) / noise
+
+    tofIndex = np.nonzero(snr >= signalToNoiseRatio)[0]
+
+    if len(tofIndex) > 0:
+        return time[tofIndex[0]]
+    else:
+        return -1
 
 # A helper function to generate a list of coordinates on a line
 # used to feed into plotScanDataAtCoors to look at linecuts of data
