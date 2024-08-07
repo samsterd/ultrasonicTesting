@@ -227,6 +227,44 @@ def writeDataToDict(dataDict : dict, dat, key, indexMatched = False):
         savePickle(dataDict)
         return dataDict
 
+# stitches together data from multiple repeat pulse experiments in chronological order
+# used to combine experimental data that got separated due to e.g. power surges
+# inputs a list of data dict objects and a name to save the combined pickle as
+# outputs a data dict of the combined pickles and also saves the file
+def combineRepeatPulseData(dataList, saveName : str):
+
+    # determine the order of the pickles
+    startTimes = [data[0]['time_collected'] for data in dataList]
+    orderedData = [data for _,data in sorted(zip(startTimes, dataList), key = lambda pair: pair[0])]
+
+    # determine the last collection_index of each pickle
+    # -3 is because the indices are 0-indexed and there are two non-index keys (fileName and parameters)
+    endIndices = [len(data.keys()) - 3 for data in orderedData]
+
+    # calculate the starting index of each dict once they are combined
+    # i.e. if the data have endIndices=[200,300,400], the startingIndices=[0, 201, 502]
+    startIndices = [sum(endIndices[:i]) + i for i in range(len(endIndices))]
+
+    # determine the max index for the combined data. len(indices)-1 is added to account for all data being 0-indexed
+    maxIndex = sum(endIndices) + len(endIndices) - 1
+
+    # initialize the new data dict. Since we are not verifying the parameters are the same for all data, this will not be copied
+    newData = {}
+
+    # iterate through pickles
+    for i in range(len(orderedData)):
+
+        # write new dict by updating the indices
+        # the collection_index of newData is extended by the value of startIndices
+        for j in range(endIndices[i]):
+            newData[startIndices[i] + j] = orderedData[i][j]
+
+    # generate fileName for the new pickle
+    fileName = os.path.dirname(orderedData[0]['fileName']) + '//' + saveName
+    newData['fileName'] = fileName
+    savePickle(newData)
+    return newData
+
 # Simple post-experiment analysis automation
 # Receives the experiment params dict, converts sqlite to pickle
 # runs max-min, sta/lta, hilbert envelope, generates plots, and dumps coordinates/metrics as a csv
@@ -1073,6 +1111,23 @@ def timeCollectedToExperimentHours(timeCollected):
 
     return zeroRefArr/3600
 
+# generate repeat pulse plot
+# inputs: dataDict from a pickle and the key for the data to plot
+# generates a scatter plot of the dataKey data vs time (in hours)
+def plotRepeatPulseDataVsTime(dataDict, dataKey):
+
+    rawTime = np.array([])
+    data = np.array([])
+    # gather timeCollected and data
+    for index in dataDict.keys():
+        if type(index) == int:
+            rawTime = np.append(rawTime, dataDict[index]['time_collected'])
+            data = np.append(data, dataDict[index][dataKey])
+
+    time = timeCollectedToExperimentHours(rawTime)
+    plt.scatter(time, data)
+    plt.show()
+
 ##############################################################################3
 ############ Analysis and Data Correction Functions ############################33
 ################################################################################
@@ -1164,6 +1219,30 @@ def listExtrema(yDat, deriv, xDat):
 
     return np.array(extremaList)
 
+# A simple ToF algorithm that gets most of the functionality of the hilbert threshold method without the edge artifacts of the
+# hilber transform. Should also be much faster
+# Takes in the y (voltage) data (hopefully baseline corrected) and the x (time) data. OPtional threshold argument determines
+# the fraction of max to determine arrival
+# Algorithm takes the absolute value of the yData, determines the threshold from the max(abs(y))
+# and then returns the x-value that first exceeds this threshold
+def simpleThresholdTOF(yDat, xDat, threshold = 0.1):
+
+    if len(yDat) != len(xDat):
+        print("simpleThresholdTOF Error: x- and y- data must be the same length. Check that the correct keys are being used.")
+        return -1
+
+    if threshold <=0 or threshold >=1:
+        print("simpleThresholdTOF Error: input threshold is out of bounds. Threshold must be >0 and <1.")
+        return -1
+
+    absY = abs(yDat)
+
+    thresholdValue = threshold * np.max(absY)
+
+    firstBreakIndex = firstIndexAboveThreshold(absY, thresholdValue)
+
+    return xDat[firstBreakIndex]
+
 # Calculate the time of flight for a signal by calculating the Hilbert envelope and returning the time value where it reaches
 # a certain fraction of its max value
 # Inputs y-data of the signal ('voltage'), x-data ('time') and the fraction of maximum for the threshold (number in (0,1))
@@ -1181,7 +1260,7 @@ def envelopeThresholdTOF(yDat, xDat, threshold = 0.5):
     envelope = hilbertEnvelope(yDat)
 
     # Calculate the actual value of the threshold
-    thresholdValue = threshold * bn.nanmax(envelope)
+    thresholdValue = threshold * np.max(envelope)
 
     firstBreakIndex = firstIndexAboveThreshold(envelope, thresholdValue)
 
@@ -1242,6 +1321,34 @@ def baselineCorrectByStartingValues(voltage, startWindow):
     meanV = np.mean(voltage[0:startWindow])
 
     return voltage - meanV
+
+# Calculate the noise level as the square of the standard deviation of the first values of the waveform
+# inputs a voltage array (should baseline corrected so the mean value can be assumed to be 0)
+# outputs the standard deviation squared
+def noiseLevelByStartingValues(voltage, startWindow):
+
+    stdV = np.std(voltage[0:startWindow])
+
+    return stdV**2
+
+# Calculate the time of flight of a wave based on when the wave's value rises above a certain signal to noise threshold (wave voltage **2 / noise standard deviation **2)
+# inputs the (baseline-corrected) voltage and time data, as well as the window length in the beginning to calculate the noise floor,
+#   and the target signal to noise ratio. Returns the time when the wave first exceeds the signalToNoiseRatio
+# returns the time that first exceeds the target signal to noise. If no point exceeds the signal to noise, returns -1
+def signalToNoiseTOF(voltage, time, startWindow = 50, signalToNoiseRatio = 50):
+
+    # calculate noise std
+    noise = noiseLevelByStartingValues(voltage, startWindow)
+
+    # calculate signal to noise of each point in wave
+    snr = np.square(voltage) / noise
+
+    tofIndex = np.nonzero(snr >= signalToNoiseRatio)[0]
+
+    if len(tofIndex) > 0:
+        return time[tofIndex[0]]
+    else:
+        return -1
 
 # A helper function to generate a list of coordinates on a line
 # used to feed into plotScanDataAtCoors to look at linecuts of data
