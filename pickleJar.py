@@ -252,15 +252,16 @@ def combineRepeatPulseData(dataList, saveName : str):
     newData = {}
 
     # iterate through pickles
-    for i in range(len(orderedData)):
+    for i in tqdm(range(len(orderedData))):
 
+        print("Adding data from " + orderedData[i]['fileName'] + '...')
         # write new dict by updating the indices
         # the collection_index of newData is extended by the value of startIndices
-        for j in range(endIndices[i]):
+        for j in tqdm(range(endIndices[i])):
             newData[startIndices[i] + j] = orderedData[i][j]
 
     # generate fileName for the new pickle
-    fileName = os.path.dirname(orderedData[0]['fileName']) + '//' + saveName
+    fileName = os.path.dirname(orderedData[0]['fileName']) + '//' + saveName + '.pickle'
     newData['fileName'] = fileName
     savePickle(newData)
     return newData
