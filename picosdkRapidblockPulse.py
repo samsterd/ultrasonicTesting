@@ -205,7 +205,7 @@ class Picoscope():
             return -1
 
         #error check setting channels
-        if self.setChA != 'PICO_OK' or self.setChB != 'PICO_OK' or self.trigger != 'PICO_OK':
+        if self.setChA != 0 or self.setChB != 0 or self.trigger != 0:
             print("Picoscope setChannels error: an error occurred run ps2000aSetChannel or ps2000aSetSimpleTrigger. Try restarting the program or checking the picoscope connection.")
             assert_pico_ok(self.setChA)
             assert_pico_ok(self.setChB)
@@ -248,7 +248,7 @@ class Picoscope():
         if self.setCaptures == "PICO_OK":
             pass
         else:
-            print("Error: Problem setting number of captures on picoscope: " + self.setCaptures)
+            # print("Error: Problem setting number of captures on picoscope: " + self.setCaptures)
             assert_pico_ok(self.setCaptures)
 
         #Set up memory buffers to receive data from channel B
