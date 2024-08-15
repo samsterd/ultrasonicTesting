@@ -57,7 +57,11 @@ experimentParams = {
     'waves' : 1000,                                  # Number of waves to collect and average
     'samples': 1000,                                  # Number of data points per wave
     'halfCycles' : 16,                               # Tone burst pulser only. Number of half-cycles in a tone burst pulse. Minimum 1, maximum 32
-    'collectionMode': 'pulse-echo',                #transmission/pulse-echo/both
+    'collectionMode': 'pulse-echo',                 #transmission/pulse-echo/both
+    'collectionDirection' : 'forward',              # Specifies the channels used for the transmitting and receiving transducers
+                                                    # 'forward' pulses on Channel A and (for collectionMode = transmision or both) collects on Channel B
+                                                    # 'reverse' pulses on Channel B and collects on Channel A
+                                                    # 'both' repeats the measurement in both directions
 
     ################################################################################
     ########################### Saving Names ##########################################

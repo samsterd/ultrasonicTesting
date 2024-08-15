@@ -1,5 +1,5 @@
 import json
-import picosdkRapidblockPulse as pico
+import picosdkRapidblockPulse as picoscope
 import ultratekPulser as utp
 import time
 import tqdm
@@ -8,13 +8,12 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from database import Database
 import pickleJar as pj
-import picosdkRapidblockPulse as picoRapid
 
 
 def repeatPulse(params):
 
     # Connect to picoscope & Set up pico measurement
-    pico = picoRapid.picosdkRapidblockPulse(params)
+    pico = picoscope.Picoscope(params)
     # Connect to picoscope, ender, pulser
     # picoConnection = picoRapid.openPicoscope()
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])

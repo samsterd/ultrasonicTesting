@@ -1,6 +1,5 @@
 # Script to run a 2D ultrasonic scan
 
-import picosdkRapidblockPulse as pico
 import ultratekPulser as utp
 import scanner as sc
 import math
@@ -9,7 +8,7 @@ import json
 from tqdm import tqdm
 from database import Database
 import pickleJar as pj
-import picosdkRapidblockPulse as picoRapid
+import picosdkRapidblockPulse as picoscope
 
 # Runs a 2D scan, taking ultrasonic pulse data at every point, and saves to the specified folder
 # Inputs: parameters specified above
@@ -26,7 +25,7 @@ def runScan(params):
     # picoConnection = picoRapid.openPicoscope()
     
     #openPicoscope and setupPicoMeasurement
-    pico = picoRapid.picosdkRapidblockPulse(params)
+    pico = picoscope.Picoscope(params)
     
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
     scanner = sc.Scanner(params)
