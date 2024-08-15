@@ -60,18 +60,12 @@ def repeatPulse(params):
 
         # collect data
         if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
-            waveform, params = pico.voltageRangeFinder(params)
+            waveDict = pico.voltageRangeFinder()
         else:
-            waveform = pico.runPicoMeasurement(params['waves'])
+            wavewaveDict = pico.runPicoMeasurement()
 
-        # Make a data dict for saving
-        waveData = {}
-
-        waveData['voltage'] = list(waveform[0])
-        waveData['time'] = list(waveform[1])
-
-        waveData['time_collected'] = time.time()
-        waveData['collection_index'] = collectionIndex
+        waveDict['time_collected'] = time.time()
+        waveDict['collection_index'] = collectionIndex
         collectionIndex += 1
 
         # CURRENTLY NOT SUPPORTED
@@ -80,13 +74,13 @@ def repeatPulse(params):
 
         # save data as sqlite database
         if params['saveFormat'] == 'sqlite':
-            query = database.parse_query(waveData)
+            query = database.parse_query(waveDict)
             database.write(query)
 
         # save data as json
         else:
             with open(params['fileName'], 'a') as file:
-                json.dump(waveData, file)
+                json.dump(waveDict, file)
                 file.write('\n')
 
         # calculate time elapsed in this iteration

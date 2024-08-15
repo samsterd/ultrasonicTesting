@@ -989,19 +989,20 @@ class MainWindow(QMainWindow):
             self.params['dllFile'] = self.dllFile.text()
 
         # todo: add error handling and timeout
-        #TODO: add handling for pulse-echo plotting here
 
-        if self.params['collectionMode'] == 'both':
-            volA, volB, times = setup.singlePulseMeasure(self.params)
-            fig = MplCanvas(width = 7.5, height = 6)
-            fig.axes.plot(times, volA, color='r', label='pulse-echo')
-            fig.axes.plot(times, volB, color='b', label='transmission')
-            self.PlotDialog(fig)
-        else:
-            voltages, times = setup.singlePulseMeasure(self.params)
-            fig = MplCanvas(width = 7.5, height = 6)
-            fig.axes.plot(times, voltages)
-            self.PlotDialog(fig)
+        # run single pulse
+        waveDict = setup.singlePulseMeasure(self.params)
+
+        #parse data and plot
+        waveTime = waveDict['time']
+        fig = MplCanvas(width = 7.5, height = 6)
+        for voltageKey in waveDict.keys():
+            if voltageKey != 'time':
+                fig.axes.plot(time, waveDict[voltageKey], label=voltageKey)
+        fig.xlabel('Time (us)')
+        fig.ylabel('Voltage (mV)')
+
+        self.PlotDialog(fig)
 
         # change button back to normal
         self.executePulseButton.setText("Execute Pulse")

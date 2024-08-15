@@ -57,16 +57,9 @@ def runScan(params):
 
             #collect data
             if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
-                waveform, params = pico.voltageRangeFinder(params)
+                pixelData = pico.voltageRangeFinder()
             else:
-                waveform = pico.runPicoMeasurement(params['waves'])
-
-            #Make a data dict for saving
-            pixelData = {}
-
-            #Add waveform data to pixelData
-            pixelData['voltage'] = list(waveform[0])
-            pixelData['time'] = list(waveform[1])
+                pixelData = pico.runPicoMeasurement()
 
             #Add collection metadata
             pixelData['time_collected'] = time.time()
@@ -83,11 +76,6 @@ def runScan(params):
             #add location to pixelData
             pixelData[iKey] = iLoc
             pixelData[jKey] = jLoc
-
-            #if voltage auto range is on, record the voltage range for this pixel
-            #CURRENTLY NOT SUPPORTED
-            # if params['voltageAutoRange']:
-            #     pixelData['voltageRange'] = params['voltageRange']
 
             # save data as sqlite database
             if params['saveFormat'] == 'sqlite':
