@@ -975,7 +975,6 @@ class MainWindow(QMainWindow):
         self.executePulseButton.repaint()
 
         # gather parameters
-        #TODO: add collectionMode to the parameters(v)
         self.params['experiment'] = 'single pulse'
         self.params['transducerFrequency'] = float(self.transducerFrequency.text())
         # pulserType must be converted to lower case to be recognized by the Pulser class
@@ -988,7 +987,7 @@ class MainWindow(QMainWindow):
         self.params['waves'] = int(self.waves.text())
         self.params['samples'] = int(self.samples.text())
         self.params['halfCycles'] = int(self.halfCycles.text())
-        self.params['collectionMode']=self.collectionMode.currentText().lower()
+        self.params['collectionMode'] = self.collectionMode.currentText().lower()
         self.params['collectionDirection'] = self.collectionDirection.currentText().lower()
 
         if self.experimentType == 'Setup':
@@ -1005,9 +1004,10 @@ class MainWindow(QMainWindow):
         fig = MplCanvas(width = 7.5, height = 6)
         for voltageKey in waveDict.keys():
             if voltageKey != 'time':
-                fig.axes.plot(time, waveDict[voltageKey], label=voltageKey)
-        fig.xlabel('Time (us)')
-        fig.ylabel('Voltage (mV)')
+                fig.axes.plot(waveTime, waveDict[voltageKey], label=voltageKey)
+        fig.axes.set_xlabel('Time (us)')
+        fig.axes.set_ylabel('Voltage (mV)')
+        fig.axes.legend()
 
         self.PlotDialog(fig)
 
