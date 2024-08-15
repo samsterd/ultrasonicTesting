@@ -74,8 +74,7 @@ def repeatPulse(params):
 
         # save data as sqlite database
         if params['saveFormat'] == 'sqlite':
-            query = database.parse_query(waveDict)
-            database.write(query)
+            database.writeData(waveDict)
 
         # save data as json
         else:

@@ -10,10 +10,9 @@ import math
 import json
 from matplotlib import pyplot as plt
 from matplotlib import colormaps as cmp
+from database import Database
 
 #Roadmap:
-
-#change over to ? from string formatting
 
 ###############################################################
 #### Basic DB manipulation ###################################
@@ -24,10 +23,11 @@ from matplotlib import colormaps as cmp
 # Returns the database connection object and the initialized cursor
 def openDB(fileName):
 
-    connection = sqlite3.connect(fileName)
+    connection = sqlite3.connect(fileName, detect_types=sqlite3.PARSE_DECLTYPES)
 
-    # Set rows to be represented by sqlite3 row class
-    # connection.row_factory = sqlite3.Row
+    # register numpy adapters
+    sqlite3.register_adapter(np.ndarray, Database.adapt_array)
+    sqlite3.register_converter("array", Database.convert_array)
 
     cursor = connection.cursor()
 
@@ -231,16 +231,22 @@ def fastLookup(cursor, index: int, dataColumns: list, table='acoustics'):
 
     return data
 
+# todo: update description - no longer just for strings!
 # Helper function that takes in a string returned from a table lookup and attempts to convert it to the appropriate data type
 # Only handles floats and lists right now. If it isn't recognized, it returns the unchanged string
-def stringConverter(string : str):
+def stringConverter(string):
 
-    # First attempt a float
+    # first check if its an ndarray and return
+    if type(string) == np.ndarray:
+        return string
+
+    # Next attempt a float
     try:
         data = float(string)
         return data
     except ValueError or TypeError:
         # it isn't a float, so try to convert a list
+        # lists are deprecated but kept in for backward compatibility
         try:
             data = stringListToArray(string)
             return data

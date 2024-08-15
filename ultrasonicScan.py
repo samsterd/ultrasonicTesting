@@ -79,8 +79,7 @@ def runScan(params):
 
             # save data as sqlite database
             if params['saveFormat'] == 'sqlite':
-                query = database.parse_query(pixelData)
-                database.write(query)
+                database.writeData(pixelData)
 
             # save format is json, so dump data, then dump metadata
             else:

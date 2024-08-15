@@ -1,6 +1,50 @@
 ## Modified from previous code
 # TODO: modify style to bring in line with rest of project
 
+# Goals:
+# 1) Handle multiple incoming voltage arrays (for simultaneous pulse-echo and transmission measurements)
+#       while clearly labeling with minimal code on experiment side
+# 2) Read/write numpy arrays directly as binary blobs by writing an enocoder/decoder
+#       a) this must be updated in both the Database class and sqliteUtils
+#       b) consider merging some sqliteUtils functions into Database class
+# 3) Maintain backward compatibility:
+#       a) add saving option for string, binary, or both
+#       b)
+
+
+# For 2)
+# Include: detect_types=sqlite3.PARSE_DECLTYPES when making db connections
+# code from stackexchange: https://stackoverflow.com/questions/18621513/python-insert-numpy-array-into-sqlite3-database
+# import numpy as np
+# import io
+#
+# def adapt_array(arr):
+#     """
+#     http://stackoverflow.com/a/31312102/190597 (SoulNibbler)
+#     """
+#     out = io.BytesIO()
+#     np.save(out, arr)
+#     out.seek(0)
+#     return sqlite3.Binary(out.read())
+#
+# def convert_array(text):
+#     out = io.BytesIO(text)
+#     out.seek(0)
+#     return np.load(out)
+#
+#
+# # Converts np.array to TEXT when inserting
+# sqlite3.register_adapter(np.ndarray, adapt_array)
+#
+# # Converts TEXT to np.array when selecting
+# sqlite3.register_converter("array", convert_array)
+#
+# x = np.arange(12).reshape(2,6)
+#
+# con = sqlite3.connect(":memory:", detect_types=sqlite3.PARSE_DECLTYPES)
+# cur = con.cursor()
+# cur.execute("create table test (arr array)")
+
 import sqlite3
 import numpy as np
 import io
@@ -23,6 +67,13 @@ class Database:
         self.connection = sqlite3.connect(params['fileName'] + '.sqlite3')
         self.cursor = self.connection.cursor()
 
+        # register adapters for converting between numpy arrays and text
+        # modified from https://stackoverflow.com/questions/18621513/python-insert-numpy-array-into-sqlite3-database
+        # Converts np.array to TEXT when inserting
+        sqlite3.register_adapter(np.ndarray, self.adapt_array)
+        # Converts TEXT to np.array when selecting
+        sqlite3.register_converter("array", self.convert_array)
+
         #create data_table_initializer and parameters_table_initializer based on experiment type
         paramTableInit = self.parameter_table_initializer(params)
         dataTableInit = self.data_table_initializer(params)
@@ -31,23 +82,47 @@ class Database:
         self.cursor.execute(paramTableInit)
 
         #generate command to write parameters to the table
-        paramQuery = self.write_parameter_table(params)
+        paramQuery, paramVals = self.write_parameter_table(params)
 
         #write query to parameter table
-        self.write(paramQuery)
+        self.write(paramQuery, paramVals)
 
         #create data table
         self.cursor.execute(dataTableInit)
+
+    # define adapters for converting numpy arrays to sqlite-usable format
+    # copied from stackoverflow: https://stackoverflow.com/questions/18621513/python-insert-numpy-array-into-sqlite3-database
+    @staticmethod
+    def adapt_array(arr):
+        """
+        http://stackoverflow.com/a/31312102/190597 (SoulNibbler)
+        """
+        out = io.BytesIO()
+        np.save(out, arr)
+        out.seek(0)
+        return sqlite3.Binary(out.read())
+
+    # define adapters for converting numpy arrays to sqlite-usable format
+    # copied from stackoverflow: https://stackoverflow.com/questions/18621513/python-insert-numpy-array-into-sqlite3-database
+    @staticmethod
+    def convert_array(text):
+        out = io.BytesIO(text)
+        out.seek(0)
+        return np.load(out)
 
     # Generates an SQL query string to intialize the data table based on the experiment function
     def data_table_initializer(self, params : dict):
 
         # acoustics is name of TABLE. Not sure if we want this hardcoded
         # general table structure that is true in all experiments
-        #TODO: synchronize these to input keys in runUltrasonicExperiment
-        initTable = '''CREATE TABLE IF NOT EXISTS acoustics (
-            voltage BLOB,
-            time REAL,
+        #TODO: make voltage columns vary depending on mode and direction
+        initTable = "CREATE TABLE IF NOT EXISTS acoustics (\n"
+
+        voltageString = self.generateVoltageString(params)
+        voltageTable = ' array,\n'.join(voltageString) + ' array,\n' # need to add final separator at the end
+        initTable = initTable + voltageTable
+
+        initTable = initTable + '''time array,
             time_collected REAL,
             collection_index INTEGER PRIMARY KEY'''
 
@@ -64,8 +139,32 @@ class Database:
 
         return initTable + ')'
 
+    # helper function to generate initialization strings for the different voltages dependent on the experiment parameters
+    def generateVoltageString(self, params):
+
+        baseString = 'voltage_'
+        mode = params['collectionMode']
+        direction = params['collectionDirection']
+        modeStrings = []
+
+        if mode == 'transmission' or mode == 'both':
+            modeStrings.append(baseString + 'transmission_')
+        if mode == 'pulse-echo' or mode == 'both':
+            modeStrings.append(baseString + 'echo_')
+
+        if direction == 'forward':
+            dirStrings = [modeString + 'forward' for modeString in modeStrings]
+        elif direction == 'reverse':
+            dirStrings = [modeString + 'reverse' for modeString in modeStrings]
+        elif direction == 'both':
+            dirStringsf = [modeString + 'forward' for modeString in modeStrings]
+            dirStringsr = [modeString + 'reverse' for modeString in modeStrings]
+            dirStrings = dirStringsf + dirStringsr
+
+        return dirStrings
+
     # initialize table to record oscilloscope parameters
-    #TODO: add separate column for pulse-echo. only create it if collectionMode== 'pulse-echo' or 'both'
+    #TODO: add separate column for new parameters (mode, direction, autrange)
     def parameter_table_initializer(self, params : dict):
         initTable = '''CREATE TABLE IF NOT EXISTS parameters (
             time_started REAL PRIMARY KEY,
@@ -73,11 +172,18 @@ class Database:
             delay REAL,
             waves REAL,
             samples REAL,
-            voltage_range REAL)
+            transducer_frequency REAL,
+            voltage_range_T REAL,
+            voltage_range_P REAL,
+            voltage_autorange INTEGER
+            )
         '''
+        if params['pulserType'] == 'tone burst':
+            initTable = initTable + ',\nhalf_cycles INTEGER'
         return initTable
 
     # Generates a database query for writing the experimental parameters
+    #TODO: write in updated params from above function
     def write_parameter_table(self, params : dict):
 
         # copy over parameters into a separate dict. This isn't the best way to do this and really exposes some bad namespace choices :(
@@ -88,51 +194,48 @@ class Database:
         parameters['delay'] = params['measureDelay']
         parameters['waves'] = params['waves']
         parameters['samples'] = params['samples']
-        parameters['voltage_range'] = params['voltageRange']
+        parameters['transducer_frequency'] = params['transducerFrequency']
+        parameters['voltage_range_T'] = params['voltageRangeT']
+        parameters['voltage_range_P'] = params['voltageRangeP']
+        parameters['voltage_autorange'] = int(params['voltageAutoRange'])
 
         #create db query for the parameters to the parameters table
-        query = self.parse_query(parameters, 'parameters')
+        query, vals = self.parse_query(parameters, 'parameters')
 
-        return query
+        return query, vals
 
     # Parse query takes a dict and turns it into an SQL-readable format for writing the data
+    # returns a query string and the values as a list to be executed on the db connection
+    #TODO: update this to more efficient handling of array/text conversion (json dump voodoo)
+    # TODO: register encoder/decoder for numpy arrays
     @staticmethod
-    def parse_query(payload: dict, table: str = 'acoustics') -> str:
+    def parse_query(inputDict: dict, table: str = 'acoustics'):
         #TODO: update this approach. Also using ? for data, not string formatting, is best practice
-        """Taken from Wes' prior code. Prepares the query.
 
-        It's very hacky, but leaving for now. We have to parse the amps to a
-        SQL-readable format. It doesn't accept the pythonic list directly;
-        we must parse it to string literal.
+        dictKeys = inputDict.keys()
+        keyString = ', '.join([key for key in dictKeys])
 
-        Args:
-            payload (dict): The payload, with one entry being the acoustics data
-                as received from runPicoMeasurement().
-            table (str, optional): Table name, Defaults to "acoustics".
+        qMarks = "(" + ("?," * (len(dictKeys)-1)) + "?)"
 
-        Returns:
-            str: The query.
-        """
+        vals = [inputDict[key] for key in dictKeys]
 
-        keys: str = ', '.join([key for key in payload.keys()])
+        query = 'INSERT INTO ' + table + ' (' + keyString + ') VALUES ' + qMarks + ';'
 
-        #todo: this should be updated. json.dumps might be a universal solution here
-        values_parsed: list = [f'"{str(val)}"' if isinstance(val, list) else str(val) for val in payload.values()]
-        values: str = ', '.join(values_parsed)
+        return query, vals
 
-        return f'INSERT INTO {table} ({keys}) VALUES ({values});'
+    # takes the output of parse_query and writes it to the database
+    # inputs the query string and value list from parse_query
+    # outputs the cursor at the end of the table
+    def write(self, query: str, vals: list):
 
-    def write(self, query: str) -> int:
-        """Writes data out to Drops.
-
-        Args:
-            query (str): The query as constructed from parse_query().
-
-        Returns:
-            int: ID of last row. Useful for seeing whether data was actually inserted.
-        """
-
-        self.cursor.execute(query)
+        self.cursor.execute(query, vals)
         self.connection.commit()
 
         return self.cursor.lastrowid
+
+    # wrapper function to combine generating queries and writing to database.
+    # only inputs the data dict. Assumes you are writing to the 'acoustics' table
+    def writeData(self, dataDict):
+
+        query, vals = self.parse_query(dataDict)
+        self.write(query, vals)
