@@ -286,9 +286,13 @@ class MainWindow(QMainWindow):
         self.halfCycles = QLineEdit(str(self.params['halfCycles']))
         self.halfCycles.setValidator(QIntValidator(1,32))
 
-        self.collectionModeLabel = QLabel("transmission/pulseEcho/both")
+        self.collectionModeLabel = QLabel("Collection Mode:")
         self.collectionMode = QComboBox()
-        self.collectionMode.addItems(["transmission", "pulse-echo", "both"])
+        self.collectionMode.addItems(["Transmission", "Pulse-Echo", "Both"])
+
+        self.collectionDirectionLabel = QLabel("Collection Direction (Multiplexer Only):")
+        self.collectionDirection = QComboBox()
+        self.collectionDirection.addItems(["Forward", "Reverse", "Both"])
 
         # add port information for setup
         if self.experimentType == 'Setup':
@@ -330,18 +334,20 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.halfCycles, 10, 1)
         layout.addWidget(self.collectionModeLabel, 11, 0)
         layout.addWidget(self.collectionMode, 11, 1)
+        layout.addWidget(self.collectionDirectionLabel, 12, 0)
+        layout.addWidget(self.collectionDirection, 12, 1)
         if self.experimentType == 'Setup':
-            layout.addWidget(self.pulserPortLabel, 12, 0)
-            layout.addWidget(self.pulserPort, 12, 1)
-            layout.addWidget(self.dllFileLabel, 13, 0)
-            layout.addWidget(self.dllFile, 13, 1)
-            layout.addWidget(self.executePulseButton, 14, 1)
-            layout.addWidget(self.returnToMoveButton, 15, 1)
-            layout.addWidget(self.nextButtonPulse, 16, 1)
+            layout.addWidget(self.pulserPortLabel, 13, 0)
+            layout.addWidget(self.pulserPort, 13, 1)
+            layout.addWidget(self.dllFileLabel, 14, 0)
+            layout.addWidget(self.dllFile, 14, 1)
+            layout.addWidget(self.executePulseButton, 15, 1)
+            layout.addWidget(self.returnToMoveButton, 16, 1)
+            layout.addWidget(self.nextButtonPulse, 17, 1)
         else:
-            layout.addWidget(self.executePulseButton, 12, 1)
-            layout.addWidget(self.returnToMoveButton, 13, 1)
-            layout.addWidget(self.nextButtonPulse, 14, 1)
+            layout.addWidget(self.executePulseButton, 13, 1)
+            layout.addWidget(self.returnToMoveButton, 14, 1)
+            layout.addWidget(self.nextButtonPulse, 15, 1)
 
         widget = QWidget()
         widget.setLayout(layout)
@@ -983,6 +989,7 @@ class MainWindow(QMainWindow):
         self.params['samples'] = int(self.samples.text())
         self.params['halfCycles'] = int(self.halfCycles.text())
         self.params['collectionMode']=self.collectionMode.currentText().lower()
+        self.params['collectionDirection'] = self.collectionDirection.currentText().lower()
 
         if self.experimentType == 'Setup':
             self.params['pulserPort'] = self.pulserPort.text()
@@ -1030,6 +1037,7 @@ class MainWindow(QMainWindow):
         self.params['samples'] = int(self.samples.text())
         self.params['halfCycles'] = int(self.halfCycles.text())
         self.params['collectionMode'] = self.collectionMode.currentText().lower()
+        self.params['collectionDirection'] = self.collectionDirection.currentText().lower()
 
 
         self.params['experimentFolder'] = self.experimentFolderName.text()
@@ -1073,6 +1081,7 @@ class MainWindow(QMainWindow):
         self.params['samples'] = int(self.samples.text())
         self.params['halfCycles'] = int(self.halfCycles.text())
         self.params['collectionMode'] = self.collectionMode.currentText().lower()
+        self.params['collectionDirection'] = self.collectionDirection.currentText().lower()
 
         self.params['experimentFolder'] = self.experimentFolderName.text()
         self.params['experimentName'] = self.experimentName.text()
@@ -1118,6 +1127,7 @@ class MainWindow(QMainWindow):
         self.params['samples'] = int(self.samples.text())
         self.params['halfCycles'] = int(self.halfCycles.text())
         self.params['collectionMode'] = self.collectionMode.currentText().lower()
+        self.params['collectionDirection'] = self.collectionDirection.currentText().lower()
 
         self.params['experimentFolder'] = self.experimentFolderName.text()
         self.params['experimentName'] = self.experimentName.text()
