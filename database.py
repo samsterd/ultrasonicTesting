@@ -18,7 +18,7 @@
 # import numpy as np
 # import io
 #
-# def adapt_array(arr):
+# def adaptArray(arr):
 #     """
 #     http://stackoverflow.com/a/31312102/190597 (SoulNibbler)
 #     """
@@ -27,17 +27,17 @@
 #     out.seek(0)
 #     return sqlite3.Binary(out.read())
 #
-# def convert_array(text):
+# def convertArray(text):
 #     out = io.BytesIO(text)
 #     out.seek(0)
 #     return np.load(out)
 #
 #
 # # Converts np.array to TEXT when inserting
-# sqlite3.register_adapter(np.ndarray, adapt_array)
+# sqlite3.register_adapter(np.ndarray, adaptArray)
 #
 # # Converts TEXT to np.array when selecting
-# sqlite3.register_converter("array", convert_array)
+# sqlite3.register_converter("array", convertArray)
 #
 # x = np.arange(12).reshape(2,6)
 #
@@ -57,7 +57,7 @@ class Database:
         db = database.Database(db_filename='INL_GT_DE_2022_08_01_1')
         while *data is being updated*:
             *make some payload*
-            query: str = database.parse_query(payload=payload)
+            query: str = database.parseQuery(payload=payload)
             database.write(query)
     """
 
@@ -70,19 +70,19 @@ class Database:
         # register adapters for converting between numpy arrays and text
         # modified from https://stackoverflow.com/questions/18621513/python-insert-numpy-array-into-sqlite3-database
         # Converts np.array to TEXT when inserting
-        sqlite3.register_adapter(np.ndarray, self.adapt_array)
+        sqlite3.register_adapter(np.ndarray, self.adaptArray)
         # Converts TEXT to np.array when selecting
-        sqlite3.register_converter("array", self.convert_array)
+        sqlite3.register_converter("array", self.convertArray)
 
-        #create data_table_initializer and parameters_table_initializer based on experiment type
-        paramTableInit = self.parameter_table_initializer(params)
-        dataTableInit = self.data_table_initializer(params)
+        #create dataTableInitializer and parameters_table_initializer based on experiment type
+        paramTableInit = self.parameterTableInitializer(params)
+        dataTableInit = self.dataTableInitializer(params)
 
         #create parameters table
         self.cursor.execute(paramTableInit)
 
         #generate command to write parameters to the table
-        paramQuery, paramVals = self.write_parameter_table(params)
+        paramQuery, paramVals = self.writeParameterTable(params)
 
         #write query to parameter table
         self.write(paramQuery, paramVals)
@@ -93,7 +93,7 @@ class Database:
     # define adapters for converting numpy arrays to sqlite-usable format
     # copied from stackoverflow: https://stackoverflow.com/questions/18621513/python-insert-numpy-array-into-sqlite3-database
     @staticmethod
-    def adapt_array(arr):
+    def adaptArray(arr):
         """
         http://stackoverflow.com/a/31312102/190597 (SoulNibbler)
         """
@@ -105,13 +105,13 @@ class Database:
     # define adapters for converting numpy arrays to sqlite-usable format
     # copied from stackoverflow: https://stackoverflow.com/questions/18621513/python-insert-numpy-array-into-sqlite3-database
     @staticmethod
-    def convert_array(text):
+    def convertArray(text):
         out = io.BytesIO(text)
         out.seek(0)
         return np.load(out)
 
     # Generates an SQL query string to intialize the data table based on the experiment function
-    def data_table_initializer(self, params : dict):
+    def dataTableInitializer(self, params : dict):
 
         # acoustics is name of TABLE. Not sure if we want this hardcoded
         # general table structure that is true in all experiments
@@ -163,7 +163,7 @@ class Database:
         return dirStrings
 
     # initialize table to record oscilloscope parameters
-    def parameter_table_initializer(self, params : dict):
+    def parameterTableInitializer(self, params : dict):
         initTable = '''CREATE TABLE IF NOT EXISTS parameters (
             time_started REAL PRIMARY KEY,
             measure_time REAL,
@@ -181,7 +181,7 @@ class Database:
         return initTable
 
     # Generates a database query for writing the experimental parameters
-    def write_parameter_table(self, params : dict):
+    def writeParameterTable(self, params : dict):
 
         # copy over parameters into a separate dict. This isn't the best way to do this and really exposes some bad namespace choices :(
         parameters = {}
@@ -196,14 +196,14 @@ class Database:
         parameters['voltage_autorange'] = int(params['voltageAutoRange'])
 
         #create db query for the parameters to the parameters table
-        query, vals = self.parse_query(parameters, 'parameters')
+        query, vals = self.parseQuery(parameters, 'parameters')
 
         return query, vals
 
     # Parse query takes a dict and turns it into an SQL-readable format for writing the data
     # returns a query string and the values as a list to be executed on the db connection
     @staticmethod
-    def parse_query(inputDict: dict, table: str = 'acoustics'):
+    def parseQuery(inputDict: dict, table: str = 'acoustics'):
 
         dictKeys = inputDict.keys()
         keyString = ', '.join([key for key in dictKeys])
@@ -216,8 +216,8 @@ class Database:
 
         return query, vals
 
-    # takes the output of parse_query and writes it to the database
-    # inputs the query string and value list from parse_query
+    # takes the output of parseQuery and writes it to the database
+    # inputs the query string and value list from parseQuery
     # outputs the cursor at the end of the table
     def write(self, query: str, vals: list):
 
@@ -230,5 +230,5 @@ class Database:
     # only inputs the data dict. Assumes you are writing to the 'acoustics' table
     def writeData(self, dataDict):
 
-        query, vals = self.parse_query(dataDict)
+        query, vals = self.parseQuery(dataDict)
         self.write(query, vals)

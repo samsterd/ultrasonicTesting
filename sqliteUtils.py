@@ -26,8 +26,8 @@ def openDB(fileName):
     connection = sqlite3.connect(fileName, detect_types=sqlite3.PARSE_DECLTYPES)
 
     # register numpy adapters
-    sqlite3.register_adapter(np.ndarray, Database.adapt_array)
-    sqlite3.register_converter("array", Database.convert_array)
+    sqlite3.register_adapter(np.ndarray, Database.adaptArray)
+    sqlite3.register_converter("array", Database.convertArray)
 
     cursor = connection.cursor()
 
