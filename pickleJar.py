@@ -89,7 +89,8 @@ def sqliteToPickle(file : str):
 
         for i in range(len(colNames)):
             # some tables have blank columns due to code bugs. This skips over them
-            if row[i] != None:
+            # needs to first check if the value is an array b/c truth values don't apply to whole arrays
+            if type(row[i]) == np.ndarray or row[i] != None:
                 dataDict[index][colNames[i]] = squ.stringConverter(row[i])
             else:
                 pass
