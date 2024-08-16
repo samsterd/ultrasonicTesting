@@ -327,6 +327,7 @@ def eisConvertData(data : dict):
 
 # fit eis to a Randles model with a CPE and fixing the R0 value to the high frequency zero crossing
 # saves data as key['randles_circuit'] for the impedance package circuit object, ['randles_fit'] for the fit parameters and ['randes_err'] for the fitting errors
+# firstParams is the initial guesses. The circuit is defined as R0-p(R1-Wo1,CPE1), so this should be a length-6 list
 def constrainedRandlesFit(dataDict : dict, firstParams : list):
 
     # gather eis keys by experiment time using orderPickles as the template
