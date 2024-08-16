@@ -146,6 +146,11 @@ class Database:
         direction = params['collectionDirection']
         modeStrings = []
 
+        # short circuit in the simplest case and default to 'voltage' to maintain backward compatibility
+        if mode == 'transmission' and direction == 'forward':
+            return 'voltage'
+
+        # in other cases, build the more complex labels
         if mode == 'transmission' or mode == 'both':
             modeStrings.append(baseString + 'transmission_')
         if mode == 'pulse-echo' or mode == 'both':

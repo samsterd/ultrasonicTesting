@@ -355,8 +355,9 @@ class Picoscope():
             case 'transmission':
                 match direction:
                     case 'forward':
+                        # we will break the naming conventions for the transmission forward case to maintain backward compatibility
                         buffermVA, buffermVB, waveTime = self.runRapidBlock(direction)
-                        returnDict['voltage_transmission_forward'] = buffermVB
+                        returnDict['voltage'] = buffermVB
                         returnDict['time'] = waveTime
                         return returnDict
                     case 'reverse':
