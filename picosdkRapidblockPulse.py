@@ -53,11 +53,9 @@ import matplotlib.pyplot as plt
 
 # Control of picoscope handled by a custom class
 # Connection data is stored as class variables and connection/setup/running are handled by class functions
-# TODO: add tests (check cHandle is generated, errors are properly raised)
 class Picoscope():
 
     # initializing object requires experimental parameters as input
-    #TODO: setup function needs to be moved outside of init since it may need to be called multiple times
     def __init__(self,params: dict):
 
         self.params = params
@@ -288,7 +286,6 @@ class Picoscope():
         # LpReady = None (not used)
         # pParameter = None (not used)
         self.runblock = ps.ps2000aRunBlock(self.cHandle, 0, self.samples, self.timebase, 0, None, 0, None, None)
-        #TODO: add better error handling
         assert_pico_ok(self.runblock)
 
         #Wait until data collection is finished
@@ -343,7 +340,6 @@ class Picoscope():
     # a wrapper for the runRapidBlock() function that manages calls and returns
     # uses the experimental parameters saved as self.params, so it requires no inputs
     # outputs a dict with keys labeling the data and values being arrays of time or voltage data
-    # todo: create a wrapper function for the runpico function
     # needs to take in parameters, run self.runRapidBlock() appropriately (i.e. double for direction = 'both')
     # then sort how the data is returned based on collectionMode and collectionDirection
     # return all data as a list of arrays and also add a list of strings that label the data?

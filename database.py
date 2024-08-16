@@ -115,7 +115,6 @@ class Database:
 
         # acoustics is name of TABLE. Not sure if we want this hardcoded
         # general table structure that is true in all experiments
-        #TODO: make voltage columns vary depending on mode and direction
         initTable = "CREATE TABLE IF NOT EXISTS acoustics (\n"
 
         voltageString = self.generateVoltageString(params)
@@ -164,7 +163,6 @@ class Database:
         return dirStrings
 
     # initialize table to record oscilloscope parameters
-    #TODO: add separate column for new parameters (mode, direction, autrange)
     def parameter_table_initializer(self, params : dict):
         initTable = '''CREATE TABLE IF NOT EXISTS parameters (
             time_started REAL PRIMARY KEY,
@@ -183,11 +181,9 @@ class Database:
         return initTable
 
     # Generates a database query for writing the experimental parameters
-    #TODO: write in updated params from above function
     def write_parameter_table(self, params : dict):
 
         # copy over parameters into a separate dict. This isn't the best way to do this and really exposes some bad namespace choices :(
-        # TODO: return to this and improve it
         parameters = {}
         parameters['time_started'] = time.time()
         parameters['measure_time'] = params['measureTime']
@@ -206,11 +202,8 @@ class Database:
 
     # Parse query takes a dict and turns it into an SQL-readable format for writing the data
     # returns a query string and the values as a list to be executed on the db connection
-    #TODO: update this to more efficient handling of array/text conversion (json dump voodoo)
-    # TODO: register encoder/decoder for numpy arrays
     @staticmethod
     def parse_query(inputDict: dict, table: str = 'acoustics'):
-        #TODO: update this approach. Also using ? for data, not string formatting, is best practice
 
         dictKeys = inputDict.keys()
         keyString = ', '.join([key for key in dictKeys])
