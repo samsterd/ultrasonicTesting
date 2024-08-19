@@ -1,5 +1,5 @@
 import json
-import picosdkRapidblockPulse as picoscope
+import picoscope as picoscope
 import ultratekPulser as utp
 import time
 import tqdm

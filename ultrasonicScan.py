@@ -8,7 +8,7 @@ import json
 from tqdm import tqdm
 from database import Database
 import pickleJar as pj
-import picosdkRapidblockPulse as picoscope
+import picoscope as picoscope
 
 # Runs a 2D scan, taking ultrasonic pulse data at every point, and saves to the specified folder
 # Inputs: parameters specified above

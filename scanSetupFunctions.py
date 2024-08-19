@@ -9,7 +9,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import time
-import picosdkRapidblockPulse as picoscope
+import picoscope as picoscope
 
 
 # Function to test collection parameters
