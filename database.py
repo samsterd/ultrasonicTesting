@@ -1,55 +1,9 @@
-## Modified from previous code
-# TODO: modify style to bring in line with rest of project
-
-# Goals:
-# 1) Handle multiple incoming voltage arrays (for simultaneous pulse-echo and transmission measurements)
-#       while clearly labeling with minimal code on experiment side
-# 2) Read/write numpy arrays directly as binary blobs by writing an enocoder/decoder
-#       a) this must be updated in both the Database class and sqliteUtils
-#       b) consider merging some sqliteUtils functions into Database class
-# 3) Maintain backward compatibility:
-#       a) add saving option for string, binary, or both
-#       b)
-
-
-# For 2)
-# Include: detect_types=sqlite3.PARSE_DECLTYPES when making db connections
-# code from stackexchange: https://stackoverflow.com/questions/18621513/python-insert-numpy-array-into-sqlite3-database
-# import numpy as np
-# import io
-#
-# def adaptArray(arr):
-#     """
-#     http://stackoverflow.com/a/31312102/190597 (SoulNibbler)
-#     """
-#     out = io.BytesIO()
-#     np.save(out, arr)
-#     out.seek(0)
-#     return sqlite3.Binary(out.read())
-#
-# def convertArray(text):
-#     out = io.BytesIO(text)
-#     out.seek(0)
-#     return np.load(out)
-#
-#
-# # Converts np.array to TEXT when inserting
-# sqlite3.register_adapter(np.ndarray, adaptArray)
-#
-# # Converts TEXT to np.array when selecting
-# sqlite3.register_converter("array", convertArray)
-#
-# x = np.arange(12).reshape(2,6)
-#
-# con = sqlite3.connect(":memory:", detect_types=sqlite3.PARSE_DECLTYPES)
-# cur = con.cursor()
-# cur.execute("create table test (arr array)")
-
 import sqlite3
 import numpy as np
 import io
 import time
 
+#todo: update documentation for overall class
 class Database:
     """Writes to a local database.
 

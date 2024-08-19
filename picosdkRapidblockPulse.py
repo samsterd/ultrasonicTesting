@@ -1,35 +1,4 @@
-# UPGRADE PLAN
-# Goal is to implement pulse-echo mode while also updating the code
-# Install picoSDK locally
-#   this part sucks
-#   verify with hardware first before overhauling!
-#
-# First overhaul: set up oscilloscope class Picoscope
-#   picoData dict should be stored as class variables(o)
-#   functions should be class functions (o)
-#   openPicoscope and setupPicoMeasurement should be taken over by the __init__ function(o)
-#       __init__ should take the experimental params dict from runUltrasonicExperiment as an input(o)
-#   runPicoMeasurement should be a class function that also takes the params dict as an argument(o)
-#   closePicoscope should be implemented as a class function as well(o)
-#   Replace all previous picoscope functions in other files with the new implementation, test it
-#       these will be in scanSetupFunctions(o), repeatPulse(o), and ultrasonicScan(o)
-#   wish list:
-#       better error handling
-#           currently sending errors through assert_pico_ok which raises assertion errors when something breaks
-#           these should be handled through a popup window in the GUI in the executeExperiment windows
-#       better handling of timebase/experiment time interconversion
-
-# Next: refactor code to enable pulse-echo mode
-#   need to read oscilloscope documentation to verify 300V pulse is safe!
-#   rewire things
-#       trigger goes to same channel, but need a BNC junction to connect pulser TX to transducer and picoscope
-#   (if possible) collect data from the trigger channel A
-#       allocate memory buffers for channel A data
-#       allow option of collecting transmission, pulse-echo, or both
-#   add pulse-echo to interface
-#       add option to params dict
-#       add to GUI (relevant experiment windows as well as executeExperiment functions)
-
+#TODO: update documentation here
 # Interface to interact with Picoscope 2208B and collect rapid block data from a simple trigger
 # Intended to replace pulse.py for ultrasonic testing
 # General program flow:
@@ -102,7 +71,7 @@ class Picoscope():
     # 1) Set voltage limits (convert voltage to voltage index)
     # x*2) Run setchannel functions
     # 3) Calculate timebase, delay intervals
-    # x*4) Set trigger
+    # 4) Set trigger
     #RUN PROCESS
     # 5) Create pointers/memory buffers
     #   a) Number of Samples
@@ -120,7 +89,7 @@ class Picoscope():
     #   use 'collectionMode' and 'directionality' to assign which channel is transmission and which is echo
     #       -for directionality == 'both' it needs to run twice - maybe have that as a wrapper to setup/run? or implement in experiment function at higher abstraction?
     #    (time setup function) make setup part of run, not init
-    def setupPicoMeasurement(self,  direction = 'forward'):
+    def setupPicoMeasurement(self):
 
         #Retrieve important parameters for later use
         cHandle = self.cHandle
@@ -141,8 +110,8 @@ class Picoscope():
         # Convert delay time (in us) to delay samples
         self.delayIntervals = math.floor((measureDelay * 1000) / self.timeInterval)
 
-        # set channels and triggers based on collectionMode and direction
-        setErrorCheck = self.setChannels(direction)
+        # set channels and triggers
+        setErrorCheck = self.setChannels()
         if setErrorCheck == -1:
             assert_pico_ok(self.setChA)
 
@@ -166,13 +135,9 @@ class Picoscope():
 
         return voltageIndex
 
-    # helper function to run ps2000aSetChannel appropriately depending on the input direction
-    # Inputs direction, which is either 'forward' or 'reverse'
-    # forward: A is pulser, B is transmission receiver
-    # reverse: B is pulser, A is transmission receiver
-    # trigger is set on the pulser channel
+    # helper function to run ps2000aSetChannel with the data on channel A and trigger on B
     # return -1 and print error message for all other input
-    def setChannels(self, direction : str):
+    def setChannels(self):
 
         # input for ps2000aSetChannel is as follows:
         # handle = chandle
@@ -190,17 +155,9 @@ class Picoscope():
         # Direction = ps2000a_Above = 0
         # Delay = delayIntervals
         # autoTrigger_ms = 1
-        if direction == 'forward':
-            self.setChA = ps.ps2000aSetChannel(self.cHandle, 0, 1, 1, self.voltageIndexP, 0)
-            self.setChB = ps.ps2000aSetChannel(self.cHandle, 1, 1, 1, self.voltageIndexT, 0)
-            self.trigger = ps.ps2000aSetSimpleTrigger(self.cHandle, 1, 0, 10000, 0, self.delayIntervals, 10)
-        elif direction == 'reverse':
-            self.setChA = ps.ps2000aSetChannel(self.cHandle, 0, 1, 1, self.voltageIndexT, 0)
-            self.setChB = ps.ps2000aSetChannel(self.cHandle, 1, 1, 1, self.voltageIndexP, 0)
-            self.trigger = ps.ps2000aSetSimpleTrigger(self.cHandle, 1, 1, 10000, 0, self.delayIntervals, 10)
-        else:
-            print("Picoscope setChannels error: input direction is \"" + direction + "\" but only \"forward\" and \"reverse\" are accepted.")
-            return -1
+        self.setChA = ps.ps2000aSetChannel(self.cHandle, 0, 1, 1, self.voltageIndexP, 0)
+        self.setChB = ps.ps2000aSetChannel(self.cHandle, 1, 1, 1, self.voltageIndexT, 0)
+        self.trigger = ps.ps2000aSetSimpleTrigger(self.cHandle, 1, 0, 10000, 0, self.delayIntervals, 10)
 
         #error check setting channels
         if self.setChA != 0 or self.setChB != 0 or self.trigger != 0:
@@ -211,14 +168,12 @@ class Picoscope():
         return 0
 
     # runPicoMeasurement runs a rapidblock measurement on the picoscope and returns the waveform data
-    #   Inputs are the picoData dict. Note that setupPicoMeasurement must have been run or the dict will not have necessary fields informed and errors will occur
-    #   Second input is the number of waveforms to collect in rapid block. Choosing a larger number will result in more waves to average,
-    #       but may use up memory. The Picoscope2208B has 64MS buffer memory w/ 2 channels, meaning it can store ~64000 waves with 1000 samples/wave
-    #   Returns a numpy array of the average of the numberOfWaves
-    def runRapidBlock(self,  direction = 'forward'):
+    # Runs measurement based on parameters in self.params
+    # Returns an array of voltages and an array of times
+    def runRapidBlock(self):
 
         # run setup first
-        self.setupPicoMeasurement(direction)
+        self.setupPicoMeasurement()
 
         #TODO: add error checking here, need to assert that all necessary self.picoData fields are informed
         #these include: cHandle, timebase, numberOfSamples, all channel and trigger statuses
@@ -307,7 +262,7 @@ class Picoscope():
 
         #Calculate the average of the waveform values stored in the buffer
         bufferMeanA = np.mean(bufferArrayChannelA, axis = 0)
-        bufferMeanB = np.mean(bufferArrayChannelB, axis = 0)
+        # bufferMeanB = np.mean(bufferArrayChannelB, axis = 0)
 
         # Make sure the picoscope is stopped
         self.stop = ps.ps2000aStop(self.cHandle)
@@ -321,7 +276,7 @@ class Picoscope():
 
         # Then convert the mean data array from ADC to mV using the sdk function
         buffermVA = np.array(adc2mV(bufferMeanA, self.voltageIndexP, maxADC))
-        buffermVB = np.array(adc2mV(bufferMeanB, self.voltageIndexT, maxADC))
+        # buffermVB = np.array(adc2mV(bufferMeanB, self.voltageIndexT, maxADC))
 
         #Create the time data (i.e. the x-axis) using the time intervals, numberOfSamples, and delay time
         timeInterval = self.timeInterval
@@ -335,14 +290,12 @@ class Picoscope():
         del bufferArrayChannelA
 
         # return data all data
-        return buffermVA, buffermVB, waveTime
+        return buffermVA, waveTime
 
-    # a wrapper for the runRapidBlock() function that manages calls and returns
+    # a wrapper for the runRapidBlock() and multiplexer functions that manages measurements based on direction and collectionMode
     # uses the experimental parameters saved as self.params, so it requires no inputs
     # outputs a dict with keys labeling the data and values being arrays of time or voltage data
-    # needs to take in parameters, run self.runRapidBlock() appropriately (i.e. double for direction = 'both')
-    # then sort how the data is returned based on collectionMode and collectionDirection
-    # return all data as a list of arrays and also add a list of strings that label the data?
+    # this data dict can be fed directly into Database.writeData(dict) to save data
     def runPicoMeasurement(self):
 
         collectionMode = self.params['collectionMode']
