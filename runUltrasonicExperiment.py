@@ -56,11 +56,27 @@ experimentParams = {
     'waves' : 1000,                                  # Number of waves to collect and average
     'samples': 1000,                                  # Number of data points per wave
     'halfCycles' : 16,                               # Tone burst pulser only. Number of half-cycles in a tone burst pulse. Minimum 1, maximum 32
+
+    ##############################################################################################
+    ######################## Advanced Options ####################################################
+    ############# Parameters for multiplexed measurements ########################################
+    ##############################################################################################
+
+    'multiplex' : False,                            # Will the multiplexer be used in the measurement
+                                                    # If set to False, all other parameters in this section are ignored
+                                                    # and the system is assumed to be wired without the multiplexer (trigger to Channel B, receiver or RF data to Channel A)
     'collectionMode': 'pulse-echo',                 #transmission/pulse-echo/both
     'collectionDirection' : 'forward',              # Specifies the channels used for the transmitting and receiving transducers
                                                     # 'forward' pulses on Channel A and (for collectionMode = transmision or both) collects on Channel B
                                                     # 'reverse' pulses on Channel B and collects on Channel A
                                                     # 'both' repeats the measurement in both directions
+    'txAddress' : (0, 0),                           # Multiplexer addresses for all of the relevant channels
+    'picoAddress' : (1, 0),                         #   Form is (module #, switch #)
+    'rfAddress' : (1, 1),                           #   NOTE: all data channels (RF, transducer receive) should be on the same module as the picoscope
+    't0PulseAddress' : (0, 2),                      #         and all pulsing transducer channels should be on the same module as the TX (pulser output)
+    't0ReceiveAddress' : (1, 2),                    #   If you are not using a particular channel, using None as the value will
+    't1PulseAddress' : (0, 3),                      #   will enable error checking that the channels used are compatible with the chosen
+    't1ReceiveAddress' : (1,3),                     #   collectionMode and collectionDirection
 
     ################################################################################
     ########################### Saving Names ##########################################
@@ -103,6 +119,7 @@ experimentParams = {
     'pulserPort' : '/dev/ttyUSB0',                          # Ultratek pulser port name
     'scannerPort' : '/dev/ttyUSB1',                         # Ender port name
     'dllFile' : 'C://USUTSDK//USBUTSDKC//USBUT.dll',        # Only used for 'pulserType' : 'tone burst'. Location of USBUT350 pulser SDK
+    'multiplexerPort' : '/dev/ttyUSB0',                     # Only used if 'multiplexer': True
 
     ##################################################################################
     ######################### Scanner Size Parameters ################################
