@@ -70,6 +70,8 @@ experimentParams = {
                                                     # 'forward' pulses on Channel A and (for collectionMode = transmision or both) collects on Channel B
                                                     # 'reverse' pulses on Channel B and collects on Channel A
                                                     # 'both' repeats the measurement in both directions
+    'voltageOffset' : 0.0,                          # Voltage offset applied to pulse-echo measurements to fix large baseline added by pulser output
+    'calculateVoltageOffset' : True,                   # Use function calculateOffset() before the first measurement to calculate a good echoOffset
     'rfAddress': (1, 1),                            # Multiplexer addresses for all of the relevant channels
     't0PulseAddress': (0, 2),                       #   Form is (module #, switch #)
     't0ReceiveAddress': (1, 2),                     #   NOTE: all data channels (RF, transducer receive) should be on the same module as the picoscope

@@ -89,7 +89,7 @@ class Picoscope():
     #   use 'collectionMode' and 'directionality' to assign which channel is transmission and which is echo
     #       -for directionality == 'both' it needs to run twice - maybe have that as a wrapper to setup/run? or implement in experiment function at higher abstraction?
     #    (time setup function) make setup part of run, not init
-    def setupPicoMeasurement(self):
+    def setupPicoMeasurement(self, mode):
 
         #Retrieve important parameters for later use
         cHandle = self.cHandle
@@ -98,8 +98,16 @@ class Picoscope():
         self.samples = self.params['samples']
         measureTime = self.params['measureTime']
 
-        # get voltage indices from input voltage ranges
-        self.voltageIndex = self.voltageIndexFromRange(voltageRange)
+        # set mode-dependent parameters: voltageIndex and voltageOffset
+        # voltageIndex: get voltage indices from input voltage ranges for transmission measurement
+        #   pulse-echo should be set to 1 V (index = 6) since the signal is optimized by pulser gain instead
+        # voltageOffset: 0 for transmission, params['echoOffset
+        if mode == 'transmission':
+            self.voltageIndex = self.voltageIndexFromRange(voltageRange)
+            self.voltageOffset = 0
+        elif mode == 'echo':
+            self.voltageIndex = 6
+            self.voltageOffset = self.params['voltageOffset']
 
         # calculate and save measurement parameters (timebase, timeinterval, samples, delayintervals)
         # Calculate timebase and timeInterval (in ns) by making a call to a helper function
@@ -145,7 +153,7 @@ class Picoscope():
         # range = voltageIndex
         # analogue offset = 0 V
         # todo: look into analog offset for pulse-echo measurements
-        self.setChA = ps.ps2000aSetChannel(self.cHandle, 0, 1, 1, self.voltageIndex, 0)
+        self.setChA = ps.ps2000aSetChannel(self.cHandle, 0, 1, 1, self.voltageIndex, self.voltageOffset)
         self.setChB = ps.ps2000aSetChannel(self.cHandle, 1, 1, 1, 6, 0)
         # Input for ps2000aSetTrigger is as follow:
         # cHandle = cHandle
@@ -178,7 +186,7 @@ class Picoscope():
             multiplexer.setMuxConfiguration(mode, direction)
 
         # run setup first
-        self.setupPicoMeasurement()
+        self.setupPicoMeasurement(mode)
 
         #TODO: add error checking here, need to assert that all necessary self.picoData fields are informed
         #these include: cHandle, timebase, numberOfSamples, all channel and trigger statuses
