@@ -462,7 +462,7 @@ class Picoscope():
         tolerance = 0.95
         voltageTolerances = tolerance * voltageLimits
 
-        currentLimit = self.params['voltageRangeT']
+        currentLimit = self.params['voltageRange']
         currentTolerance = tolerance * currentLimit
 
         # collect initial waveform and find maximum
@@ -493,7 +493,7 @@ class Picoscope():
 
             # if not, setup a new measurement with the tighter voltage limit and return that data
             else:
-                self.params['voltageRangeT'] = limit
+                self.params['voltageRange'] = limit
                 waveform = self.runPicoMeasurement(multiplexer)
                 return waveform
 
@@ -509,7 +509,7 @@ class Picoscope():
 
             # move to the next higher voltage limit and try again
             else:
-                self.params['voltageRangeT'] = voltageLimits[rangeIndex + 1]
+                self.params['voltageRange'] = voltageLimits[rangeIndex + 1]
                 return self.voltageRangeFinder(multiplexer)
             
     # helper function that finds the maximum voltage from transmission data
