@@ -15,8 +15,6 @@ class Mux():
             return -1
 
         # gather addresses
-        self.tx = params['txAddress']
-        self.pico = params['picoAddress']
         self.rf = params['rfAddress']
         self.t0p = params['t0PulseAddress']
         self.t0r = params['t0ReceiveAddress']
@@ -26,11 +24,10 @@ class Mux():
         # define mode/direction combinations in terms of switches that are on
         # self.tx and self.pico are added to all combinations since they are required to run an experiment
         # this data is used in self.setMuxConfiguration but is more convenient to define in __init__
-        txPico = [self.tx, self.pico]
-        self.transForward = [self.t0p, self.t1r] + txPico
-        self.transReverse = [self.t1p, self.t0r] + txPico
-        self.echoForward = [self.t0p, self.rf] + txPico
-        self.echoReverse = [self.t1p, self.rf] + txPico
+        self.transForward = [self.t0p, self.t1r]
+        self.transReverse = [self.t1p, self.t0r]
+        self.echoForward = [self.t0p, self.rf]
+        self.echoReverse = [self.t1p, self.rf]
 
         # ensure there are no dangerous or poorly formed address combinations in the input
         self.errorCheckAddresses(params)
@@ -157,12 +154,13 @@ class Mux():
     # or if the experiment specified in params requires a component that has a (None, None) address
     def errorCheckAddresses(self, params):
 
-        # check that pulser and picoscope are not on the same module
-        txMod = self.tx[0]
-        picoMod = self.pico[0]
-        if txMod == picoMod:
-            raise MuxError("Unsafe combination of multiplexer addresses detected. Please ensure that the txAddress is"
-                           " not on the same module as the picoAddress and retry.")
+        # check that the receiving and pulsing transducer switches are on separate modules
+        if self.t0r[0] == self.t0p[0] or self.t0r[0] == self.t1p[0]:
+            raise MuxError("Unsafe combination of multiplexer addresses detected. Please ensure that the t0ReceiveAddress is"
+                           " not on the same module as any transducer pulse address.")
+        if self.t1r[0] == self.t0p[0] or self.t1r[0] == self.t1p[0]:
+            raise MuxError("Unsafe combination of multiplexer addresses detected. Please ensure that the t1ReceiveAddress is"
+                           " not on the same module as any transducer pulse address.")
 
         # check that requested collectionMode and collectionDirection do not require a None address
         # can't think of a clever way to do it so we'll brute force it. It only needs to be done once per experiment so optimization isn't critical

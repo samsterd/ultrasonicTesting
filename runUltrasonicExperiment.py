@@ -70,13 +70,13 @@ experimentParams = {
                                                     # 'forward' pulses on Channel A and (for collectionMode = transmision or both) collects on Channel B
                                                     # 'reverse' pulses on Channel B and collects on Channel A
                                                     # 'both' repeats the measurement in both directions
-    'txAddress' : (0, 0),                           # Multiplexer addresses for all of the relevant channels
-    'picoAddress' : (1, 0),                         #   Form is (module #, switch #)
-    'rfAddress' : (1, 1),                           #   NOTE: all data channels (RF, transducer receive) should be on the same module as the picoscope
-    't0PulseAddress' : (0, 2),                      #         and all pulsing transducer channels should be on the same module as the TX (pulser output)
-    't0ReceiveAddress' : (1, 2),                    #   If you are not using a particular channel, using None as the value will
-    't1PulseAddress' : (0, 3),                      #   will enable error checking that the channels used are compatible with the chosen
-    't1ReceiveAddress' : (1,3),                     #   collectionMode and collectionDirection
+    'rfAddress': (1, 1),                            # Multiplexer addresses for all of the relevant channels
+    't0PulseAddress': (0, 2),                       #   Form is (module #, switch #)
+    't0ReceiveAddress': (1, 2),                     #   NOTE: all data channels (RF, transducer receive) should be on the same module as the picoscope
+    't1PulseAddress': (0, 3),                       #         and all pulsing transducer channels should be on the same module as the TX (pulser output)
+    't1ReceiveAddress': (1, 3),                     #   If you are not using a particular channel, using None as the value will
+                                                    #   will enable error checking that the channels used are compatible with the chosen
+                                                    #   collectionMode and collectionDirection
 
     ################################################################################
     ########################### Saving Names ##########################################
