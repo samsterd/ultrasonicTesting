@@ -512,7 +512,11 @@ class Picoscope():
         else:
             match direction:
                 case 'forward':
-                    return np.max(waveDict['voltage_transmission_forward'])/1000
+                    try:
+                        # first try to handle case of forward transmission only, which uses 'voltage' as the key for backward compatibility
+                        return np.max(waveDict['voltage'])/1000
+                    except KeyError:
+                        return np.max(waveDict['voltage_transmission_forward'])/1000
                 case 'reverse':
                     return np.max(waveDict['voltage_transmission_reverse'])/1000
                 case 'both':
