@@ -37,7 +37,6 @@ class Mux():
 
         # set the multiplexer to answerback mode to ensure all commands are received
         self.writeToMux('A 1 73')
-        return 0
 
     def closeMux(self):
 
@@ -75,6 +74,8 @@ class Mux():
     # runs the 'L# # #' command, which opens the specified switch
     # inputs a switch address tuple
     def openSwitch(self, switch):
+
+        #todo: check that there is no None in the switch
 
         # convert switch address to command string
         commandString = "L0 " + str(switch[0]) + " " + str(switch[1])
@@ -127,7 +128,7 @@ class Mux():
         elif mode == 'echo' and direction == 'reverse':
             self.openSwitches(self.echoReverse)
         else:
-            print("Mux.setMuxConfiguration: Invalid mode/direction input. Only valid values are mode = 'transmission' or 'echo'"
+            print("Mux.setMuxConfiguration: Invalid mode/direction input. Only valid values are mode = 'transmission' or 'echo' "
                   "and direction = 'forward' or 'reverse'.\nInputs were mode = " + mode + " and direction = " + direction + "\nAction was aborted.")
             return -1
         return 0
@@ -142,7 +143,10 @@ class Mux():
         picoMod = self.pico[0]
         if txMod == picoMod:
             raise MuxError("Unsafe combination of multiplexer addresses detected. Please ensure that the txAddress is"
-                           "not on the same module as the picoAddress and retry.")
+                           " not on the same module as the picoAddress and retry.")
+
+        #TODO: add check for address overlap
+
 
         # check that requested collectionMode and collectionDirection do not require a None address
         # can't think of a clever way to do it so we'll brute force it. It only needs to be done once per experiment so optimization isn't critical
