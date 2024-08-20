@@ -17,7 +17,7 @@ from picosdk.ps2000a import ps2000a as ps
 import numpy as np
 import math
 from picosdk.functions import adc2mV, assert_pico_ok
-import matplotlib.pyplot as plt
+import mux
 
 
 # Control of picoscope handled by a custom class
@@ -168,9 +168,15 @@ class Picoscope():
         return 0
 
     # runPicoMeasurement runs a rapidblock measurement on the picoscope and returns the waveform data
-    # Runs measurement based on parameters in self.params
+    # Runs measurement based on parameters in self.params. Inputs a multiplexer object, a direction, and a mode
+    #   If no multiplexer is used (multiplexer = None) these inputs are ignored. Otherwise, the multiplexer is configured
+    #   before running the experiment
     # Returns an array of voltages and an array of times
-    def runRapidBlock(self):
+    def runRapidBlock(self, multiplexer = None, mode = 'transmission', direction = 'forward'):
+
+        # configure multiplexer, if applicable
+        if multiplexer != None:
+            multiplexer.setMuxConfiguration(mode, direction)
 
         # run setup first
         self.setupPicoMeasurement()
@@ -293,13 +299,19 @@ class Picoscope():
         return buffermVA, waveTime
 
     # a wrapper for the runRapidBlock() and multiplexer functions that manages measurements based on direction and collectionMode
-    # uses the experimental parameters saved as self.params, so it requires no inputs
+    # uses the experimental parameters saved as self.params
+    # inputs a multiplexer object if params['multiplexer'] = True, otherwise defaults to None
     # outputs a dict with keys labeling the data and values being arrays of time or voltage data
     # this data dict can be fed directly into Database.writeData(dict) to save data
-    def runPicoMeasurement(self):
+    def runPicoMeasurement(self, multiplexer = None):
 
-        collectionMode = self.params['collectionMode']
-        direction = self.params['collectionDirection']
+        # if a multiplexer is not provided, assume default mode = transmission and direction = forward
+        if multiplexer != None:
+            collectionMode = self.params['collectionMode']
+            direction = self.params['collectionDirection']
+        else:
+            collectionMode = 'transmission'
+            direction = 'forward'
         returnDict = {}
 
         # match all cases of collectionMode and direction
@@ -309,20 +321,20 @@ class Picoscope():
                 match direction:
                     case 'forward':
                         # we will break the naming conventions for the transmission forward case to maintain backward compatibility
-                        buffermVA, buffermVB, waveTime = self.runRapidBlock(direction)
-                        returnDict['voltage'] = buffermVB
+                        voltage, waveTime = self.runRapidBlock(multiplexer, collectionMode, direction)
+                        returnDict['voltage'] = voltage
                         returnDict['time'] = waveTime
                         return returnDict
                     case 'reverse':
-                        buffermVA, buffermVB, waveTime = self.runRapidBlock(direction)
-                        returnDict['voltage_transmission_reverse'] = buffermVA
+                        voltage, waveTime = self.runRapidBlock(multiplexer, collectionMode, direction)
+                        returnDict['voltage_transmission_reverse'] = voltage
                         returnDict['time'] = waveTime
                         return returnDict
                     case 'both':
-                        buffermVAf, buffermVBf, waveTimef = self.runRapidBlock('forward')
-                        buffermVAr, buffermVBr, waveTimer = self.runRapidBlock('reverse')
-                        returnDict['voltage_transmission_forward'] = buffermVBf
-                        returnDict['voltage_transmission_reverse'] = buffermVAr
+                        voltagef, waveTimef = self.runRapidBlock(multiplexer, collectionMode, 'forward')
+                        voltager, waveTimer = self.runRapidBlock(multiplexer, collectionMode, 'reverse')
+                        returnDict['voltage_transmission_forward'] = voltagef
+                        returnDict['voltage_transmission_reverse'] = voltager
                         returnDict['time'] = waveTimef  # waveTime is constant for either measurement, so choice is arbitrary
                         return returnDict
                     case _:
@@ -332,20 +344,20 @@ class Picoscope():
             case 'pulse-echo':
                 match direction:
                     case 'forward':
-                        buffermVA, buffermVB, waveTime = self.runRapidBlock(direction)
-                        returnDict['voltage_echo_forward'] = buffermVA
+                        voltage, waveTime = self.runRapidBlock(multiplexer, collectionMode, direction)
+                        returnDict['voltage_echo_forward'] = voltage
                         returnDict['time'] = waveTime
                         return returnDict
                     case 'reverse':
-                        buffermVA, buffermVB, waveTime = self.runRapidBlock(direction)
-                        returnDict['voltage_echo_reverse'] = buffermVB
+                        voltage, waveTime = self.runRapidBlock(multiplexer, collectionMode, direction)
+                        returnDict['voltage_echo_reverse'] = voltage
                         returnDict['time'] = waveTime
                         return returnDict
                     case 'both':
-                        buffermVAf, buffermVBf, waveTimef = self.runRapidBlock('forward')
-                        buffermVAr, buffermVBr, waveTimer = self.runRapidBlock('reverse')
-                        returnDict['voltage_echo_forward'] = buffermVAf
-                        returnDict['voltage_echo_reverse'] = buffermVBr
+                        voltagef, waveTimef = self.runRapidBlock(multiplexer, collectionMode, 'forward')
+                        voltager, waveTimer = self.runRapidBlock(multiplexer, collectionMode, 'reverse')
+                        returnDict['voltage_echo_forward'] = voltagef
+                        returnDict['voltage_echo_reverse'] = voltager
                         returnDict['time'] = waveTimef
                         return returnDict
                     case _:
@@ -355,25 +367,29 @@ class Picoscope():
             case 'both':
                 match direction:
                     case 'forward':
-                        buffermVA, buffermVB, waveTime = self.runRapidBlock(direction)
-                        returnDict['voltage_echo_forward'] = buffermVA
-                        returnDict['voltage_transmission_forward'] = buffermVB
-                        returnDict['time'] = waveTime
+                        voltaget, waveTimet = self.runRapidBlock(multiplexer, 'transmission', direction)
+                        voltagee, waveTimer = self.runRapidBlock(multiplexer, 'echo', direction)
+                        returnDict['voltage_echo_forward'] = voltagee
+                        returnDict['voltage_transmission_forward'] = voltaget
+                        returnDict['time'] = waveTimet
                         return returnDict
                     case 'reverse':
-                        buffermVA, buffermVB, waveTime = self.runRapidBlock(direction)
-                        returnDict['voltage_echo_reverse'] = buffermVB
-                        returnDict['voltage_transmission_reverse'] = buffermVA
-                        returnDict['time'] = waveTime
+                        voltaget, waveTimet = self.runRapidBlock(multiplexer, 'transmission', direction)
+                        voltagee, waveTimer = self.runRapidBlock(multiplexer, 'echo', direction)
+                        returnDict['voltage_echo_reverse'] = voltagee
+                        returnDict['voltage_transmission_reverse'] = voltaget
+                        returnDict['time'] = waveTimet
                         return returnDict
                     case 'both':
-                        buffermVAf, buffermVBf, waveTimef = self.runRapidBlock('forward')
-                        buffermVAr, buffermVBr, waveTimer = self.runRapidBlock('reverse')
-                        returnDict['voltage_echo_forward'] = buffermVAf
-                        returnDict['voltage_transmission_forward'] = buffermVBf
-                        returnDict['voltage_echo_reverse'] = buffermVBr
-                        returnDict['voltage_transmission_reverse'] = buffermVAr
-                        returnDict['time'] = waveTimef
+                        voltagetf, waveTimetf = self.runRapidBlock(multiplexer, 'transmission', 'forward')
+                        voltageef, waveTimeef = self.runRapidBlock(multiplexer, 'echo', 'forward')
+                        voltagetr, waveTimetr = self.runRapidBlock(multiplexer, 'transmission', 'reverse')
+                        voltageer, waveTimeer = self.runRapidBlock(multiplexer, 'echo', 'reverse')
+                        returnDict['voltage_transmission_forward'] = voltagetf
+                        returnDict['voltage_echo_forward'] = voltageef
+                        returnDict['voltage_transmission_reverse'] = voltagetr
+                        returnDict['voltage_echo_reverse'] = voltageer
+                        returnDict['time'] = waveTimetf
                         return returnDict
                     case _:
                         print(
@@ -436,9 +452,10 @@ class Picoscope():
 
     # Recursively determines the minimum voltage range needed to capture data at the current location
     # Returns the waveform data at the proper rang and the updated params dict
+    # Inputs a multiplexer object. If no multiplexer is used, default to None
     # This should only add extra time if the voltage range has changed from the previous pixel
     # NOTE: this only works for the transmission voltage currently
-    def voltageRangeFinder(self):
+    def voltageRangeFinder(self, multiplexer = None):
 
         # hardcoded voltage limits
         voltageLimits = np.array([0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20])
@@ -451,7 +468,7 @@ class Picoscope():
         currentTolerance = tolerance * currentLimit
 
         # collect initial waveform and find maximum
-        waveDict = self.runPicoMeasurement()
+        waveDict = self.runPicoMeasurement(multiplexer)
         maxV = self.transmissionMaximum(waveDict)
 
         # base case 1 : currentLimit == lowest limit and max < current limit. return waveform
@@ -479,7 +496,7 @@ class Picoscope():
             # if not, setup a new measurement with the tighter voltage limit and return that data
             else:
                 self.params['voltageRangeT'] = limit
-                waveform = self.runPicoMeasurement()
+                waveform = self.runPicoMeasurement(multiplexer)
                 return waveform
 
         # recursion case : max > current tolerance. try again at the next highest voltage limit
@@ -495,7 +512,7 @@ class Picoscope():
             # move to the next higher voltage limit and try again
             else:
                 self.params['voltageRangeT'] = voltageLimits[rangeIndex + 1]
-                return self.voltageRangeFinder()
+                return self.voltageRangeFinder(multiplexer)
             
     # helper function that finds the maximum voltage from transmission data
     # inputs the dict returned from running runPicoMeasurement()

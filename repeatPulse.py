@@ -8,15 +8,20 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from database import Database
 import pickleJar as pj
+import mux
 
 
 def repeatPulse(params):
 
-    # Connect to picoscope & Set up pico measurement
+    # Connect to picoscope, pulser
     pico = picoscope.Picoscope(params)
-    # Connect to picoscope, ender, pulser
-    # picoConnection = picoRapid.openPicoscope()
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
+
+    # connect to multiplexer, if applicable
+    if params['multiplexer']:
+        multiplexer = mux.Mux(params)
+    else:
+        multiplexer = None
 
     # generate filename for current scan
     params['fileName'] = params['experimentFolder'] + '//' + params['experimentName']
@@ -60,9 +65,9 @@ def repeatPulse(params):
 
         # collect data
         if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
-            waveDict = pico.voltageRangeFinder()
+            waveDict = pico.voltageRangeFinder(multiplexer)
         else:
-            wavewaveDict = pico.runPicoMeasurement()
+            wavewaveDict = pico.runPicoMeasurement(multiplexer)
 
         waveDict['time_collected'] = time.time()
         waveDict['collection_index'] = collectionIndex
@@ -101,8 +106,11 @@ def repeatPulse(params):
 
     pbar.close()
 
+    # close instrument and database connections
     pulser.pulserOff()
     pulser.closePulser()
     pico.closePicoscope()
+    if params['multiplexer']:
+        multiplexer.closeMux()
     if params['saveFormat'] == 'sqlite':
         database.connection.close()

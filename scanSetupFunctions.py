@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 import picoscope as picoscope
+import mux
 
 
 # Function to test collection parameters
@@ -22,6 +23,12 @@ def singlePulseMeasure(params):
     # TODO: this is done for compatibility with the linux computer, but Qt5 SHOULD work there too...
     if params['gui'] == False:
         matplotlib.use('TkAgg')
+
+    # connect to multiplexer, if applicable
+    if params['multiplexer']:
+        multiplexer = mux.Mux(params)
+    else:
+        multiplexer = None
 
     # Connect to picoscope & Set up pico measurement
     pico = picoscope.Picoscope(params)
@@ -42,16 +49,18 @@ def singlePulseMeasure(params):
 
     # Run pico measurement
     if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
-        waveDict = pico.voltageRangeFinder()
+        waveDict = pico.voltageRangeFinder(multiplexer)
     else:
-        waveDict = pico.runPicoMeasurement()
+        waveDict = pico.runPicoMeasurement(multiplexer)
 
     # Turn off pulser
     pulser.pulserOff()
 
-    # Close connection to pulser and picoscope
+    # Close connection to pulser, picoscope, and multiplexer
     pulser.closePulser()
     pico.closePicoscope()
+    if params['multiplexer']:
+        multiplexer.closeMux()
 
     if params['gui']:
         return waveDict

@@ -9,6 +9,7 @@ from tqdm import tqdm
 from database import Database
 import pickleJar as pj
 import picoscope as picoscope
+import mux
 
 # Runs a 2D scan, taking ultrasonic pulse data at every point, and saves to the specified folder
 # Inputs: parameters specified above
@@ -21,8 +22,11 @@ def runScan(params):
     if params['saveFormat'] == 'sqlite':
         database = Database(params)
 
-    #Connect to picoscope, ender, pulser#here
-    # picoConnection = picoRapid.openPicoscope()
+    # connect to multiplexer, if applicable
+    if params['multiplexer']:
+        multiplexer = mux.Mux(params)
+    else:
+        multiplexer = None
     
     #openPicoscope and setupPicoMeasurement
     pico = picoscope.Picoscope(params)
@@ -57,9 +61,9 @@ def runScan(params):
 
             #collect data
             if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
-                pixelData = pico.voltageRangeFinder()
+                pixelData = pico.voltageRangeFinder(multiplexer)
             else:
-                pixelData = pico.runPicoMeasurement()
+                pixelData = pico.runPicoMeasurement(multiplexer)
 
             #Add collection metadata
             pixelData['time_collected'] = time.time()
@@ -107,12 +111,15 @@ def runScan(params):
     #Turn off pulser
     pulser.pulserOff()
 
-    #Close connection to pulser, picoscope, database and ender
+    #Close connection to pulser, picoscope, database, multiplexer and scanner
     pulser.closePulser()
     scanner.close()
     pico.closePicoscope()
+    if params['multiplexer']:
+        multiplexer.closeMux()
 
     if params['saveFormat'] == 'sqlite':
         database.connection.close()
         if params['postAnalysis']:
             pj.simplePostAnalysis(params)
+

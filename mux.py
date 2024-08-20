@@ -38,8 +38,10 @@ class Mux():
         # set the multiplexer to answerback mode to ensure all commands are received
         self.writeToMux('A 1 73')
 
+    # close all switches and close serial connection
     def closeMux(self):
 
+        self.clearMux()
         try:
             self.connection.close()
 
