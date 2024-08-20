@@ -94,14 +94,12 @@ class Picoscope():
         #Retrieve important parameters for later use
         cHandle = self.cHandle
         measureDelay = self.params['measureDelay']
-        voltageRangeT = self.params['voltageRangeT']
-        voltageRangeP = self.params['voltageRangeP']
+        voltageRange = self.params['voltageRange']
         self.samples = self.params['samples']
         measureTime = self.params['measureTime']
 
         # get voltage indices from input voltage ranges
-        self.voltageIndexT = self.voltageIndexFromRange(voltageRangeT)
-        self.voltageIndexP = self.voltageIndexFromRange(voltageRangeP)
+        self.voltageIndex = self.voltageIndexFromRange(voltageRange)
 
         # calculate and save measurement parameters (timebase, timeinterval, samples, delayintervals)
         # Calculate timebase and timeInterval (in ns) by making a call to a helper function
@@ -146,6 +144,8 @@ class Picoscope():
         # coupling type = ps2000a_DC = 1
         # range = voltageIndex
         # analogue offset = 0 V
+        self.setChA = ps.ps2000aSetChannel(self.cHandle, 0, 1, 1, self.voltageIndex, 0)
+        self.setChB = ps.ps2000aSetChannel(self.cHandle, 1, 1, 1, 6, 0)
         # Input for ps2000aSetTrigger is as follow:
         # cHandle = cHandle
         # Enable = 1
@@ -155,9 +155,7 @@ class Picoscope():
         # Direction = ps2000a_Above = 0
         # Delay = delayIntervals
         # autoTrigger_ms = 1
-        self.setChA = ps.ps2000aSetChannel(self.cHandle, 0, 1, 1, self.voltageIndexP, 0)
-        self.setChB = ps.ps2000aSetChannel(self.cHandle, 1, 1, 1, self.voltageIndexT, 0)
-        self.trigger = ps.ps2000aSetSimpleTrigger(self.cHandle, 1, 0, 10000, 0, self.delayIntervals, 10)
+        self.trigger = ps.ps2000aSetSimpleTrigger(self.cHandle, 1, 1, 10000, 0, self.delayIntervals, 10)
 
         #error check setting channels
         if self.setChA != 0 or self.setChB != 0 or self.trigger != 0:
@@ -281,7 +279,7 @@ class Picoscope():
         assert_pico_ok(self.maximumValue)
 
         # Then convert the mean data array from ADC to mV using the sdk function
-        buffermVA = np.array(adc2mV(bufferMeanA, self.voltageIndexP, maxADC))
+        buffermVA = np.array(adc2mV(bufferMeanA, self.voltageIndex, maxADC))
         # buffermVB = np.array(adc2mV(bufferMeanB, self.voltageIndexT, maxADC))
 
         #Create the time data (i.e. the x-axis) using the time intervals, numberOfSamples, and delay time
@@ -341,7 +339,7 @@ class Picoscope():
                         print(
                             "Invalid collection direction. Make sure collectionDirection is set to 'forward', 'reverse', or 'both' and retry.")
                         return None
-            case 'pulse-echo':
+            case 'echo':
                 match direction:
                     case 'forward':
                         voltage, waveTime = self.runRapidBlock(multiplexer, collectionMode, direction)
@@ -397,7 +395,7 @@ class Picoscope():
                         return None
             case _:
                 print(
-                    "Invalid collection mode. Make sure collectionMode is set to 'transmission', 'pulse-echo', or 'both' and retry.")
+                    "Invalid collection mode. Make sure collectionMode is set to 'transmission', 'echo', or 'both' and retry.")
                 return None, None
 
 
@@ -464,7 +462,7 @@ class Picoscope():
         tolerance = 0.95
         voltageTolerances = tolerance * voltageLimits
 
-        currentLimit = self.params['voltageRangeT']
+        currentLimit = self.params['voltageRange']
         currentTolerance = tolerance * currentLimit
 
         # collect initial waveform and find maximum
@@ -495,7 +493,7 @@ class Picoscope():
 
             # if not, setup a new measurement with the tighter voltage limit and return that data
             else:
-                self.params['voltageRangeT'] = limit
+                self.params['voltageRange'] = limit
                 waveform = self.runPicoMeasurement(multiplexer)
                 return waveform
 
@@ -511,7 +509,7 @@ class Picoscope():
 
             # move to the next higher voltage limit and try again
             else:
-                self.params['voltageRangeT'] = voltageLimits[rangeIndex + 1]
+                self.params['voltageRange'] = voltageLimits[rangeIndex + 1]
                 return self.voltageRangeFinder(multiplexer)
             
     # helper function that finds the maximum voltage from transmission data
