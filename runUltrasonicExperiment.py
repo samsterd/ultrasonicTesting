@@ -46,11 +46,10 @@ experimentParams = {
     'pulserType' : 'standard',                       # Type of pulser. 'standard' is the single wave CompactPulser. 'tone burst' uses the USBUT350 tone burst pulser
     'measureTime' : 1,                               # Approx measurement time, in us. Note this can be changed by the picoscope time interval based on samples
                                                      #      Changes to the measureTime will be printed in the console when the script is run
-    'measureDelay' : 1,                           # Approx delay after trigger to start measuring, in us
-    'voltageRangeT' : 0.02,                            # Picoscope voltage range for transmission transducer in V. Note this is the total range: 1 V = [-0.5 V, 0.5 V]
+    'measureDelay' : 26,                           # Approx delay after trigger to start measuring, in us
+    'voltageRange' : 1,                            # Picoscope voltage range for transmission transducer in V. Note this is the total range: 1 V = [-0.5 V, 0.5 V]
                                                      # Allowed voltages = (0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20)
-    'voltageRangeP' : 1,                            # voltage range for pulse transducer, in V
-    'voltageAutoRange' : True,                      # Set the oscilloscope to rerun measurements where the voltage range of the wave has significantly changed
+    'voltageAutoRange' : False,                      # Set the oscilloscope to rerun measurements where the voltage range of the wave has significantly changed
                                                      # This enables the tightest possible voltageRange to be used, increasing the accuracy of low intensity signals without cutting off high intensity ones
                                                      # NOTE: this can add significant overhead (2-3x increase in collection time) for each waveform where the range changes
     'waves' : 1000,                                  # Number of waves to collect and average
