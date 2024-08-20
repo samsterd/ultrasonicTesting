@@ -75,10 +75,27 @@ class Mux():
     # inputs a switch address tuple
     def openSwitch(self, switch):
 
-        #todo: check that there is no None in the switch
+        if None in switch:
+            raise MuxError("An address containing None was passed to openSwitch. This is not a valid address. Experiment aborted.\n"
+                           "If this error appears during normal operation, please send your experimental parameters to Sam. Congratulations! You have found"
+                           " an interesting edge case to the guardrails.")
 
         # convert switch address to command string
         commandString = "L0 " + str(switch[0]) + " " + str(switch[1])
+        self.writeToMux(commandString)
+        return 0
+
+    # runs the 'U# # #' command, which closes the specified switch
+    # inputs a switch address tuple
+    def closeSwitch(self, switch):
+
+        if None in switch:
+            raise MuxError("An address containing None was passed to closeSwitch. This is not a valid address. Experiment aborted.\n"
+                           "If this error appears during normal operation, please send your experimental parameters to Sam. Congratulations! You have found"
+                           " an interesting edge case to the guardrails.")
+
+        # convert switch address to command string
+        commandString = "U0 " + str(switch[0]) + " " + str(switch[1])
         self.writeToMux(commandString)
         return 0
 
@@ -145,9 +162,6 @@ class Mux():
             raise MuxError("Unsafe combination of multiplexer addresses detected. Please ensure that the txAddress is"
                            " not on the same module as the picoAddress and retry.")
 
-        #TODO: add check for address overlap
-
-
         # check that requested collectionMode and collectionDirection do not require a None address
         # can't think of a clever way to do it so we'll brute force it. It only needs to be done once per experiment so optimization isn't critical
         addressList = []
@@ -164,11 +178,22 @@ class Mux():
             if (dir == 'reverse' or dir == 'both'):
                 addressList = addressList + self.echoReverse
 
-        # iterate through the addressList and raise an error if any of them are None
+        # check for duplicate addresses
+        addressSet = set(addressList)
+        if len(addressSet) != len(addressList):
+            raise MuxError("The input list of addresses contains duplicates. Please ensure no two addresses share the same "
+                           "(module, switch) numbers and try again.")
+
+        # iterate through the addressList and raise an error if any of them are improperly formed or None
         for addr in addressList:
             if None in addr:
                 raise MuxError("The specified collectionMode and collectionDirection require a multiplexer address that contains a None value."
                                "Ensure that all required channels are plugged in and that the input addresses are correct and try again.")
+            if len(addr) != 2:
+                raise MuxError("An input address " + str(addr) + " has the incorrect length. Multiplexer addresses must be tuples of length 2.")
+            for num in addr:
+                if type(num) != int:
+                    raise MuxError("An input address " + str(addr) + " is improperly formatted. All characters in an address must be integers or None.")
         return 0
 
 # Create error class for issues relating to multiplexer configuration and operation
