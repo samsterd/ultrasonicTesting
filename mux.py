@@ -155,10 +155,10 @@ class Mux():
     def errorCheckAddresses(self, params):
 
         # check that the receiving and pulsing transducer switches are on separate modules
-        if self.t0r[0] == self.t0p[0] or self.t0r[0] == self.t1p[0]:
+        if self.t0r[0] != None and (self.t0r[0] == self.t0p[0] or self.t0r[0] == self.t1p[0]):
             raise MuxError("Unsafe combination of multiplexer addresses detected. Please ensure that the t0ReceiveAddress is"
                            " not on the same module as any transducer pulse address.")
-        if self.t1r[0] == self.t0p[0] or self.t1r[0] == self.t1p[0]:
+        if self.t1r[0] != None and (self.t1r[0] == self.t0p[0] or self.t1r[0] == self.t1p[0]):
             raise MuxError("Unsafe combination of multiplexer addresses detected. Please ensure that the t1ReceiveAddress is"
                            " not on the same module as any transducer pulse address.")
 
@@ -179,10 +179,12 @@ class Mux():
                 addressList = addressList + self.echoReverse
 
         # check for duplicate addresses
-        addressSet = set(addressList)
-        if len(addressSet) != len(addressList):
-            raise MuxError("The input list of addresses contains duplicates. Please ensure no two addresses share the same "
-                           "(module, switch) numbers and try again.")
+        #todo: maybe delete this test? there should be duplicates in address list, so check this another way
+        # addressSet = set(addressList)
+        # if len(addressSet) != len(addressList):
+        #     raise MuxError("The input list of addresses contains duplicates. Please ensure no two addresses share the same "
+        #                    "(module, switch) numbers and try again.\n"
+        #                    "If you are getting this error but there are no duplicate numbers, check that the addresses with (None, None) match the input experiment mode and direction.")
 
         # iterate through the addressList and raise an error if any of them are improperly formed or None
         for addr in addressList:

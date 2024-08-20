@@ -61,7 +61,8 @@ experimentParams = {
     ############# Parameters for multiplexed measurements ########################################
     ##############################################################################################
 
-    'multiplex' : False,                            # Will the multiplexer be used in the measurement
+    #todo: add gain option here?
+    'multiplexer' : True,                            # Will the multiplexer be used in the measurement
                                                     # If set to False, all other parameters in this section are ignored
                                                     # and the system is assumed to be wired without the multiplexer (trigger to Channel B, receiver or RF data to Channel A)
     'collectionMode': 'pulse-echo',                 #transmission/pulse-echo/both

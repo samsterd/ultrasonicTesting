@@ -144,6 +144,7 @@ class Picoscope():
         # coupling type = ps2000a_DC = 1
         # range = voltageIndex
         # analogue offset = 0 V
+        # todo: look into analog offset for pulse-echo measurements
         self.setChA = ps.ps2000aSetChannel(self.cHandle, 0, 1, 1, self.voltageIndex, 0)
         self.setChB = ps.ps2000aSetChannel(self.cHandle, 1, 1, 1, 6, 0)
         # Input for ps2000aSetTrigger is as follow:
