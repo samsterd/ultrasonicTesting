@@ -14,8 +14,8 @@ import mux
 def repeatPulse(params):
 
     # Connect to picoscope, pulser
-    pico = picoscope.Picoscope(params)
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
+    pico = picoscope.Picoscope(params, pulser)
 
     # connect to multiplexer, if applicable
     if params['multiplexer']:
@@ -64,10 +64,7 @@ def repeatPulse(params):
         pulseStartTime = time.time()
 
         # collect data
-        if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
-            waveDict = pico.voltageRangeFinder(multiplexer)
-        else:
-            wavewaveDict = pico.runPicoMeasurement(multiplexer)
+        waveDict = pico.runPicoMeasurement(multiplexer)
 
         waveDict['time_collected'] = time.time()
         waveDict['collection_index'] = collectionIndex

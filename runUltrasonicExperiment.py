@@ -49,8 +49,10 @@ experimentParams = {
     'measureDelay' : 26,                           # Approx delay after trigger to start measuring, in us
     'voltageRange' : 1,                            # Picoscope voltage range for transmission transducer in V. Note this is the total range: 1 V = [-0.5 V, 0.5 V]
                                                      # Allowed voltages = (0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20)
-    'voltageAutoRange' : False,                      # Set the oscilloscope to rerun measurements where the voltage range of the wave has significantly changed
+    'autoRange' : False,                            # Set the oscilloscope to rerun measurements where the voltage range of the wave has significantly changed
                                                      # This enables the tightest possible voltageRange to be used, increasing the accuracy of low intensity signals without cutting off high intensity ones
+                                                     # For transmission measurements, this changes the voltage range on the oscilloscope. For echo measurements, this changes the voltage offset on the scope and
+                                                    #  the gain setting on the pulser
                                                      # NOTE: this can add significant overhead (2-3x increase in collection time) for each waveform where the range changes
     'waves' : 1000,                                  # Number of waves to collect and average
     'samples': 1000,                                  # Number of data points per wave
@@ -70,7 +72,11 @@ experimentParams = {
                                                     # 'forward' pulses on Channel A and (for collectionMode = transmision or both) collects on Channel B
                                                     # 'reverse' pulses on Channel B and collects on Channel A
                                                     # 'both' repeats the measurement in both directions
-    'voltageOffset' : 0.0,                          # Voltage offset applied to pulse-echo measurements to fix large baseline added by pulser output
+    'voltageOffsetForward' : 0.0,                   # Voltage offset applied to pulse-echo measurements to fix large baseline added by pulser output
+    'voltageOffsetReverse': 0.0,                    #     Voltage offsets are directional since 1) echo baseline depends heavily on delay time and 2) delay time
+                                                    #     is a function of sample placement and could vary widely between the forward and reverse transducer
+    'gainForward' : 500,                            # Gain setting on pulser, used to maximize the signal of pulse-echo measurements
+    'gainReverse' : 500,                            #  similar to voltageOffsets, these can be set to different values for the forward and reverse directions
     'calculateVoltageOffset' : True,                   # Use function calculateOffset() before the first measurement to calculate a good echoOffset
     'rfAddress': (1, 1),                            # Multiplexer addresses for all of the relevant channels
     't0PulseAddress': (0, 2),                       #   Form is (module #, switch #)

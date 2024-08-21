@@ -30,13 +30,12 @@ def singlePulseMeasure(params):
     else:
         multiplexer = None
 
+    # Open connection to pulser
+    pulser = utp.Pulser(params['pulserType'], pulserPort=params['pulserPort'], dllFile=params['dllFile'])
+
     # Connect to picoscope & Set up pico measurement
     pico = picoscope.Picoscope(params)
 
-    # Open connection to pulser
-    pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
-    # between -120 and 840
-    pulser.setGain(500)
     # Adjust pulser pulsewidth
     pulser.setFrequency(params['transducerFrequency'])
 
@@ -47,11 +46,7 @@ def singlePulseMeasure(params):
     # Turn on the pulser
     pulser.pulserOn()
 
-    # Run pico measurement
-    if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
-        waveDict = pico.voltageRangeFinder(multiplexer)
-    else:
-        waveDict = pico.runPicoMeasurement(multiplexer)
+    waveDict = pico.runPicoMeasurement(multiplexer)
 
     # Turn off pulser
     pulser.pulserOff()

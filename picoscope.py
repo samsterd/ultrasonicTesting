@@ -12,22 +12,44 @@
 #   "openUnit" - a dict containing the picoscope status returns
 
 import ctypes
-import time
+from time import sleep
 from picosdk.ps2000a import ps2000a as ps
 import numpy as np
 import math
 from picosdk.functions import adc2mV, assert_pico_ok
 import mux
 
+# Explanation of measurement process:
+# 1) Picoscope object created using experimental parameters. This establishes the connection to the picoscope
+#   -> This is only run once per experiment
+#   i) openPicoscope establishes connection with the instrument. This can take a second or two
+# 2) For every data point within an experiment:
+#   a) Picoscope.RunPicoMeasurement is called. This sorts the measurement calls based on mode and direction and calls autoRange().
+#      Multiple measurements can be made at a single point if either mode or direction is set to 'both'
+#      It then formats the returned data into a dict suitable for use with Database.writeData()
+#   b) Picoscope.autoRange() determines whether to directly call Picoscope.runRapidBlock() or to use autoRangeFinder, calculateOffset, or optimizeGain
+#       i) voltageRangeFinder() is used for mode = Transmission measurements. If finds the smallest picoscope voltage range
+#          that does not cut off data. It does this by repeatedly calling runRapidBlock with different voltage ranges
+#       ii) calculateOffset() is used for mode = Echo measurements. It determines the picoscope analog offset voltage that
+#           centers the data around 0 V. It does this by calling runRapidBlock once and averaging the first ~50 points and setting them to zero
+#       iii) optimizeGain() is used for mode = Echo measurements. It determines the optimal gain setting on the pulser to
+#           get the signal maximum close to +/- 1 V without going over. It does this by repeatedly calling runRapidBlock with different gain settings
+#   c) Picoscope.runRapidBlock sets up a measurement based on the input parameters and gathers the data from an individual measurement using the picoscope rapid block mode
+#       i) if a multiplexer is being used, it is set to the appropriate configuration using mux.setMuxConfiguration
+#       ii) setupPicoMeasurement is used to set the picoscope channels and triggers to the correct settings, as well as the pulser gain for mode = echo
+#      Data is returned as two equal length numpy arrays (voltage, time)
+# 3) closePicoscope is called when the experiment is finished
 
 # Control of picoscope handled by a custom class
 # Connection data is stored as class variables and connection/setup/running are handled by class functions
 class Picoscope():
 
     # initializing object requires experimental parameters as input
-    def __init__(self,params: dict):
+    # optionally takes a pulser object as an input. This is only used when mode = echo or both and autoRange = True
+    def __init__(self, params: dict, pulser = None):
 
         self.params = params
+        self.pulser = pulser
 
         self.openPicoscope()
         # self.setupPicoMeasurement(measureDelay, voltageRangeT, voltageRangeP, samples, measureTime, collectionDirection)
@@ -89,7 +111,7 @@ class Picoscope():
     #   use 'collectionMode' and 'directionality' to assign which channel is transmission and which is echo
     #       -for directionality == 'both' it needs to run twice - maybe have that as a wrapper to setup/run? or implement in experiment function at higher abstraction?
     #    (time setup function) make setup part of run, not init
-    def setupPicoMeasurement(self, mode):
+    def setupPicoMeasurement(self, mode, direction):
 
         #Retrieve important parameters for later use
         cHandle = self.cHandle
@@ -101,13 +123,19 @@ class Picoscope():
         # set mode-dependent parameters: voltageIndex and voltageOffset
         # voltageIndex: get voltage indices from input voltage ranges for transmission measurement
         #   pulse-echo should be set to 1 V (index = 6) since the signal is optimized by pulser gain instead
-        # voltageOffset: 0 for transmission, params['echoOffset
+        # voltageOffset: 0 for transmission, params['echoOffsetDirection'] for echo
+        # pulser gain is also set for pulse-echo measurements
         if mode == 'transmission':
             self.voltageIndex = self.voltageIndexFromRange(voltageRange)
             self.voltageOffset = 0
         elif mode == 'echo':
             self.voltageIndex = 6
-            self.voltageOffset = self.params['voltageOffset']
+            if direction == 'forward':
+                self.voltageOffset = self.params['voltageOffsetForward']
+                self.pulser.setGain(self.params['gainForward'])
+            else:
+                self.voltageOffset = self.params['voltageOffsetReverse']
+                self.pulser.setGain(self.params['gainReverse'])
 
         # calculate and save measurement parameters (timebase, timeinterval, samples, delayintervals)
         # Calculate timebase and timeInterval (in ns) by making a call to a helper function
@@ -184,9 +212,11 @@ class Picoscope():
         # configure multiplexer, if applicable
         if multiplexer != None:
             multiplexer.setMuxConfiguration(mode, direction)
+            # add 1 ms sleep to ensure switches have changed
+            sleep(0.001)
 
         # run setup first
-        self.setupPicoMeasurement(mode)
+        self.setupPicoMeasurement(mode, direction)
 
         #TODO: add error checking here, need to assert that all necessary self.picoData fields are informed
         #these include: cHandle, timebase, numberOfSamples, all channel and trigger statuses
@@ -319,6 +349,9 @@ class Picoscope():
         else:
             collectionMode = 'transmission'
             direction = 'forward'
+
+        autoRangeQ = self.params['autoRange']
+
         returnDict = {}
 
         # match all cases of collectionMode and direction
@@ -328,18 +361,18 @@ class Picoscope():
                 match direction:
                     case 'forward':
                         # we will break the naming conventions for the transmission forward case to maintain backward compatibility
-                        voltage, waveTime = self.runRapidBlock(multiplexer, collectionMode, direction)
+                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction, autoRangeQ)
                         returnDict['voltage'] = voltage
                         returnDict['time'] = waveTime
                         return returnDict
                     case 'reverse':
-                        voltage, waveTime = self.runRapidBlock(multiplexer, collectionMode, direction)
+                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction, autoRangeQ)
                         returnDict['voltage_transmission_reverse'] = voltage
                         returnDict['time'] = waveTime
                         return returnDict
                     case 'both':
-                        voltagef, waveTimef = self.runRapidBlock(multiplexer, collectionMode, 'forward')
-                        voltager, waveTimer = self.runRapidBlock(multiplexer, collectionMode, 'reverse')
+                        voltagef, waveTimef = self.autoRange(multiplexer, collectionMode, 'forward', autoRangeQ)
+                        voltager, waveTimer = self.autoRange(multiplexer, collectionMode, 'reverse', autoRangeQ)
                         returnDict['voltage_transmission_forward'] = voltagef
                         returnDict['voltage_transmission_reverse'] = voltager
                         returnDict['time'] = waveTimef  # waveTime is constant for either measurement, so choice is arbitrary
@@ -351,18 +384,18 @@ class Picoscope():
             case 'echo':
                 match direction:
                     case 'forward':
-                        voltage, waveTime = self.runRapidBlock(multiplexer, collectionMode, direction)
+                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction, autoRangeQ)
                         returnDict['voltage_echo_forward'] = voltage
                         returnDict['time'] = waveTime
                         return returnDict
                     case 'reverse':
-                        voltage, waveTime = self.runRapidBlock(multiplexer, collectionMode, direction)
+                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction, autoRangeQ)
                         returnDict['voltage_echo_reverse'] = voltage
                         returnDict['time'] = waveTime
                         return returnDict
                     case 'both':
-                        voltagef, waveTimef = self.runRapidBlock(multiplexer, collectionMode, 'forward')
-                        voltager, waveTimer = self.runRapidBlock(multiplexer, collectionMode, 'reverse')
+                        voltagef, waveTimef = self.autoRange(multiplexer, collectionMode, 'forward', autoRangeQ)
+                        voltager, waveTimer = self.autoRange(multiplexer, collectionMode, 'reverse', autoRangeQ)
                         returnDict['voltage_echo_forward'] = voltagef
                         returnDict['voltage_echo_reverse'] = voltager
                         returnDict['time'] = waveTimef
@@ -374,24 +407,24 @@ class Picoscope():
             case 'both':
                 match direction:
                     case 'forward':
-                        voltaget, waveTimet = self.runRapidBlock(multiplexer, 'transmission', direction)
-                        voltagee, waveTimer = self.runRapidBlock(multiplexer, 'echo', direction)
+                        voltaget, waveTimet = self.autoRange(multiplexer, 'transmission', direction, autoRangeQ)
+                        voltagee, waveTimer = self.autoRange(multiplexer, 'echo', direction)
                         returnDict['voltage_echo_forward'] = voltagee
                         returnDict['voltage_transmission_forward'] = voltaget
                         returnDict['time'] = waveTimet
                         return returnDict
                     case 'reverse':
-                        voltaget, waveTimet = self.runRapidBlock(multiplexer, 'transmission', direction)
-                        voltagee, waveTimer = self.runRapidBlock(multiplexer, 'echo', direction)
+                        voltaget, waveTimet = self.autoRange(multiplexer, 'transmission', direction, autoRangeQ)
+                        voltagee, waveTimer = self.autoRange(multiplexer, 'echo', direction, autoRangeQ)
                         returnDict['voltage_echo_reverse'] = voltagee
                         returnDict['voltage_transmission_reverse'] = voltaget
                         returnDict['time'] = waveTimet
                         return returnDict
                     case 'both':
-                        voltagetf, waveTimetf = self.runRapidBlock(multiplexer, 'transmission', 'forward')
-                        voltageef, waveTimeef = self.runRapidBlock(multiplexer, 'echo', 'forward')
-                        voltagetr, waveTimetr = self.runRapidBlock(multiplexer, 'transmission', 'reverse')
-                        voltageer, waveTimeer = self.runRapidBlock(multiplexer, 'echo', 'reverse')
+                        voltagetf, waveTimetf = self.autoRange(multiplexer, 'transmission', 'forward', autoRangeQ)
+                        voltageef, waveTimeef = self.autoRange(multiplexer, 'echo', 'forward', autoRangeQ)
+                        voltagetr, waveTimetr = self.autoRange(multiplexer, 'transmission', 'reverse', autoRangeQ)
+                        voltageer, waveTimeer = self.autoRange(multiplexer, 'echo', 'reverse', autoRangeQ)
                         returnDict['voltage_transmission_forward'] = voltagetf
                         returnDict['voltage_echo_forward'] = voltageef
                         returnDict['voltage_transmission_reverse'] = voltagetr
@@ -457,12 +490,120 @@ class Picoscope():
             print("Warning: Requested time interval is too long for picoscope. Use a stopwatch instead.")
             return (2**32)-1, 34000000000
 
+    # a wrapper function to call the appropriate auto range function (if any)
+    def autoRange(self, multiplexer, mode, direction, autoRangeQ):
+
+        if not(autoRangeQ):
+            return self.runRapidBlock(multiplexer, mode, direction)
+
+        elif mode == 'transmission':
+            return self.voltageRangeFinder(multiplexer, direction)
+
+        elif mode == 'echo':
+            if self.params['calculateVoltageOffset']:
+                self.calculateVoltageOffset(multiplexer, direction)
+            return self.gainOptimizer(multiplexer, direction)
+        else:
+            print("Picoscope.autoRange(): unable to run auto range function. An incorrect mode (" + str(mode) + ") was likely specified during execution.\nRunning without auto range...")
+            return self.runRapidBlock(multiplexer, mode, direction)
+
+    # calculate a voltageOffset for a pulse-echo measurement based on an initial test pulse
+    # runs a test measurement, calculates the mean value of the first pointsToAverage voltage values, then sets
+    # self.params['voltageOffset'] to the mean value of those points
+    def calculateVoltageOffset(self, multiplexer, direction : str, pointsToAverage = 50):
+
+        # do a measurement at the provided voltageOffset
+        voltage, time = self.runRapidBlock(multiplexer, 'echo', direction)
+
+        # offset is added to the measured values in picoscope, so -1* is needed to center at 0
+        offset = -1 * np.mean(voltage[0:pointsToAverage])
+
+        # set the new voltageOffset
+        if direction == 'forward':
+            self.params['voltageOffsetForward'] = offset
+        elif direction == 'reverse':
+            self.params['voltageOffsetReverse'] = offset
+        else:
+            print("Picoscope.calculateVoltageOffset: invalid direction (" + str(direction) + "). Check Pico.RunPicoMeasurement call to debug.")
+            return -1
+
+        return 0
+
+    # maximizes the echo signal by changing the gain on the pulser
+    # The pulser limits the signal to +/- 1 V. Gain settings are -120 to 840
+    # gainOptimizer takes the direction, and a target min and max voltage as arguments
+    # it runs the measurement until the maximum of the signal is above the minV and below maxV
+    # Returns the voltage, time at the optimal setting
+    def gainOptimizer(self, multiplexer, direction, minV = 0.5, maxV = 0.95):
+
+        if direction == 'forward':
+            gain = self.params['gainForward']
+        else:
+            gain = self.params['gainReverse']
+
+        self.pulser.setGain(gain)
+        voltage, time = self.runRapidBlock(multiplexer, 'echo', direction)
+        absMax = np.max(abs(voltage))
+
+        # base case 1: minV <= absMax <= maxV -> success! return values
+        if absMax <= maxV and absMax >= minV:
+            return voltage, time
+
+        # base case 2: absMax > maxV and gain = minGain: print warning and return values
+        elif absMax > maxV and gain == self.pulser.minGain:
+            print("Picoscope.gainOptimizer Warning: signal voltage exceeds tolerance and gain is set to minimum. Voltage returned, but values are likely to be cut off.")
+            return voltage, time
+
+        # base case 3: absMax < minV and gain = maxGain: print warning and return values
+        elif absMax < minV and gain == self.pulser.maxGain:
+            print("Picoscope.gainOptimizer Warning: signal voltage is below threshold and gain is set to max. Voltage returned, but may have low signal to noise.")
+            return voltage, time
+
+        # recursion case: absMax not within [minV, maxV]: set a new gain guess, rerun
+        elif absMax < minV or absMax > maxV:
+            newGain = self.guessGain(gain, absMax, minV, maxV)
+            if direction == 'forward':
+                self.params['gainForward'] = newGain
+            else:
+                self.params['gainReverse'] = newGain
+            return self.gainOptimizer(multiplexer, direction, minV, maxV)
+
+        # this case should not be possible
+        else:
+            print("HOW DID YOU GET HERE? THIS SHOULD NOT BE HOW NUMBERS WORK.\n"
+                  "Also you should notify Sam and show him the parameters.")
+            return -1
+
+    # helper function to guess a reasonable new value for gain based on the current settings and measurement
+    def guessGain(self, currentGain, measuredV, minV, maxV):
+
+        # gain values are tenth of decibels (so hundredths of a power of ten)
+        # using MeasuredVoltage = ActualVoltage * (10**currentGain/100) and using that to calculate gain needed to reach minV
+        # NewGain = 100log10(MinV/MeasuredV) + CurrentGain
+        # 1 is added to this value ensure the new value is slightly over minV
+        if measuredV < minV:
+            newGain = (100 * np.log10(minV/measuredV)) + currentGain + 1
+        # for voltages over the maximum, it is harder to generate an accurate guess since the value is cut off above 1 V
+        # for now just guess -10 dB
+        else:
+            newGain = currentGain - 100
+
+        # make sure the new gain does not exceed the gain limits
+        if newGain > self.pulser.maxGain:
+            return self.pulser.maxGain
+        elif newGain < self.pulser.minGain:
+            return self.pulser.minGain
+        else:
+            # gain needs to be an int, so ceil is used
+            return math.ceil(newGain)
+
+
     # Recursively determines the minimum voltage range needed to capture data at the current location
-    # Returns the waveform data at the proper rang and the updated params dict
-    # Inputs a multiplexer object. If no multiplexer is used, default to None
+    # Returns the waveform data at the proper range
+    # Inputs a multiplexer object and direction. If no multiplexer is used, default to None
     # This should only add extra time if the voltage range has changed from the previous pixel
-    # NOTE: this only works for the transmission voltage currently
-    def voltageRangeFinder(self, multiplexer = None):
+    # NOTE: this is only defined for transmission measurements. mode is implicitly 'transmission' when this is called
+    def voltageRangeFinder(self, multiplexer = None, direction = 'forward'):
 
         # hardcoded voltage limits
         voltageLimits = np.array([0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20])
@@ -475,20 +616,20 @@ class Picoscope():
         currentTolerance = tolerance * currentLimit
 
         # collect initial waveform and find maximum
-        waveDict = self.runPicoMeasurement(multiplexer)
-        maxV = self.transmissionMaximum(waveDict)
+        voltage, time = self.runRapidBlock(multiplexer, 'transmission', direction)
+        maxV = np.max(voltage)
 
         # base case 1 : currentLimit == lowest limit and max < current limit. return waveform
         if currentLimit == voltageLimits[0] and maxV < currentLimit:
-            return waveDict
+            return voltage, time
 
         # base case 2 : currentLimit == highest limit and max > highest tolerance. return waveform and print a warning
         elif currentLimit == voltageLimits[-1] and maxV >= currentTolerance:
             print(
                 "Warning: voltageRangeFinder- waveform voltage exceeds oscilloscope maximum. Peaks are likely to be cutoff.")
-            return waveDict
+            return voltage, time
 
-        # base case 3 : max < current limit. set voltage range to be lowest range within tolerance, rerun measurement and return waveform, params
+        # base case 3 : max < current limit. set voltage range to be lowest range within tolerance, rerun measurement and return waveform
         elif maxV <= currentTolerance:
 
             # return index of first (lowest) tolerance that is >= maxV
@@ -498,13 +639,12 @@ class Picoscope():
 
             # if that tolerance is the current tolerance, return waveform, params
             if limit == currentLimit:
-                return waveDict
+                return voltage, time
 
             # if not, setup a new measurement with the tighter voltage limit and return that data
             else:
                 self.params['voltageRange'] = limit
-                waveform = self.runPicoMeasurement(multiplexer)
-                return waveform
+                return self.runRapidBlock(multiplexer, 'transmission', direction)
 
         # recursion case : max > current tolerance. try again at the next highest voltage limit
         else:
@@ -512,14 +652,14 @@ class Picoscope():
             # get the index of the current limit
             rangeIndex = np.nonzero(voltageLimits == currentLimit)[0][0]
 
-            # just for safety, check that range index is not the last index. this shouldn't be possible, but just in case I'm missing a case
+            # just for safety, check that range index is not the last index. this shouldn't be possible, but just in case I'm missing an edge case
             if rangeIndex == len(voltageLimits) - 1:
-                return waveDict
+                return voltage, time
 
             # move to the next higher voltage limit and try again
             else:
                 self.params['voltageRange'] = voltageLimits[rangeIndex + 1]
-                return self.voltageRangeFinder(multiplexer)
+                return self.voltageRangeFinder(multiplexer, direction)
             
     # helper function that finds the maximum voltage from transmission data
     # inputs the dict returned from running runPicoMeasurement()

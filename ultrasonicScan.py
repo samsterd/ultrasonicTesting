@@ -28,10 +28,9 @@ def runScan(params):
     else:
         multiplexer = None
     
-    #openPicoscope and setupPicoMeasurement
-    pico = picoscope.Picoscope(params)
-    
-    pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
+    # open instrument connections
+    pulser = utp.Pulser(params['pulserType'], pulserPort=params['pulserPort'], dllFile=params['dllFile'])
+    pico = picoscope.Picoscope(params, pulser)
     scanner = sc.Scanner(params)
 
     # Adjust pulser pulsewidth
@@ -58,12 +57,8 @@ def runScan(params):
 
         for j in range(primaryAxisSteps):
 
-
             #collect data
-            if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
-                pixelData = pico.voltageRangeFinder(multiplexer)
-            else:
-                pixelData = pico.runPicoMeasurement(multiplexer)
+            pixelData = pico.runPicoMeasurement(multiplexer)
 
             #Add collection metadata
             pixelData['time_collected'] = time.time()
