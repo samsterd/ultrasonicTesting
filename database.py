@@ -107,7 +107,7 @@ class Database:
         # in other cases, build the more complex labels
         if mode == 'transmission' or mode == 'both':
             modeStrings.append(baseString + 'transmission_')
-        if mode == 'pulse-echo' or mode == 'both':
+        if mode == 'echo' or mode == 'both':
             modeStrings.append(baseString + 'echo_')
 
         if direction == 'forward':
@@ -122,6 +122,7 @@ class Database:
         return dirStrings
 
     # initialize table to record oscilloscope parameters
+    #todo: generate table based on parameter dict. save full dict rather than hardcode every new parameter
     def parameterTableInitializer(self, params : dict):
         initTable = '''CREATE TABLE IF NOT EXISTS parameters (
             time_started REAL PRIMARY KEY,
@@ -130,8 +131,7 @@ class Database:
             waves REAL,
             samples REAL,
             transducer_frequency REAL,
-            voltage_range_T REAL,
-            voltage_range_P REAL,
+            voltage_range REAL,
             voltage_autorange INTEGER
             )
         '''
@@ -150,9 +150,8 @@ class Database:
         parameters['waves'] = params['waves']
         parameters['samples'] = params['samples']
         parameters['transducer_frequency'] = params['transducerFrequency']
-        parameters['voltage_range_T'] = params['voltageRangeT']
-        parameters['voltage_range_P'] = params['voltageRangeP']
-        parameters['voltage_autorange'] = int(params['voltageAutoRange'])
+        parameters['voltage_range'] = params['voltageRange']
+        parameters['voltage_autorange'] = int(params['autoRange'])
 
         #create db query for the parameters to the parameters table
         query, vals = self.parseQuery(parameters, 'parameters')

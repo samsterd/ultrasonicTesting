@@ -34,7 +34,7 @@ def singlePulseMeasure(params):
     pulser = utp.Pulser(params['pulserType'], pulserPort=params['pulserPort'], dllFile=params['dllFile'])
 
     # Connect to picoscope & Set up pico measurement
-    pico = picoscope.Picoscope(params)
+    pico = picoscope.Picoscope(params, pulser)
 
     # Adjust pulser pulsewidth
     pulser.setFrequency(params['transducerFrequency'])

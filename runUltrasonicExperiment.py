@@ -49,6 +49,7 @@ experimentParams = {
     'measureDelay' : 26,                           # Approx delay after trigger to start measuring, in us
     'voltageRange' : 1,                            # Picoscope voltage range for transmission transducer in V. Note this is the total range: 1 V = [-0.5 V, 0.5 V]
                                                      # Allowed voltages = (0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20)
+    # todo: separate autoRange and autoGain
     'autoRange' : False,                            # Set the oscilloscope to rerun measurements where the voltage range of the wave has significantly changed
                                                      # This enables the tightest possible voltageRange to be used, increasing the accuracy of low intensity signals without cutting off high intensity ones
                                                      # For transmission measurements, this changes the voltage range on the oscilloscope. For echo measurements, this changes the voltage offset on the scope and

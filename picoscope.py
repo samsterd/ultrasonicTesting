@@ -501,7 +501,7 @@ class Picoscope():
 
         elif mode == 'echo':
             if self.params['calculateVoltageOffset']:
-                self.calculateVoltageOffset(multiplexer, direction)
+                self.measureVoltageOffset(multiplexer, direction)
             return self.gainOptimizer(multiplexer, direction)
         else:
             print("Picoscope.autoRange(): unable to run auto range function. An incorrect mode (" + str(mode) + ") was likely specified during execution.\nRunning without auto range...")
@@ -510,21 +510,27 @@ class Picoscope():
     # calculate a voltageOffset for a pulse-echo measurement based on an initial test pulse
     # runs a test measurement, calculates the mean value of the first pointsToAverage voltage values, then sets
     # self.params['voltageOffset'] to the mean value of those points
-    def calculateVoltageOffset(self, multiplexer, direction : str, pointsToAverage = 50):
+    def measureVoltageOffset(self, multiplexer, direction : str, pointsToAverage = 50):
 
         # do a measurement at the provided voltageOffset
         voltage, time = self.runRapidBlock(multiplexer, 'echo', direction)
+
+        self.calculateVoltageOffset(direction, voltage, pointsToAverage)
+
+    def calculateVoltageOffset(self, direction, voltage, pointsToAverage = 50):
 
         # offset is added to the measured values in picoscope, so -1* is needed to center at 0
         offset = -1 * np.mean(voltage[0:pointsToAverage])
 
         # set the new voltageOffset
+        # must be converted to mV
         if direction == 'forward':
-            self.params['voltageOffsetForward'] = offset
+            self.params['voltageOffsetForward'] = offset / 1000
         elif direction == 'reverse':
-            self.params['voltageOffsetReverse'] = offset
+            self.params['voltageOffsetReverse'] = offset / 1000
         else:
-            print("Picoscope.calculateVoltageOffset: invalid direction (" + str(direction) + "). Check Pico.RunPicoMeasurement call to debug.")
+            print("Picoscope.measureVoltageOffset: invalid direction (" + str(
+                direction) + "). Check Pico.RunPicoMeasurement call to debug.")
             return -1
 
         return 0
@@ -533,13 +539,16 @@ class Picoscope():
     # The pulser limits the signal to +/- 1 V. Gain settings are -120 to 840
     # gainOptimizer takes the direction, and a target min and max voltage as arguments
     # it runs the measurement until the maximum of the signal is above the minV and below maxV
+    # Also alters the baseline offset as a function of the new gain
     # Returns the voltage, time at the optimal setting
-    def gainOptimizer(self, multiplexer, direction, minV = 0.5, maxV = 0.95):
+    def gainOptimizer(self, multiplexer, direction, minV = 500, maxV = 920):
 
         if direction == 'forward':
             gain = self.params['gainForward']
+            offset = self.params['voltageOffsetForward']
         else:
             gain = self.params['gainReverse']
+            offset = self.params['voltageOffsetReverse']
 
         self.pulser.setGain(gain)
         voltage, time = self.runRapidBlock(multiplexer, 'echo', direction)
@@ -562,6 +571,8 @@ class Picoscope():
         # recursion case: absMax not within [minV, maxV]: set a new gain guess, rerun
         elif absMax < minV or absMax > maxV:
             newGain = self.guessGain(gain, absMax, minV, maxV)
+            # adjust offset as well for next measurement
+            self.calculateVoltageOffset(direction, voltage)
             if direction == 'forward':
                 self.params['gainForward'] = newGain
             else:
@@ -580,9 +591,9 @@ class Picoscope():
         # gain values are tenth of decibels (so hundredths of a power of ten)
         # using MeasuredVoltage = ActualVoltage * (10**currentGain/100) and using that to calculate gain needed to reach minV
         # NewGain = 100log10(MinV/MeasuredV) + CurrentGain
-        # 1 is added to this value ensure the new value is slightly over minV
+        # 50 is added to this value ensure the new value is slightly over minV since this method seems to systematically underestimate
         if measuredV < minV:
-            newGain = (100 * np.log10(minV/measuredV)) + currentGain + 1
+            newGain = (100 * np.log10(minV/measuredV)) + currentGain + 50
         # for voltages over the maximum, it is harder to generate an accurate guess since the value is cut off above 1 V
         # for now just guess -10 dB
         else:
@@ -615,9 +626,9 @@ class Picoscope():
         currentLimit = self.params['voltageRange']
         currentTolerance = tolerance * currentLimit
 
-        # collect initial waveform and find maximum
+        # collect initial waveform and find maximum. Convert to mV
         voltage, time = self.runRapidBlock(multiplexer, 'transmission', direction)
-        maxV = np.max(voltage)
+        maxV = np.max(voltage)/1000
 
         # base case 1 : currentLimit == lowest limit and max < current limit. return waveform
         if currentLimit == voltageLimits[0] and maxV < currentLimit:
