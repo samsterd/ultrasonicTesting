@@ -923,9 +923,6 @@ def plotScan(dataDict, colorKey, colorRange = [None, None], scalePlot = False, s
         plt.axis('scaled')
     plt.colorbar()
 
-    if show == True:
-        plt.show()
-
     # save. generate a filename if it isn't specified
     if save == True:
 
@@ -936,7 +933,13 @@ def plotScan(dataDict, colorKey, colorRange = [None, None], scalePlot = False, s
         else:
             saveFile = fileName
         plt.savefig(saveFile)
-        plt.close()
+        if show == False:
+            plt.close()
+
+    if show == True:
+        plt.show()
+
+
 
 # helper function for plotScan that reverses coordinate lists that start negative
 # inputs an array. Outputs an array that is reversed if the input started negative
