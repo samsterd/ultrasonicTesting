@@ -20,7 +20,8 @@ class Pulser():
 
         # Fill in some constants
         self.minGain = -120
-        self.maxGain = 840
+        # maxGain is set below pulser maximum (840) because signals get distorted above 600
+        self.maxGain = 600
 
         # Initialize connection to the pulser based on the type
         self.connection = self.openPulser(pulserType, kwargs)

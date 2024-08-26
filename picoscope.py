@@ -127,14 +127,14 @@ class Picoscope():
         # pulser gain is also set for pulse-echo measurements
         if mode == 'transmission':
             self.voltageIndex = self.voltageIndexFromRange(voltageRange)
-            self.voltageOffset = 0
+            self.voltageOffset = ctypes.c_float(0)
         elif mode == 'echo':
             self.voltageIndex = 6
             if direction == 'forward':
-                self.voltageOffset = self.params['voltageOffsetForward']
+                self.voltageOffset = ctypes.c_float(self.params['voltageOffsetForward'])
                 self.pulser.setGain(self.params['gainForward'])
             else:
-                self.voltageOffset = self.params['voltageOffsetReverse']
+                self.voltageOffset = ctypes.c_float(self.params['voltageOffsetReverse'])
                 self.pulser.setGain(self.params['gainReverse'])
 
         # calculate and save measurement parameters (timebase, timeinterval, samples, delayintervals)
@@ -470,7 +470,7 @@ class Picoscope():
             #math.floor is used instead of np.floor to make it return an int not a float
             timebase = math.floor(np.log2(estimatedInterval))
             actualInterval = (2**timebase)
-            print("Actual measurement duration for calculated timebase is " + str(numberOfSamples * actualInterval / 1000) + " us.")
+            # print("Actual measurement duration for calculated timebase is " + str(numberOfSamples * actualInterval / 1000) + " us.")
             return timebase, actualInterval
 
         #Handle case  where estimated interval is 8 ns to 30 seconds
@@ -480,7 +480,7 @@ class Picoscope():
             #Large numbers convert between seconds and nanoseconds and back again
             timebase = math.floor((125000000 * (estimatedInterval * (10**-9))) + 2)
             actualInterval = (10**9) * (timebase - 2) / 125000000
-            print("Actual measurement duration for calculated timebase is " + str(numberOfSamples * actualInterval / 1000) + " us.")
+            # print("Actual measurement duration for calculated timebase is " + str(numberOfSamples * actualInterval / 1000) + " us.")
             return timebase, actualInterval
 
         #Finally handle weird case where really long time interval is requested
@@ -510,27 +510,29 @@ class Picoscope():
     # inputs measurement direction string, the voltage array, and the number of points to average to calculate the baseline from
     # the beginning of the voltage array
     # offset calculated by finding the mean of the first pointsToAverage points within the voltage array
-    # Updates the values of the class variables self.offset and self.params['voltageOffsetForward/Reverse'
+    # Updates the values of the class variables self.baseline and self.params['voltageOffsetForward/Reverse'
     # returns the calculated offset
     def calculateVoltageOffset(self, direction : str, voltage, pointsToAverage = 50):
 
-        # offset is added to the measured values in picoscope, so -1* is needed to center at 0
-        offset = -1 * np.mean(voltage[0:pointsToAverage])
+        # baseline is added to the measured values in picoscope, so -1* is needed to center at 0
+        baseline = -1* np.mean(voltage[0:pointsToAverage])/1000
 
-        # set the new voltageOffset
+        # set the new voltageOffset based on its change from the old one
         # must be converted to mV
         if direction == 'forward':
-            self.offset = offset/1000
-            self.params['voltageOffsetForward'] = self.offset
+            newOffset = self.params['voltageOffsetForward'] + baseline
+            self.baseline = baseline
+            self.params['voltageOffsetForward'] = newOffset
         elif direction == 'reverse':
-            self.offset = offset/1000
-            self.params['voltageOffsetReverse'] = self.offset
+            newOffset = self.params['voltageOffsetReverse'] + baseline
+            self.baseline = baseline
+            self.params['voltageOffsetReverse'] = newOffset
         else:
             print("Picoscope.measureVoltageOffset: invalid direction (" + str(
                 direction) + "). Check Pico.RunPicoMeasurement call to debug.")
             return -1
 
-        return offset
+        return baseline
 
     # function that finds acceptable gain and baseline correction values for pulse-echo measurements
     # First determines the optimal voltage offset
@@ -541,14 +543,14 @@ class Picoscope():
     #   If the gain is acceptable, the voltage, time from the baseline optimization is returned
     # inputs:
     #   multiplexer object and experiment direction
-    #   offsetTolerance: amount of mV the baseline can drift from 0 before the baseline is recalculated
+    #   baselineTolerance: amount of V the baseline can drift from 0 before the baseline is recalculated
     #   baselinePoints: number of points in the beginning of the wave to average when calculating baseline
     #   minV, maxV: the target range in mV of the wave maximum. If it is outside this range, gain and baseline are remeasured until within tolerance
     # outputs the voltage, time arrays collected at the optimal conditions
-    def optimizeEchoRange(self, multiplexer, direction : str, offsetTolerance=100, baselinePoints=50, minV=500, maxV=920):
+    def optimizeEchoRange(self, multiplexer, direction : str, baselineTolerance=0.05, baselinePoints=50, minV=400, maxV=920):
 
         # run initial measurement, calculate new offset (this will alter the offset of the next measurement in a scan/repeat pulse)
-        voltage, time = self.optimizeOffset(multiplexer, 'echo', direction, offsetTolerance, baselinePoints)
+        voltage, time = self.optimizeOffset(multiplexer,  direction, baselineTolerance, baselinePoints)
 
         # determine whether to run optimizeGain i.e. the offset wave is outside of [minV, maxV]
         voltageMax = np.max(abs(voltage))
@@ -557,8 +559,9 @@ class Picoscope():
 
             # if the offset is now outside of tolerance, the whole protocol should be rerun
             # this will rerun the offset optimization and, if needed, the gain optimization
-            if abs(self.offset) < offsetTolerance:
-                return self.optimizeEchoRange(multiplexer, direction, offsetTolerance, baselinePoints, minV, maxV)
+            # note conversion from V to mV
+            if abs(self.baseline) > baselineTolerance:
+                return self.optimizeEchoRange(multiplexer, direction, baselineTolerance, baselinePoints, minV, maxV)
 
             # otherwise the new measurement is good
             return voltageG, timeG
@@ -569,22 +572,22 @@ class Picoscope():
     # function that recursively runs runRapidBlock until the calculated baseline is within a set tolerance
     # inputs:
     #   multiplexer object and experiment direction
-    #   offsetTolerance: amount of mV the baseline can drift from 0 before the baseline is recalculated
+    #   baselineTolerance: amount of mV the baseline can drift from 0 before the baseline is recalculated
     #   baselinePoints: number of points in the beginning of the wave to average when calculating baseline
-    # returns the voltage, time arrays collected within the offsetTolerance
-    def optimizeOffset(self, multiplexer, direction, offsetTolerance, baselinePoints):
+    # returns the voltage, time arrays collected within the baselineTolerance
+    def optimizeOffset(self, multiplexer, direction, baselineTolerance, baselinePoints):
 
         # run initial measurement and update offsets
         voltage, time = self.runRapidBlock(multiplexer, 'echo', direction)
         self.calculateVoltageOffset(direction, voltage, baselinePoints)
 
         # base case: offset is within tolerance, so return the data
-        if abs(self.offset) < offsetTolerance:
+        if abs(self.baseline) < baselineTolerance:
             return voltage, time
 
         # recursive case: offset is outside of tolerance, so rerun the function
         else:
-            return self.optimizeOffset(multiplexer, direction, offsetTolerance, baselinePoints)
+            return self.optimizeOffset(multiplexer, direction, baselineTolerance, baselinePoints)
         # todo: handle error where requested offset is out of possible ranges
 
     # maximizes the echo signal by changing the gain on the pulser
@@ -593,7 +596,7 @@ class Picoscope():
     # it runs the measurement until the maximum of the signal is above the minV and below maxV
     # Also alters the baseline offset as a function of the new gain
     # Returns the voltage, time at the optimal setting
-    def optimizeGain(self, multiplexer, direction, minV = 500, maxV = 920):
+    def optimizeGain(self, multiplexer, direction, minV = 400, maxV = 920):
 
         if direction == 'forward':
             gain = self.params['gainForward']
