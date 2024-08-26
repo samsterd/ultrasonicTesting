@@ -350,8 +350,6 @@ class Picoscope():
             collectionMode = 'transmission'
             direction = 'forward'
 
-        autoRangeQ = self.params['autoRange']
-
         returnDict = {}
 
         # match all cases of collectionMode and direction
@@ -361,18 +359,18 @@ class Picoscope():
                 match direction:
                     case 'forward':
                         # we will break the naming conventions for the transmission forward case to maintain backward compatibility
-                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction, autoRangeQ)
+                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction)
                         returnDict['voltage'] = voltage
                         returnDict['time'] = waveTime
                         return returnDict
                     case 'reverse':
-                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction, autoRangeQ)
+                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction)
                         returnDict['voltage_transmission_reverse'] = voltage
                         returnDict['time'] = waveTime
                         return returnDict
                     case 'both':
-                        voltagef, waveTimef = self.autoRange(multiplexer, collectionMode, 'forward', autoRangeQ)
-                        voltager, waveTimer = self.autoRange(multiplexer, collectionMode, 'reverse', autoRangeQ)
+                        voltagef, waveTimef = self.autoRange(multiplexer, collectionMode, 'forward')
+                        voltager, waveTimer = self.autoRange(multiplexer, collectionMode, 'reverse')
                         returnDict['voltage_transmission_forward'] = voltagef
                         returnDict['voltage_transmission_reverse'] = voltager
                         returnDict['time'] = waveTimef  # waveTime is constant for either measurement, so choice is arbitrary
@@ -384,18 +382,18 @@ class Picoscope():
             case 'echo':
                 match direction:
                     case 'forward':
-                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction, autoRangeQ)
+                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction)
                         returnDict['voltage_echo_forward'] = voltage
                         returnDict['time'] = waveTime
                         return returnDict
                     case 'reverse':
-                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction, autoRangeQ)
+                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction)
                         returnDict['voltage_echo_reverse'] = voltage
                         returnDict['time'] = waveTime
                         return returnDict
                     case 'both':
-                        voltagef, waveTimef = self.autoRange(multiplexer, collectionMode, 'forward', autoRangeQ)
-                        voltager, waveTimer = self.autoRange(multiplexer, collectionMode, 'reverse', autoRangeQ)
+                        voltagef, waveTimef = self.autoRange(multiplexer, collectionMode, 'forward')
+                        voltager, waveTimer = self.autoRange(multiplexer, collectionMode, 'reverse')
                         returnDict['voltage_echo_forward'] = voltagef
                         returnDict['voltage_echo_reverse'] = voltager
                         returnDict['time'] = waveTimef
@@ -407,24 +405,24 @@ class Picoscope():
             case 'both':
                 match direction:
                     case 'forward':
-                        voltaget, waveTimet = self.autoRange(multiplexer, 'transmission', direction, autoRangeQ)
+                        voltaget, waveTimet = self.autoRange(multiplexer, 'transmission', direction)
                         voltagee, waveTimer = self.autoRange(multiplexer, 'echo', direction)
                         returnDict['voltage_echo_forward'] = voltagee
                         returnDict['voltage_transmission_forward'] = voltaget
                         returnDict['time'] = waveTimet
                         return returnDict
                     case 'reverse':
-                        voltaget, waveTimet = self.autoRange(multiplexer, 'transmission', direction, autoRangeQ)
-                        voltagee, waveTimer = self.autoRange(multiplexer, 'echo', direction, autoRangeQ)
+                        voltaget, waveTimet = self.autoRange(multiplexer, 'transmission', direction)
+                        voltagee, waveTimer = self.autoRange(multiplexer, 'echo', direction)
                         returnDict['voltage_echo_reverse'] = voltagee
                         returnDict['voltage_transmission_reverse'] = voltaget
                         returnDict['time'] = waveTimet
                         return returnDict
                     case 'both':
-                        voltagetf, waveTimetf = self.autoRange(multiplexer, 'transmission', 'forward', autoRangeQ)
-                        voltageef, waveTimeef = self.autoRange(multiplexer, 'echo', 'forward', autoRangeQ)
-                        voltagetr, waveTimetr = self.autoRange(multiplexer, 'transmission', 'reverse', autoRangeQ)
-                        voltageer, waveTimeer = self.autoRange(multiplexer, 'echo', 'reverse', autoRangeQ)
+                        voltagetf, waveTimetf = self.autoRange(multiplexer, 'transmission', 'forward')
+                        voltageef, waveTimeef = self.autoRange(multiplexer, 'echo', 'forward')
+                        voltagetr, waveTimetr = self.autoRange(multiplexer, 'transmission', 'reverse')
+                        voltageer, waveTimeer = self.autoRange(multiplexer, 'echo', 'reverse')
                         returnDict['voltage_transmission_forward'] = voltagetf
                         returnDict['voltage_echo_forward'] = voltageef
                         returnDict['voltage_transmission_reverse'] = voltagetr
@@ -491,33 +489,30 @@ class Picoscope():
             return (2**32)-1, 34000000000
 
     # a wrapper function to call the appropriate auto range function (if any)
-    def autoRange(self, multiplexer, mode, direction, autoRangeQ):
+    def autoRange(self, multiplexer, mode, direction):
 
-        if not(autoRangeQ):
+        autoRangeTrans = self.params['autoRange']
+        autoRangeEcho = self.params['autoRangeEcho']
+
+        if (mode == 'transmission' and not autoRangeTrans) or (mode == 'echo' and not autoRangeEcho):
             return self.runRapidBlock(multiplexer, mode, direction)
 
         elif mode == 'transmission':
             return self.voltageRangeFinder(multiplexer, direction)
 
         elif mode == 'echo':
-            if self.params['calculateVoltageOffset']:
-                self.measureVoltageOffset(multiplexer, direction)
-            return self.gainOptimizer(multiplexer, direction)
+            return self.optimizeEchoRange(multiplexer, direction)
         else:
             print("Picoscope.autoRange(): unable to run auto range function. An incorrect mode (" + str(mode) + ") was likely specified during execution.\nRunning without auto range...")
             return self.runRapidBlock(multiplexer, mode, direction)
 
-    # calculate a voltageOffset for a pulse-echo measurement based on an initial test pulse
-    # runs a test measurement, calculates the mean value of the first pointsToAverage voltage values, then sets
-    # self.params['voltageOffset'] to the mean value of those points
-    def measureVoltageOffset(self, multiplexer, direction : str, pointsToAverage = 50):
-
-        # do a measurement at the provided voltageOffset
-        voltage, time = self.runRapidBlock(multiplexer, 'echo', direction)
-
-        self.calculateVoltageOffset(direction, voltage, pointsToAverage)
-
-    def calculateVoltageOffset(self, direction, voltage, pointsToAverage = 50):
+    # helper function that calculates the baseline of a given voltage array for the purposes of specifying a new voltage offset
+    # inputs measurement direction string, the voltage array, and the number of points to average to calculate the baseline from
+    # the beginning of the voltage array
+    # offset calculated by finding the mean of the first pointsToAverage points within the voltage array
+    # Updates the values of the class variables self.offset and self.params['voltageOffsetForward/Reverse'
+    # returns the calculated offset
+    def calculateVoltageOffset(self, direction : str, voltage, pointsToAverage = 50):
 
         # offset is added to the measured values in picoscope, so -1* is needed to center at 0
         offset = -1 * np.mean(voltage[0:pointsToAverage])
@@ -525,23 +520,80 @@ class Picoscope():
         # set the new voltageOffset
         # must be converted to mV
         if direction == 'forward':
-            self.params['voltageOffsetForward'] = offset / 1000
+            self.offset = offset/1000
+            self.params['voltageOffsetForward'] = self.offset
         elif direction == 'reverse':
-            self.params['voltageOffsetReverse'] = offset / 1000
+            self.offset = offset/1000
+            self.params['voltageOffsetReverse'] = self.offset
         else:
             print("Picoscope.measureVoltageOffset: invalid direction (" + str(
                 direction) + "). Check Pico.RunPicoMeasurement call to debug.")
             return -1
 
-        return 0
+        return offset
+
+    # function that finds acceptable gain and baseline correction values for pulse-echo measurements
+    # First determines the optimal voltage offset
+    # Next determines whether the gain should be changed.
+    #   If yes, a gain optimization protocol is run
+    #       Since this can change the baseline, it rechecks if the offset is outside of tolerance. If yes, the whole protocol is
+    #       recursively rerun. If the baseline is acceptable, the voltage, time with optimal gain is returned
+    #   If the gain is acceptable, the voltage, time from the baseline optimization is returned
+    # inputs:
+    #   multiplexer object and experiment direction
+    #   offsetTolerance: amount of mV the baseline can drift from 0 before the baseline is recalculated
+    #   baselinePoints: number of points in the beginning of the wave to average when calculating baseline
+    #   minV, maxV: the target range in mV of the wave maximum. If it is outside this range, gain and baseline are remeasured until within tolerance
+    # outputs the voltage, time arrays collected at the optimal conditions
+    def optimizeEchoRange(self, multiplexer, direction : str, offsetTolerance=100, baselinePoints=50, minV=500, maxV=920):
+
+        # run initial measurement, calculate new offset (this will alter the offset of the next measurement in a scan/repeat pulse)
+        voltage, time = self.optimizeOffset(multiplexer, 'echo', direction, offsetTolerance, baselinePoints)
+
+        # determine whether to run optimizeGain i.e. the offset wave is outside of [minV, maxV]
+        voltageMax = np.max(abs(voltage))
+        if voltageMax < minV or voltageMax > maxV:
+            voltageG, timeG = self.optimizeGain(multiplexer, direction, minV, maxV)
+
+            # if the offset is now outside of tolerance, the whole protocol should be rerun
+            # this will rerun the offset optimization and, if needed, the gain optimization
+            if abs(self.offset) < offsetTolerance:
+                return self.optimizeEchoRange(multiplexer, direction, offsetTolerance, baselinePoints, minV, maxV)
+
+            # otherwise the new measurement is good
+            return voltageG, timeG
+
+        # gain did not need to be optimized, return values from offset optimization
+        return voltage, time
+
+    # function that recursively runs runRapidBlock until the calculated baseline is within a set tolerance
+    # inputs:
+    #   multiplexer object and experiment direction
+    #   offsetTolerance: amount of mV the baseline can drift from 0 before the baseline is recalculated
+    #   baselinePoints: number of points in the beginning of the wave to average when calculating baseline
+    # returns the voltage, time arrays collected within the offsetTolerance
+    def optimizeOffset(self, multiplexer, direction, offsetTolerance, baselinePoints):
+
+        # run initial measurement and update offsets
+        voltage, time = self.runRapidBlock(multiplexer, 'echo', direction)
+        self.calculateVoltageOffset(direction, voltage, baselinePoints)
+
+        # base case: offset is within tolerance, so return the data
+        if abs(self.offset) < offsetTolerance:
+            return voltage, time
+
+        # recursive case: offset is outside of tolerance, so rerun the function
+        else:
+            return self.optimizeOffset(multiplexer, direction, offsetTolerance, baselinePoints)
+        # todo: handle error where requested offset is out of possible ranges
 
     # maximizes the echo signal by changing the gain on the pulser
     # The pulser limits the signal to +/- 1 V. Gain settings are -120 to 840
-    # gainOptimizer takes the direction, and a target min and max voltage as arguments
+    # optimizeGain takes the direction, and a target min and max voltage as arguments
     # it runs the measurement until the maximum of the signal is above the minV and below maxV
     # Also alters the baseline offset as a function of the new gain
     # Returns the voltage, time at the optimal setting
-    def gainOptimizer(self, multiplexer, direction, minV = 500, maxV = 920):
+    def optimizeGain(self, multiplexer, direction, minV = 500, maxV = 920):
 
         if direction == 'forward':
             gain = self.params['gainForward']
@@ -552,6 +604,10 @@ class Picoscope():
 
         self.pulser.setGain(gain)
         voltage, time = self.runRapidBlock(multiplexer, 'echo', direction)
+
+        # adjust offset as well for next measurement
+        self.calculateVoltageOffset(direction, voltage)
+
         absMax = np.max(abs(voltage))
 
         # base case 1: minV <= absMax <= maxV -> success! return values
@@ -560,24 +616,22 @@ class Picoscope():
 
         # base case 2: absMax > maxV and gain = minGain: print warning and return values
         elif absMax > maxV and gain == self.pulser.minGain:
-            print("Picoscope.gainOptimizer Warning: signal voltage exceeds tolerance and gain is set to minimum. Voltage returned, but values are likely to be cut off.")
+            print("Picoscope.optimizeGain Warning: signal voltage exceeds tolerance and gain is set to minimum. Voltage returned, but values are likely to be cut off.")
             return voltage, time
 
         # base case 3: absMax < minV and gain = maxGain: print warning and return values
         elif absMax < minV and gain == self.pulser.maxGain:
-            print("Picoscope.gainOptimizer Warning: signal voltage is below threshold and gain is set to max. Voltage returned, but may have low signal to noise.")
+            print("Picoscope.optimizeGain Warning: signal voltage is below threshold and gain is set to max. Voltage returned, but may have low signal to noise.")
             return voltage, time
 
         # recursion case: absMax not within [minV, maxV]: set a new gain guess, rerun
         elif absMax < minV or absMax > maxV:
             newGain = self.guessGain(gain, absMax, minV, maxV)
-            # adjust offset as well for next measurement
-            self.calculateVoltageOffset(direction, voltage)
             if direction == 'forward':
                 self.params['gainForward'] = newGain
             else:
                 self.params['gainReverse'] = newGain
-            return self.gainOptimizer(multiplexer, direction, minV, maxV)
+            return self.optimizeGain(multiplexer, direction, minV, maxV)
 
         # this case should not be possible
         else:

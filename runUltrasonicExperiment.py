@@ -73,12 +73,12 @@ experimentParams = {
                                                     # 'forward' pulses on Channel A and (for collectionMode = transmision or both) collects on Channel B
                                                     # 'reverse' pulses on Channel B and collects on Channel A
                                                     # 'both' repeats the measurement in both directions
+    'autoRangeEcho': True,                          # Automatically calculate and adjust the offset and gain values. This may add significant measurement time
     'voltageOffsetForward' : 0.0,                   # Voltage offset applied to pulse-echo measurements to fix large baseline added by pulser output
     'voltageOffsetReverse': 0.0,                    #     Voltage offsets are directional since 1) echo baseline depends heavily on delay time and 2) delay time
                                                     #     is a function of sample placement and could vary widely between the forward and reverse transducer
     'gainForward' : 500,                            # Gain setting on pulser, used to maximize the signal of pulse-echo measurements
     'gainReverse' : 500,                            #  similar to voltageOffsets, these can be set to different values for the forward and reverse directions
-    'calculateVoltageOffset' : True,                   # Use function calculateOffset() before the first measurement to calculate a good echoOffset
     'rfAddress': (1, 1),                            # Multiplexer addresses for all of the relevant channels
     't0PulseAddress': (0, 2),                       #   Form is (module #, switch #)
     't0ReceiveAddress': (1, 2),                     #   NOTE: all data channels (RF, transducer receive) should be on the same module as the picoscope
