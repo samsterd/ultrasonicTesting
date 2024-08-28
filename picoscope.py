@@ -10,6 +10,7 @@
 # picoData keys and values:
 #   "cHandle" - c_int16 unique identifier of picoscope
 #   "openUnit" - a dict containing the picoscope status returns
+# todo: organize functions! this file has grown quite a bit and needs some overall organizing
 
 import ctypes
 from time import sleep
@@ -350,30 +351,21 @@ class Picoscope():
             collectionMode = 'transmission'
             direction = 'forward'
 
-        returnDict = {}
-
-        # match all cases of collectionMode and direction
-        # while some of these are redundant and could be combined, it is better to separate them for clarity
+        # match all cases of collectionMode and direction and call self.autoRange for each combination
+        # the resulting dicts with data are then merged by {**x, **y} and then returned
         match collectionMode:
             case 'transmission':
                 match direction:
                     case 'forward':
                         # we will break the naming conventions for the transmission forward case to maintain backward compatibility
-                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction)
-                        returnDict['voltage'] = voltage
-                        returnDict['time'] = waveTime
+                        returnDict = self.autoRange(multiplexer, collectionMode, direction, ['voltage', 'time'])
                         return returnDict
                     case 'reverse':
-                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction)
-                        returnDict['voltage_transmission_reverse'] = voltage
-                        returnDict['time'] = waveTime
+                        returnDict = self.autoRange(multiplexer, collectionMode, direction, ['voltage_transmission_reverse', 'time'])
                         return returnDict
                     case 'both':
-                        voltagef, waveTimef = self.autoRange(multiplexer, collectionMode, 'forward')
-                        voltager, waveTimer = self.autoRange(multiplexer, collectionMode, 'reverse')
-                        returnDict['voltage_transmission_forward'] = voltagef
-                        returnDict['voltage_transmission_reverse'] = voltager
-                        returnDict['time'] = waveTimef  # waveTime is constant for either measurement, so choice is arbitrary
+                        returnDict = {**self.autoRange(multiplexer, collectionMode, 'forward', ['voltage_transmission_forward', 'time']),
+                                      **self.autoRange(multiplexer, collectionMode, 'reverse', ['voltage_transmission_reverse', 'time'])}
                         return returnDict
                     case _:
                         print(
@@ -382,21 +374,15 @@ class Picoscope():
             case 'echo':
                 match direction:
                     case 'forward':
-                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction)
-                        returnDict['voltage_echo_forward'] = voltage
-                        returnDict['time'] = waveTime
+                        returnDict = self.autoRange(multiplexer, collectionMode, direction, ['voltage_echo_forward', 'time'])
                         return returnDict
                     case 'reverse':
-                        voltage, waveTime = self.autoRange(multiplexer, collectionMode, direction)
-                        returnDict['voltage_echo_reverse'] = voltage
-                        returnDict['time'] = waveTime
+                        returnDict = self.autoRange(multiplexer, collectionMode, direction,
+                                                    ['voltage_echo_reverse', 'time'])
                         return returnDict
                     case 'both':
-                        voltagef, waveTimef = self.autoRange(multiplexer, collectionMode, 'forward')
-                        voltager, waveTimer = self.autoRange(multiplexer, collectionMode, 'reverse')
-                        returnDict['voltage_echo_forward'] = voltagef
-                        returnDict['voltage_echo_reverse'] = voltager
-                        returnDict['time'] = waveTimef
+                        returnDict = {**self.autoRange(multiplexer, collectionMode, 'forward', ['voltage_echo_forward', 'time']),
+                            **self.autoRange(multiplexer, collectionMode, 'forward', ['voltage_echo_reverse', 'time'])}
                         return returnDict
                     case _:
                         print(
@@ -405,29 +391,25 @@ class Picoscope():
             case 'both':
                 match direction:
                     case 'forward':
-                        voltaget, waveTimet = self.autoRange(multiplexer, 'transmission', direction)
-                        voltagee, waveTimer = self.autoRange(multiplexer, 'echo', direction)
-                        returnDict['voltage_echo_forward'] = voltagee
-                        returnDict['voltage_transmission_forward'] = voltaget
-                        returnDict['time'] = waveTimet
+                        returnDict = {
+                            **self.autoRange(multiplexer, 'transmission', direction, ['voltage_transmission_forward', 'time']),
+                            **self.autoRange(multiplexer, 'echo', direction, ['voltage_echo_forward', 'time'])}
                         return returnDict
                     case 'reverse':
-                        voltaget, waveTimet = self.autoRange(multiplexer, 'transmission', direction)
-                        voltagee, waveTimer = self.autoRange(multiplexer, 'echo', direction)
-                        returnDict['voltage_echo_reverse'] = voltagee
-                        returnDict['voltage_transmission_reverse'] = voltaget
-                        returnDict['time'] = waveTimet
+                        returnDict = {
+                            **self.autoRange(multiplexer, 'transmission', direction,
+                                             ['voltage_transmission_reverse', 'time']),
+                            **self.autoRange(multiplexer, 'echo', direction, ['voltage_echo_reverse', 'time'])}
                         return returnDict
                     case 'both':
-                        voltagetf, waveTimetf = self.autoRange(multiplexer, 'transmission', 'forward')
-                        voltageef, waveTimeef = self.autoRange(multiplexer, 'echo', 'forward')
-                        voltagetr, waveTimetr = self.autoRange(multiplexer, 'transmission', 'reverse')
-                        voltageer, waveTimeer = self.autoRange(multiplexer, 'echo', 'reverse')
-                        returnDict['voltage_transmission_forward'] = voltagetf
-                        returnDict['voltage_echo_forward'] = voltageef
-                        returnDict['voltage_transmission_reverse'] = voltagetr
-                        returnDict['voltage_echo_reverse'] = voltageer
-                        returnDict['time'] = waveTimetf
+                        returnDict = {
+                            **self.autoRange(multiplexer, 'transmission', 'forward',
+                                             ['voltage_transmission_forward', 'time']),
+                            **self.autoRange(multiplexer, 'echo', 'forward', ['voltage_echo_forward', 'time']),
+                            **self.autoRange(multiplexer, 'transmission', 'reverse',
+                                             ['voltage_transmission_reverse', 'time']),
+                            **self.autoRange(multiplexer, 'echo', 'reverse', ['voltage_echo_reverse', 'time'])
+                        }
                         return returnDict
                     case _:
                         print(
@@ -489,22 +471,36 @@ class Picoscope():
             return (2**32)-1, 34000000000
 
     # a wrapper function to call the appropriate auto range function (if any)
-    def autoRange(self, multiplexer, mode, direction):
+    # note: at this level, mode and direction must not be 'both' - that is decided when this is called from runPicoMeasurement()
+    # inputs are the mux object, mode and direction strings (cannot be 'both' at this level) and a list of strings used
+    #   as keys for the voltage, time in the return dict
+    # returns a dict with voltage, times, and gain/offset if needed
+    def autoRange(self, multiplexer, mode, direction, saveKeys : list):
 
         autoRangeTrans = self.params['autoRange']
         autoRangeEcho = self.params['autoRangeEcho']
+        returnDict = {}
 
         if (mode == 'transmission' and not autoRangeTrans) or (mode == 'echo' and not autoRangeEcho):
-            return self.runRapidBlock(multiplexer, mode, direction)
+            voltage, time = self.runRapidBlock(multiplexer, mode, direction)
 
         elif mode == 'transmission':
-            return self.voltageRangeFinder(multiplexer, direction)
+            voltage, time =  self.voltageRangeFinder(multiplexer, direction)
 
         elif mode == 'echo':
-            return self.optimizeEchoRange(multiplexer, direction)
+            voltage, time =  self.optimizeEchoRange(multiplexer, direction)
+            # generate key names for the gain and voltage. direction.title() converts e.g. 'forward' to 'Forward'
+            gainString = 'gain' + direction.title()
+            offsetString = 'voltageOffset' + direction.title()
+            returnDict[gainString] = self.params[gainString]
+            returnDict[offsetString] = self.params[offsetString]
         else:
             print("Picoscope.autoRange(): unable to run auto range function. An incorrect mode (" + str(mode) + ") was likely specified during execution.\nRunning without auto range...")
-            return self.runRapidBlock(multiplexer, mode, direction)
+            voltage, time = self.runRapidBlock(multiplexer, mode, direction)
+
+        returnDict[saveKeys[0]] = voltage
+        returnDict[saveKeys[1]] = time
+        return returnDict
 
     # helper function that calculates the baseline of a given voltage array for the purposes of specifying a new voltage offset
     # inputs measurement direction string, the voltage array, and the number of points to average to calculate the baseline from
@@ -738,7 +734,7 @@ class Picoscope():
         mode = self.params['collectionMode']
         direction = self.params['collectionDirection']
         
-        if mode == 'pulse-echo':
+        if mode == 'echo':
             return -1 # no transmission data collected
         
         else:
