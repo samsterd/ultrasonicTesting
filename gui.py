@@ -320,31 +320,38 @@ class MainWindow(QMainWindow):
 
         self.picoModuleLabel = QLabel("Picoscope Multiplexer Module:")
         self.picoModule = QComboBox()
-        self.picoModule.addItems(["1", "0"])
+        self.picoModule.addItems([ "0", "1"])
+        self.picoModule.setCurrentIndex(1)
 
         self.pulseModuleLabel = QLabel("Pulser TX Multiplexer Module:")
         self.pulseModule = QComboBox()
         self.pulseModule.addItems(["0", "1"])
+        self.pulseModule.setCurrentIndex(0)
 
         self.rfSwitchLabel = QLabel("RF Switch Number:")
         self.rfSwitch = QComboBox()
         self.rfSwitch.addItems(["None", "0", "1", "2", "3", "4", "5", "6", "7"])
+        self.rfSwitch.setCurrentIndex(3)
 
         self.t0PulseSwitchLabel = QLabel("Front Transducer Pulse Switch Number:")
         self.t0PulseSwitch = QComboBox()
         self.t0PulseSwitch.addItems(["None", "0", "1", "2", "3", "4", "5", "6", "7"])
+        self.t0PulseSwitch.setCurrentIndex(1)
 
         self.t0ReceiveSwitchLabel = QLabel("Front Transducer Pico Switch Number:")
         self.t0ReceiveSwitch = QComboBox()
         self.t0ReceiveSwitch.addItems(["None", "0", "1", "2", "3", "4", "5", "6", "7"])
+        self.t0ReceiveSwitch.setCurrentIndex(1)
 
         self.t1PulseSwitchLabel = QLabel("Back Transducer Pulse Switch Number:")
         self.t1PulseSwitch = QComboBox()
         self.t1PulseSwitch.addItems(["None", "0", "1", "2", "3", "4", "5", "6", "7"])
+        self.t1PulseSwitch.setCurrentIndex(2)
 
         self.t1ReceiveSwitchLabel = QLabel("Back Transducer Pico Switch Number:")
         self.t1ReceiveSwitch = QComboBox()
         self.t1ReceiveSwitch.addItems(["None", "0", "1", "2", "3", "4", "5", "6", "7"])
+        self.t1ReceiveSwitch.setCurrentIndex(2)
 
         # add port information for setup
         if self.experimentType == 'Setup':
@@ -382,10 +389,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.waves, 8, 1)
         layout.addWidget(self.halfCyclesLabel, 9, 0)
         layout.addWidget(self.halfCycles, 9, 1)
-        layout.addWidget(self.collectionModeLabel, 10, 0)
-        layout.addWidget(self.collectionMode, 10, 1)
-        layout.addWidget(self.collectionDirectionLabel, 11, 0)
-        layout.addWidget(self.collectionDirection, 11, 1)
 
         layout.addWidget(self.advancedOptionsLabel , 0, 3)
         layout.addWidget(self.multiplexerLabel , 1, 3)
@@ -424,13 +427,10 @@ class MainWindow(QMainWindow):
             layout.addWidget(self.pulserPort, 12, 1)
             layout.addWidget(self.dllFileLabel, 13, 0)
             layout.addWidget(self.dllFile, 13, 1)
-            layout.addWidget(self.executePulseButton, 14, 1)
-            layout.addWidget(self.returnToMoveButton, 15, 1)
-            layout.addWidget(self.nextButtonPulse, 16, 1)
-        else:
-            layout.addWidget(self.executePulseButton, 12, 1)
-            layout.addWidget(self.returnToMoveButton, 13, 1)
-            layout.addWidget(self.nextButtonPulse, 14, 1)
+
+        layout.addWidget(self.executePulseButton, 16, 4)
+        layout.addWidget(self.returnToMoveButton, 17, 4)
+        layout.addWidget(self.nextButtonPulse, 18, 4)
 
         widget = QWidget()
         widget.setLayout(layout)
@@ -614,10 +614,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.measureTime, 4, 1)
         layout.addWidget(self.measureDelayLabel, 5, 0)
         layout.addWidget(self.measureDelay, 5, 1)
-        layout.addWidget(self.voltageRangeTLabel, 6, 0)
-        layout.addWidget(self.voltageRangeT, 6, 1)
-        layout.addWidget(self.voltageRangePLabel, 7, 0)
-        layout.addWidget(self.voltageRangeP, 7, 1)
+        layout.addWidget(self.voltageRangeLabel, 6, 0)
+        layout.addWidget(self.voltageRange, 6, 1)
         layout.addWidget(self.voltageAutoRangeLabel, 8, 0)
         layout.addWidget(self.voltageAutoRange, 8, 1)
         layout.addWidget(self.samplesLabel, 9, 0)
@@ -1098,6 +1096,9 @@ class MainWindow(QMainWindow):
         self.gatherPulseParams()
         self.gatherSaveParams()
 
+        self.params['pulseInterval'] = float(self.pulseInterval.text())
+        self.params['experimentTime'] = float(self.experimentTime.text())
+
         # run experiment
         repeatPulse.repeatPulse(self.params)
 
@@ -1178,8 +1179,7 @@ class MainWindow(QMainWindow):
         self.params['pulserType'] = self.pulser.currentText().lower()
         self.params['measureTime'] = float(self.measureTime.text())
         self.params['measureDelay'] = float(self.measureDelay.text())
-        self.params['voltageRangeT'] = float(self.voltageRangeT.currentText())
-        self.params['voltageRangeP'] = float(self.voltageRangeP.currentText())
+        self.params['voltageRange'] = float(self.voltageRange.currentText())
         self.params['voltageAutoRange'] = self.voltageAutoRange.isChecked()
         self.params['waves'] = int(self.waves.text())
         self.params['samples'] = int(self.samples.text())
@@ -1209,7 +1209,7 @@ class MainWindow(QMainWindow):
         
         try:
             return int(input)
-        except TypeError:
+        except ValueError:
             return None
 
 ##############################################################################

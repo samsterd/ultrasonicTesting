@@ -72,8 +72,7 @@ class Database:
         initTable = "CREATE TABLE IF NOT EXISTS acoustics (\n"
 
         voltageString = self.generateVoltageString(params)
-        voltageTable = ' array,\n'.join(voltageString) + ' array,\n' # need to add final separator at the end
-        initTable = initTable + voltageTable
+        initTable = initTable + voltageString
 
         initTable = initTable + '''time array,
             time_collected REAL,
@@ -102,7 +101,7 @@ class Database:
 
         # short circuit in the simplest case and default to 'voltage' to maintain backward compatibility
         if mode == 'transmission' and direction == 'forward':
-            return 'voltage'
+            return 'voltage array,\n'
 
         # in other cases, build the more complex labels
         if mode == 'transmission' or mode == 'both':
@@ -119,7 +118,8 @@ class Database:
             dirStringsr = [modeString + 'reverse' for modeString in modeStrings]
             dirStrings = dirStringsf + dirStringsr
 
-        return dirStrings
+        # format the dirStrings into 'voltage_type array,\n'
+        return ' array,\n'.join(dirStrings) + ' array,\n'  # need to add final separator at the end
 
     # initialize table to record oscilloscope parameters
     #todo: generate table based on parameter dict. save full dict rather than hardcode every new parameter
