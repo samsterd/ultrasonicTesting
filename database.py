@@ -73,7 +73,7 @@ class Database:
 
         voltageString = self.generateVoltageString(params)
         gainOffsetString = self.generateGainOffsetString(params)
-        initTable = initTable + voltageString + gainOffsetString
+        initTable += voltageString + gainOffsetString
 
         initTable = initTable + '''time array,
             time_collected REAL,
@@ -88,7 +88,7 @@ class Database:
             #add a column for each axis
             primaryAxisColumn = params['primaryAxis'] + ' REAL,\n'
             secondaryAxisColumn = params['secondaryAxis'] + ' REAL'
-            initTable = initTable + primaryAxisColumn + secondaryAxisColumn
+            initTable += primaryAxisColumn + secondaryAxisColumn
 
         return initTable + ')'
 
@@ -131,9 +131,9 @@ class Database:
         # check if the mode includes pulse-echo and auto ranging is on
         if (params['collectionMode'] == 'echo' or params['collectionMode'] == 'both') and params['autoRangeEcho'] == True:
             if params['collectionDirection'] == 'forward' or params['collectionDirection'] == 'both':
-                gainOffsetString = gainOffsetString + 'voltageOffsetForward REAL,\ngainForward INT,\n'
+                gainOffsetString += 'voltageOffsetForward REAL,\ngainForward INT,\n'
             if params['collectionDirection'] == 'reverse' or params['collectionDirection'] == 'both':
-                gainOffsetString = gainOffsetString + 'voltageOffsetReverse REAL,\ngainReverse INT,\n'
+                gainOffsetString += 'voltageOffsetReverse REAL,\ngainReverse INT,\n'
             return gainOffsetString
         else:
             return ''
@@ -154,7 +154,7 @@ class Database:
             else:
                 keyType = ' TEXT,\n'
 
-            paramString = paramString + keyString + keyType
+            paramString += keyString + keyType
 
         # need to replace ending ",\n" with a ")"
         tableString = paramString.removesuffix(",\n") + ")"
