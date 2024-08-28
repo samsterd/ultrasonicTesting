@@ -382,7 +382,7 @@ class Picoscope():
                         return returnDict
                     case 'both':
                         returnDict = {**self.autoRange(multiplexer, collectionMode, 'forward', ['voltage_echo_forward', 'time']),
-                            **self.autoRange(multiplexer, collectionMode, 'forward', ['voltage_echo_reverse', 'time'])}
+                            **self.autoRange(multiplexer, collectionMode, 'reverse', ['voltage_echo_reverse', 'time'])}
                         return returnDict
                     case _:
                         print(

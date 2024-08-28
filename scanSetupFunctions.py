@@ -69,7 +69,8 @@ def plotWaveDict(waveDict):
     time = waveDict['time']
     fig, ax = plt.subplots()
     for voltageKey in waveDict.keys():
-        if voltageKey != 'time':
+        # this isn't the best way to only select voltage keys but it works for now
+        if 'voltage' in voltageKey and 'Offset' not in voltageKey:
             ax.plot(time, waveDict[voltageKey], label = voltageKey)
 
     plt.xlabel('Time (us)')
