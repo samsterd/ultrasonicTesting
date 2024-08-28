@@ -14,12 +14,14 @@ class Mux():
             print(f"Error opening multiplexer: {error}")
             return -1
 
-        # gather addresses
-        self.rf = params['rfAddress']
-        self.t0p = params['t0PulseAddress']
-        self.t0r = params['t0ReceiveAddress']
-        self.t1p = params['t1PulseAddress']
-        self.t1r = params['t1ReceiveAddress']
+        # convert input module and switch definitions to (module, switch) addresses
+        self.picoMod = params['picoModule']
+        self.pulseMod = params['pulseModule']
+        self.rf = (self.picoMod, params['rfSwitch'])
+        self.t0p = (self.pulseMod, params['t0PulseSwitch'])
+        self.t0r = (self.picoMod, params['t0ReceiveSwitch'])
+        self.t1p = (self.pulseMod, params['t1PulseSwitch'])
+        self.t1r = (self.picoMod, params['t1ReceiveSwitch'])
 
         # define mode/direction combinations in terms of switches that are on
         # self.tx and self.pico are added to all combinations since they are required to run an experiment
@@ -156,10 +158,10 @@ class Mux():
 
         # check that the receiving and pulsing transducer switches are on separate modules
         if self.t0r[0] != None and (self.t0r[0] == self.t0p[0] or self.t0r[0] == self.t1p[0]):
-            raise MuxError("Unsafe combination of multiplexer addresses detected. Please ensure that the t0ReceiveAddress is"
+            raise MuxError("Unsafe combination of multiplexer addresses detected. Please ensure that the t0ReceiveSwitch is"
                            " not on the same module as any transducer pulse address.")
         if self.t1r[0] != None and (self.t1r[0] == self.t0p[0] or self.t1r[0] == self.t1p[0]):
-            raise MuxError("Unsafe combination of multiplexer addresses detected. Please ensure that the t1ReceiveAddress is"
+            raise MuxError("Unsafe combination of multiplexer addresses detected. Please ensure that the t1ReceiveSwitch is"
                            " not on the same module as any transducer pulse address.")
 
         # check that requested collectionMode and collectionDirection do not require a None address

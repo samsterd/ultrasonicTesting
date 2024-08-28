@@ -219,7 +219,6 @@ class MainWindow(QMainWindow):
 
 
     # pulse window specifies scope and pulser paramters
-    #TODO: add collectionMode widget as a QComboBox(v)
     def pulseWindow(self):
 
         if self.experimentType == 'Setup':
@@ -250,16 +249,13 @@ class MainWindow(QMainWindow):
         self.measureDelay = QLineEdit(str(self.params['measureDelay']))
         self.measureDelay.setValidator(QDoubleValidator(0.001, 1000, 3))
 
-        self.voltageRangeTLabel = QLabel("Voltage range on the oscilloscope (V) for Transmission:")
-        self.voltageRangeTLabel.setToolTip("This determines the range of the y-axis in a plot of the measured waveform.\n"
+        self.voltageRangeLabel = QLabel("Voltage range on the oscilloscope (V) for Transmission:")
+        self.voltageRangeLabel.setToolTip("This determines the range of the y-axis in a plot of the measured waveform.\n"
                                           "If it is too small, the waves will be cut off. If it is too large, the waves will\n"
                                           "show artifacts due to division of the voltage range.\n"
                                           "Recommend voltageRange for BOTH collectionMode: 0.5")
-        self.voltageRangePLabel = QLabel("Voltage range on the oscilloscope (V) for Pulse-echo:")
-        self.voltageRangeT = QComboBox()
-        self.voltageRangeT.addItems(["0.02", "0.05", "0.1", "0.2", "0.5", "1", "2", "5", "10", "20"])
-        self.voltageRangeP = QComboBox()
-        self.voltageRangeP.addItems(["0.02", "0.05", "0.1", "0.2", "0.5", "1", "2", "5", "10", "20"])
+        self.voltageRange = QComboBox()
+        self.voltageRange.addItems(["0.02", "0.05", "0.1", "0.2", "0.5", "1", "2", "5", "10", "20"])
         self.voltageAutoRangeLabel = QLabel("Voltage Auto Range (recommended):")
         self.voltageAutoRangeLabel.setToolTip("Automatically finds the optimal voltage range during a measurement.\n"
                                               "Note: this can increase collection time, but prevents measurement artifacts\n"
@@ -286,13 +282,69 @@ class MainWindow(QMainWindow):
         self.halfCycles = QLineEdit(str(self.params['halfCycles']))
         self.halfCycles.setValidator(QIntValidator(1,32))
 
-        self.collectionModeLabel = QLabel("Collection Mode:")
+        # Advanced options
+        self.advancedOptionsLabel = QLabel("Advanced Options (Pulse-Echo and Multiplexer Operation)")
+
+        self.multiplexerLabel = QLabel("Use Multiplexer:")
+        self.multiplexer = QCheckBox()
+        self.multiplexer.setChecked(False)
+
+        self.collectionModeLabel = QLabel("Collection mode:")
         self.collectionMode = QComboBox()
-        self.collectionMode.addItems(["Transmission", "Pulse-Echo", "Both"])
+        self.collectionMode.addItems(["Transmission", "Echo", "Both"])
 
         self.collectionDirectionLabel = QLabel("Collection Direction (Multiplexer Only):")
         self.collectionDirection = QComboBox()
         self.collectionDirection.addItems(["Forward", "Reverse", "Both"])
+
+        self.autoRangeEchoLabel = QLabel("Auto-range Echo Measurements:")
+        self.autoRangeEchoLabel.setToolTip("Automatically calculates the voltage offset and gain to optimize pulse-echo signal. This may increase experiment time by 25% or more.")
+        self.autoRangeEcho = QCheckBox()
+        self.autoRangeEcho.setChecked(False)
+
+        self.voltageOffsetForwardLabel = QLabel("Forward Pulse-Echo Voltage Offset (V):")
+        self.voltageOffsetForward = QLineEdit(str(self.params['voltageOffsetForward']))
+        self.voltageOffsetForward.setValidator(QDoubleValidator(-2, 2, 3))
+
+        self.voltageOffsetReverseLabel = QLabel("Reverse Pulse-Echo Voltage Offset (V):")
+        self.voltageOffsetReverse = QLineEdit(str(self.params['voltageOffsetReverse']))
+        self.voltageOffsetReverse.setValidator(QDoubleValidator(-2, 2, 3))
+
+        self.gainForwardLabel = QLabel("Forward Pulse-Echo Gain (dB/10):")
+        self.gainForward = QLineEdit(str(self.params["gainForward"]))
+        self.gainForward.setValidator(QIntValidator(-120, 600))
+
+        self.gainReverseLabel = QLabel("Reverse Pulse-Echo Gain (dB/10):")
+        self.gainReverse = QLineEdit(str(self.params["gainReverse"]))
+        self.gainReverse.setValidator(QIntValidator(-120, 600))
+
+        self.picoModuleLabel = QLabel("Picoscope Multiplexer Module:")
+        self.picoModule = QComboBox()
+        self.picoModule.addItems(["1", "0"])
+
+        self.pulseModuleLabel = QLabel("Pulser TX Multiplexer Module:")
+        self.pulseModule = QComboBox()
+        self.pulseModule.addItems(["0", "1"])
+
+        self.rfSwitchLabel = QLabel("RF Switch Number:")
+        self.rfSwitch = QComboBox()
+        self.rfSwitch.addItems(["None", "0", "1", "2", "3", "4", "5", "6", "7"])
+
+        self.t0PulseSwitchLabel = QLabel("Front Transducer Pulse Switch Number:")
+        self.t0PulseSwitch = QComboBox()
+        self.t0PulseSwitch.addItems(["None", "0", "1", "2", "3", "4", "5", "6", "7"])
+
+        self.t0ReceiveSwitchLabel = QLabel("Front Transducer Pico Switch Number:")
+        self.t0ReceiveSwitch = QComboBox()
+        self.t0ReceiveSwitch.addItems(["None", "0", "1", "2", "3", "4", "5", "6", "7"])
+
+        self.t1PulseSwitchLabel = QLabel("Back Transducer Pulse Switch Number:")
+        self.t1PulseSwitch = QComboBox()
+        self.t1PulseSwitch.addItems(["None", "0", "1", "2", "3", "4", "5", "6", "7"])
+
+        self.t1ReceiveSwitchLabel = QLabel("Back Transducer Pico Switch Number:")
+        self.t1ReceiveSwitch = QComboBox()
+        self.t1ReceiveSwitch.addItems(["None", "0", "1", "2", "3", "4", "5", "6", "7"])
 
         # add port information for setup
         if self.experimentType == 'Setup':
@@ -320,34 +372,65 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.measureTime, 3, 1)
         layout.addWidget(self.measureDelayLabel, 4, 0)
         layout.addWidget(self.measureDelay, 4, 1)
-        layout.addWidget(self.voltageRangeTLabel, 5, 0)
-        layout.addWidget(self.voltageRangeT, 5, 1)
-        layout.addWidget(self.voltageRangePLabel, 6, 0)
-        layout.addWidget(self.voltageRangeP, 6, 1)
-        layout.addWidget(self.voltageAutoRangeLabel, 7, 0)
-        layout.addWidget(self.voltageAutoRange, 7, 1)
-        layout.addWidget(self.samplesLabel, 8, 0)
-        layout.addWidget(self.samples, 8, 1)
-        layout.addWidget(self.wavesLabel, 9, 0)
-        layout.addWidget(self.waves, 9, 1)
-        layout.addWidget(self.halfCyclesLabel, 10, 0)
-        layout.addWidget(self.halfCycles, 10, 1)
-        layout.addWidget(self.collectionModeLabel, 11, 0)
-        layout.addWidget(self.collectionMode, 11, 1)
-        layout.addWidget(self.collectionDirectionLabel, 12, 0)
-        layout.addWidget(self.collectionDirection, 12, 1)
+        layout.addWidget(self.voltageRangeLabel, 5, 0)
+        layout.addWidget(self.voltageRange, 5, 1)
+        layout.addWidget(self.voltageAutoRangeLabel, 6, 0)
+        layout.addWidget(self.voltageAutoRange, 6, 1)
+        layout.addWidget(self.samplesLabel, 7, 0)
+        layout.addWidget(self.samples, 7, 1)
+        layout.addWidget(self.wavesLabel, 8, 0)
+        layout.addWidget(self.waves, 8, 1)
+        layout.addWidget(self.halfCyclesLabel, 9, 0)
+        layout.addWidget(self.halfCycles, 9, 1)
+        layout.addWidget(self.collectionModeLabel, 10, 0)
+        layout.addWidget(self.collectionMode, 10, 1)
+        layout.addWidget(self.collectionDirectionLabel, 11, 0)
+        layout.addWidget(self.collectionDirection, 11, 1)
+
+        layout.addWidget(self.advancedOptionsLabel , 0, 3)
+        layout.addWidget(self.multiplexerLabel , 1, 3)
+        layout.addWidget(self.multiplexer , 1, 4)
+        layout.addWidget(self.collectionModeLabel , 2, 3)
+        layout.addWidget(self.collectionMode , 2, 4)
+        layout.addWidget(self.collectionDirectionLabel , 3, 3)
+        layout.addWidget(self.collectionDirection , 3, 4)
+        layout.addWidget(self.autoRangeEchoLabel , 4, 3)
+        layout.addWidget(self.autoRangeEcho, 4, 4)
+        layout.addWidget(self.voltageOffsetForwardLabel, 5, 3)
+        layout.addWidget(self.voltageOffsetForward, 5, 4)
+        layout.addWidget(self.voltageOffsetReverseLabel, 6, 3)
+        layout.addWidget(self.voltageOffsetReverse, 6, 4)
+        layout.addWidget(self.gainForwardLabel, 7, 3)
+        layout.addWidget(self.gainForward, 7, 4)
+        layout.addWidget(self.gainReverseLabel, 8, 3)
+        layout.addWidget(self.gainReverse, 8, 4)
+        layout.addWidget(self.picoModuleLabel, 9, 3)
+        layout.addWidget(self.picoModule, 9, 4)
+        layout.addWidget(self.pulseModuleLabel, 10, 3)
+        layout.addWidget(self.pulseModule, 10,4)
+        layout.addWidget(self.rfSwitchLabel, 11, 3)
+        layout.addWidget(self.rfSwitch, 11, 4)
+        layout.addWidget(self.t0PulseSwitchLabel, 12, 3)
+        layout.addWidget(self.t0PulseSwitch, 12, 4)
+        layout.addWidget(self.t0ReceiveSwitchLabel, 13, 3)
+        layout.addWidget(self.t0ReceiveSwitch, 13, 4)
+        layout.addWidget(self.t1PulseSwitchLabel, 14, 3)
+        layout.addWidget(self.t1PulseSwitch, 14, 4)
+        layout.addWidget(self.t1ReceiveSwitchLabel, 15, 3)
+        layout.addWidget(self.t1ReceiveSwitch, 15, 4)
+
         if self.experimentType == 'Setup':
-            layout.addWidget(self.pulserPortLabel, 13, 0)
-            layout.addWidget(self.pulserPort, 13, 1)
-            layout.addWidget(self.dllFileLabel, 14, 0)
-            layout.addWidget(self.dllFile, 14, 1)
-            layout.addWidget(self.executePulseButton, 15, 1)
-            layout.addWidget(self.returnToMoveButton, 16, 1)
-            layout.addWidget(self.nextButtonPulse, 17, 1)
+            layout.addWidget(self.pulserPortLabel, 12, 0)
+            layout.addWidget(self.pulserPort, 12, 1)
+            layout.addWidget(self.dllFileLabel, 13, 0)
+            layout.addWidget(self.dllFile, 13, 1)
+            layout.addWidget(self.executePulseButton, 14, 1)
+            layout.addWidget(self.returnToMoveButton, 15, 1)
+            layout.addWidget(self.nextButtonPulse, 16, 1)
         else:
-            layout.addWidget(self.executePulseButton, 13, 1)
-            layout.addWidget(self.returnToMoveButton, 14, 1)
-            layout.addWidget(self.nextButtonPulse, 15, 1)
+            layout.addWidget(self.executePulseButton, 12, 1)
+            layout.addWidget(self.returnToMoveButton, 13, 1)
+            layout.addWidget(self.nextButtonPulse, 14, 1)
 
         widget = QWidget()
         widget.setLayout(layout)
@@ -976,19 +1059,7 @@ class MainWindow(QMainWindow):
 
         # gather parameters
         self.params['experiment'] = 'single pulse'
-        self.params['transducerFrequency'] = float(self.transducerFrequency.text())
-        # pulserType must be converted to lower case to be recognized by the Pulser class
-        self.params['pulserType'] = self.pulser.currentText().lower()
-        self.params['measureTime'] = float(self.measureTime.text())
-        self.params['measureDelay'] = float(self.measureDelay.text())
-        self.params['voltageRangeT'] = float(self.voltageRangeT.currentText())
-        self.params['voltageRangeP'] = float(self.voltageRangeP.currentText())
-        self.params['voltageAutoRange'] = self.voltageAutoRange.isChecked()
-        self.params['waves'] = int(self.waves.text())
-        self.params['samples'] = int(self.samples.text())
-        self.params['halfCycles'] = int(self.halfCycles.text())
-        self.params['collectionMode'] = self.collectionMode.currentText().lower()
-        self.params['collectionDirection'] = self.collectionDirection.currentText().lower()
+        self.gatherPulseParams()
 
         if self.experimentType == 'Setup':
             self.params['pulserPort'] = self.pulserPort.text()
@@ -1023,35 +1094,9 @@ class MainWindow(QMainWindow):
         self.executeRepeatPulseButton.repaint()
 
         # gather parameters
-
-        #TODO: add collectionMode to the parameters(v)
         self.params['experiment'] = 'repeat pulse'
-        self.params['transducerFrequency'] = float(self.transducerFrequency.text())
-        self.params['pulserType'] = self.pulser.currentText().lower()
-        self.params['measureTime'] = float(self.measureTime.text())
-        self.params['measureDelay'] = float(self.measureDelay.text())
-        self.params['voltageRangeT'] = float(self.voltageRangeT.currentText())
-        self.params['voltageRangeP'] = float(self.voltageRangeP.currentText())
-        self.params['voltageAutoRange'] = self.voltageAutoRange.isChecked()
-        self.params['waves'] = int(self.waves.text())
-        self.params['samples'] = int(self.samples.text())
-        self.params['halfCycles'] = int(self.halfCycles.text())
-        self.params['collectionMode'] = self.collectionMode.currentText().lower()
-        self.params['collectionDirection'] = self.collectionDirection.currentText().lower()
-
-
-        self.params['experimentFolder'] = self.experimentFolderName.text()
-        self.params['experimentName'] = self.experimentName.text()
-        self.params['experimentBaseName'] = self.experimentName.text()
-        saveFormat = self.saveFormat.currentText()
-        if saveFormat == 'JSON':
-            self.params['saveFormat'] = 'JSON'
-        else:
-            self.params['saveFormat'] = 'sqlite'
-        self.params['postAnalysis'] = self.postAnalysis.isChecked()
-
-        self.params['pulseInterval'] = float(self.pulseInterval.text())
-        self.params['experimentTime'] = float(self.experimentTime.text())
+        self.gatherPulseParams()
+        self.gatherSaveParams()
 
         # run experiment
         repeatPulse.repeatPulse(self.params)
@@ -1068,38 +1113,11 @@ class MainWindow(QMainWindow):
         self.executeSingleScanButton.repaint()
 
         # gather parameters
-        #TODO: add collectionMode to the parameters(v)
         self.params['experiment'] = 'single scan'
-        self.params['transducerFrequency'] = float(self.transducerFrequency.text())
-        self.params['pulserType'] = self.pulser.currentText().lower()
-        self.params['measureTime'] = float(self.measureTime.text())
-        self.params['measureDelay'] = float(self.measureDelay.text())
-        self.params['voltageRangeT'] = float(self.voltageRangeT.currentText())
-        self.params['voltageRangeP'] = float(self.voltageRangeP.currentText())
-        self.params['voltageAutoRange'] = self.voltageAutoRange.isChecked()
-        self.params['waves'] = int(self.waves.text())
-        self.params['samples'] = int(self.samples.text())
-        self.params['halfCycles'] = int(self.halfCycles.text())
-        self.params['collectionMode'] = self.collectionMode.currentText().lower()
-        self.params['collectionDirection'] = self.collectionDirection.currentText().lower()
-
-        self.params['experimentFolder'] = self.experimentFolderName.text()
-        self.params['experimentName'] = self.experimentName.text()
-        self.params['experimentBaseName'] = self.experimentName.text()
-        saveFormat = self.saveFormat.currentText()
-        if saveFormat == 'JSON':
-            self.params['saveFormat'] = 'JSON'
-        else:
-            self.params['saveFormat'] = 'sqlite'
-        self.params['postAnalysis'] = self.postAnalysis.isChecked()
-
-        self.params['primaryAxis'] = self.primaryAxis.currentText()
-        self.params['secondaryAxis'] = self.secondaryAxis.currentText()
-        self.params['primaryAxisRange'] = float(self.primaryAxisRange.text())
-        self.params['primaryAxisStep'] = float(self.primaryAxisStep.text())
-        self.params['secondaryAxisRange'] = float(self.secondaryAxisRange.text())
-        self.params['secondaryAxisStep'] = float(self.secondaryAxisStep.text())
-
+        self.gatherPulseParams()
+        self.gatherSaveParams()
+        self.gatherScanParams()
+        
         scan.runScan(self.params)
 
         # change button back to normal
@@ -1114,8 +1132,48 @@ class MainWindow(QMainWindow):
         self.executeMultiScanButton.repaint()
 
         # gather parameters
-        #TODO: add collectionMode to the parameters(v)
         self.params['experiment'] = 'multi scan'
+        self.gatherPulseParams()
+        self.gatherSaveParams()
+        self.gatherScanParams()
+
+        self.params['scanInterval'] = int(self.scanInterval.text())
+        self.params['numberOfScans'] = int(self.numberOfScans.text())
+
+        multiscan.multiscan(self.params)
+
+        # change button back to normal
+        self.executeMultiScanButton.setText("Execute Scans")
+        self.executeMultiScanButton.setEnabled(True)
+
+    # a helper function that gathers all of the save parameters and reformats them in self.params dict
+    # so they can be passed to the experiment function
+    def gatherSaveParams(self):
+        
+        self.params['experimentFolder'] = self.experimentFolderName.text()
+        self.params['experimentName'] = self.experimentName.text()
+        self.params['experimentBaseName'] = self.experimentName.text()
+        saveFormat = self.saveFormat.currentText()
+        if saveFormat == 'JSON':
+            self.params['saveFormat'] = 'JSON'
+        else:
+            self.params['saveFormat'] = 'sqlite'
+        self.params['postAnalysis'] = self.postAnalysis.isChecked()
+
+    # a helper function that gathers all of the parameters from the scan axis/range/step parameters and reformats them 
+    # in self.params dict so they can be passed to the experiment function
+    def gatherScanParams(self):
+        
+        self.params['primaryAxis'] = self.primaryAxis.currentText()
+        self.params['secondaryAxis'] = self.secondaryAxis.currentText()
+        self.params['primaryAxisRange'] = float(self.primaryAxisRange.text())
+        self.params['primaryAxisStep'] = float(self.primaryAxisStep.text())
+        self.params['secondaryAxisRange'] = float(self.secondaryAxisRange.text())
+        self.params['secondaryAxisStep'] = float(self.secondaryAxisStep.text())
+        
+    # a helper function that gathers all of the parameters from the pulsing screen and saves them
+    # in self.params dict so they can be passed to the experiment function
+    def gatherPulseParams(self):
         self.params['transducerFrequency'] = float(self.transducerFrequency.text())
         self.params['pulserType'] = self.pulser.currentText().lower()
         self.params['measureTime'] = float(self.measureTime.text())
@@ -1128,32 +1186,31 @@ class MainWindow(QMainWindow):
         self.params['halfCycles'] = int(self.halfCycles.text())
         self.params['collectionMode'] = self.collectionMode.currentText().lower()
         self.params['collectionDirection'] = self.collectionDirection.currentText().lower()
-
-        self.params['experimentFolder'] = self.experimentFolderName.text()
-        self.params['experimentName'] = self.experimentName.text()
-        self.params['experimentBaseName'] = self.experimentName.text()
-        saveFormat = self.saveFormat.currentText()
-        if saveFormat == 'JSON':
-            self.params['saveFormat'] = 'JSON'
-        else:
-            self.params['saveFormat'] = 'sqlite'
-        self.params['postAnalysis'] = self.postAnalysis.isChecked()
-
-        self.params['primaryAxis'] = self.primaryAxis.currentText()
-        self.params['secondaryAxis'] = self.secondaryAxis.currentText()
-        self.params['primaryAxisRange'] = float(self.primaryAxisRange.text())
-        self.params['primaryAxisStep'] = float(self.primaryAxisStep.text())
-        self.params['secondaryAxisRange'] = float(self.secondaryAxisRange.text())
-        self.params['secondaryAxisStep'] = float(self.secondaryAxisStep.text())
-
-        self.params['scanInterval'] = int(self.scanInterval.text())
-        self.params['numberOfScans'] = int(self.numberOfScans.text())
-
-        multiscan.multiscan(self.params)
-
-        # change button back to normal
-        self.executeMultiScanButton.setText("Execute Scans")
-        self.executeMultiScanButton.setEnabled(True)
+        self.params['multiplexer'] = self.multiplexer.isChecked()
+        self.params['collectionMode'] = self.collectionMode.currentText().lower()
+        self.params['collectionDirection'] = self.collectionDirection.currentText().lower()
+        self.params['autoRangeEcho'] = self.autoRangeEcho.isChecked()
+        self.params['voltageOffsetForward'] = float(self.voltageOffsetForward.text())
+        self.params['voltageOffsetReverse'] = float(self.voltageOffsetReverse.text())
+        self.params['gainForward'] = int(self.gainForward.text())
+        self.params['gainReverse'] = int(self.gainReverse.text())
+        self.params['picoModule'] = int(self.picoModule.currentText())
+        self.params['pulseModule'] = int(self.pulseModule.currentText())
+        self.params['rfSwitch'] = self.intOrNone(self.rfSwitch.currentText())
+        self.params['t0PulseSwitch'] = self.intOrNone(self.t0PulseSwitch.currentText())
+        self.params['t0ReceiveSwitch'] = self.intOrNone(self.t0ReceiveSwitch.currentText())
+        self.params['t1PulseSwitch'] = self.intOrNone(self.t1PulseSwitch.currentText())
+        self.params['t1ReceiveSwitch'] = self.intOrNone(self.t1ReceiveSwitch.currentText())
+        
+    # helper function that safely converts a string input of either an int or None to either an int or None output
+    # used for converting the multiplexer addresses which are either an int or None
+    @staticmethod
+    def intOrNone(input):
+        
+        try:
+            return int(input)
+        except TypeError:
+            return None
 
 ##############################################################################
 ############ EVERYTHING ELSE ##############################################

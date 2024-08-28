@@ -79,11 +79,17 @@ experimentParams = {
                                                     #     is a function of sample placement and could vary widely between the forward and reverse transducer
     'gainForward' : 500,                            # Gain setting on pulser, used to maximize the signal of pulse-echo measurements
     'gainReverse' : 500,                            #  similar to voltageOffsets, these can be set to different values for the forward and reverse directions
-    'rfAddress': (1, 1),                            # Multiplexer addresses for all of the relevant channels
-    't0PulseAddress': (0, 2),                       #   Form is (module #, switch #)
-    't0ReceiveAddress': (1, 2),                     #   NOTE: all data channels (RF, transducer receive) should be on the same module as the picoscope
-    't1PulseAddress': (0, 3),                       #         and all pulsing transducer channels should be on the same module as the TX (pulser output)
-    't1ReceiveAddress': (1, 3),                     #   If you are not using a particular channel, using None as the value will
+    #todo: add pulse module and picoscope module, convert existing address params to just switch numbers
+    # todo: will need to add code to pulse.init to build the addresses from inputs
+    # advantage of this new method is safety - you cannot specify unsafe address combos
+    'picoModule' : 1,
+    'pulseModule' : 0,
+
+    'rfSwitch': 2,                            # Multiplexer switch number for all of the relevant channels
+    't0PulseSwitch': 0,                       #
+    't0ReceiveSwitch': 0,                     #   NOTE: all data channels (RF, transducer receive) should be on the same module as the picoscope
+    't1PulseSwitch': 1,                       #         and all pulsing transducer channels should be on the same module as the TX (pulser output)
+    't1ReceiveSwitch': 1,                     #   If you are not using a particular channel, using None as the value will
                                                     #   will enable error checking that the channels used are compatible with the chosen
                                                     #   collectionMode and collectionDirection
 
