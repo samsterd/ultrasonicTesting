@@ -72,7 +72,8 @@ class Database:
         initTable = "CREATE TABLE IF NOT EXISTS acoustics (\n"
 
         voltageString = self.generateVoltageString(params)
-        initTable = initTable + voltageString
+        gainOffsetString = self.generateGainOffsetString(params)
+        initTable = initTable + voltageString + gainOffsetString
 
         initTable = initTable + '''time array,
             time_collected REAL,
@@ -121,42 +122,62 @@ class Database:
         # format the dirStrings into 'voltage_type array,\n'
         return ' array,\n'.join(dirStrings) + ' array,\n'  # need to add final separator at the end
 
-    # initialize table to record oscilloscope parameters
-    #todo: generate table based on parameter dict. save full dict rather than hardcode every new parameter
+    # a helper function to generate initialization strings for the gain and offsets in pulse-echo mode, if applicable
+    # this only saves the data if there is echo data in the experiment and echo auto range is on
+    # only saves the offset/gain for the directions that are collected in the experiment
+    def generateGainOffsetString(self, params):
+
+        gainOffsetString = ''
+        # check if the mode includes pulse-echo and auto ranging is on
+        if (params['collectionMode'] == 'echo' or params['collectionMode'] == 'both') and params['autoRangeEcho'] == True:
+            if params['collectionDirection'] == 'forward' or params['collectionDirection'] == 'both':
+                gainOffsetString = gainOffsetString + 'voltageOffsetForward REAL,\ngainForward INT,\n'
+            if params['collectionDirection'] == 'reverse' or params['collectionDirection'] == 'both':
+                gainOffsetString = gainOffsetString + 'voltageOffsetReverse REAL,\ngainReverse INT,\n'
+            return gainOffsetString
+        else:
+            return ''
+
+    # initialize table to record all input parameters for the experiment
     def parameterTableInitializer(self, params : dict):
-        initTable = '''CREATE TABLE IF NOT EXISTS parameters (
-            time_started REAL PRIMARY KEY,
-            measure_time REAL,
-            delay REAL,
-            waves REAL,
-            samples REAL,
-            transducer_frequency REAL,
-            voltage_range REAL,
-            voltage_autorange INTEGER
-            )
-        '''
-        if params['pulserType'] == 'tone burst':
-            initTable = initTable + ',\nhalf_cycles INTEGER'
-        return initTable
+
+        paramString = '''CREATE TABLE IF NOT EXISTS parameters (time_started REAL PRIMARY KEY,\n'''
+        for key in params.keys():
+
+            keyString = key
+            # need to determine sqlite data type based on param value
+            valType = type(params[key])
+            if valType == float:
+                keyType = ' REAL,\n'
+            elif valType == int:
+                keyType = ' INT,\n'
+            else:
+                keyType = ' TEXT,\n'
+
+            paramString = paramString + keyString + keyType
+
+        # need to replace ending ",\n" with a ")"
+        tableString = paramString.removesuffix(",\n") + ")"
+
+        return tableString
 
     # Generates a database query for writing the experimental parameters
     def writeParameterTable(self, params : dict):
 
-        # copy over parameters into a separate dict. This isn't the best way to do this and really exposes some bad namespace choices :(
-        parameters = {}
-        parameters['time_started'] = time.time()
-        parameters['measure_time'] = params['measureTime']
-        parameters['delay'] = params['measureDelay']
-        parameters['waves'] = params['waves']
-        parameters['samples'] = params['samples']
-        parameters['transducer_frequency'] = params['transducerFrequency']
-        parameters['voltage_range'] = params['voltageRange']
-        parameters['voltage_autorange'] = int(params['autoRange'])
+        # need to add 'time_started' to params dict
+        paramsWithTime = params
+        paramsWithTime['time_started'] = time.time()
 
         #create db query for the parameters to the parameters table
-        query, vals = self.parseQuery(parameters, 'parameters')
+        query, vals = self.parseQuery(paramsWithTime, 'parameters')
 
-        return query, vals
+        # vals need extra formatting to ensure they are all either an int, float, or array. Anything that isn't one of these
+        # i.e. tuples or None are converted to strings
+        safeValTypes = [
+            val if (type(val) == int or type(val) == float or type(val) == np.ndarray) else str(val) for val in vals
+        ]
+
+        return query, safeValTypes
 
     # Parse query takes a dict and turns it into an SQL-readable format for writing the data
     # returns a query string and the values as a list to be executed on the db connection
@@ -186,7 +207,7 @@ class Database:
 
     # wrapper function to combine generating queries and writing to database.
     # only inputs the data dict. Assumes you are writing to the 'acoustics' table
-    def writeData(self, dataDict):
+    def writeData(self, dataDict, table : str = 'acoustics'):
 
-        query, vals = self.parseQuery(dataDict)
+        query, vals = self.parseQuery(dataDict, table)
         self.write(query, vals)
