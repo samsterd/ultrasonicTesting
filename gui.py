@@ -640,36 +640,36 @@ class MainWindow(QMainWindow):
         if self.experimentType == 'Repeat Pulse Measurement':
 
             self.repeatPulseLabel = QLabel("Repeat Pulse Parameters:")
-            layout.addWidget(self.repeatPulseLabel, 17, 0)
-            layout.addWidget(self.pulseIntervalLabel, 18, 0)
-            layout.addWidget(self.pulseInterval, 18, 1)
-            layout.addWidget(self.experimentTimeLabel, 19, 0)
-            layout.addWidget(self.experimentTime, 19, 1)
+            layout.addWidget(self.repeatPulseLabel, 18, 0)
+            layout.addWidget(self.pulseIntervalLabel, 19, 0)
+            layout.addWidget(self.pulseInterval, 19, 1)
+            layout.addWidget(self.experimentTimeLabel, 20, 0)
+            layout.addWidget(self.experimentTime, 20, 1)
 
             self.executeRepeatPulseButton = QPushButton("Execute Repeat Pulse")
             self.executeRepeatPulseButton.clicked.connect(self.executeRepeatPulse)
             self.cancelButton = QPushButton("Cancel (Return To Start)")
             self.cancelButton.clicked.connect(self.nextButtonClicked)
 
-            layout.addWidget(self.executeRepeatPulseButton, 20, 1)
-            layout.addWidget(self.cancelButton, 21, 1)
+            layout.addWidget(self.executeRepeatPulseButton, 21, 1)
+            layout.addWidget(self.cancelButton, 22, 1)
 
         if self.experimentType == 'Single Scan' or self.experimentType == 'Multiple Scans':
 
             self.scanLabel = QLabel("Scan Parameters:")
-            layout.addWidget(self.scanLabel, 17, 0)
-            layout.addWidget(self.primaryAxisLabel, 18, 0)
-            layout.addWidget(self.primaryAxis, 18, 1)
-            layout.addWidget(self.primaryAxisRangeLabel, 19, 0)
-            layout.addWidget(self.primaryAxisRange, 19, 1)
-            layout.addWidget(self.primaryAxisStepLabel, 20, 0)
-            layout.addWidget(self.primaryAxisStep, 20, 1)
-            layout.addWidget(self.secondaryAxisLabel, 21, 0)
-            layout.addWidget(self.secondaryAxis, 21, 1)
-            layout.addWidget(self.secondaryAxisRangeLabel, 22, 0)
-            layout.addWidget(self.secondaryAxisRange, 22, 1)
-            layout.addWidget(self.secondaryAxisStepLabel, 23, 0)
-            layout.addWidget(self.secondaryAxisStep, 23, 1)
+            layout.addWidget(self.scanLabel, 18, 0)
+            layout.addWidget(self.primaryAxisLabel, 19, 0)
+            layout.addWidget(self.primaryAxis, 19, 1)
+            layout.addWidget(self.primaryAxisRangeLabel, 20, 0)
+            layout.addWidget(self.primaryAxisRange, 20, 1)
+            layout.addWidget(self.primaryAxisStepLabel, 21, 0)
+            layout.addWidget(self.primaryAxisStep, 21, 1)
+            layout.addWidget(self.secondaryAxisLabel, 22, 0)
+            layout.addWidget(self.secondaryAxis, 22, 1)
+            layout.addWidget(self.secondaryAxisRangeLabel, 23, 0)
+            layout.addWidget(self.secondaryAxisRange, 23, 1)
+            layout.addWidget(self.secondaryAxisStepLabel, 24, 0)
+            layout.addWidget(self.secondaryAxisStep, 24, 1)
 
         if self.experimentType == 'Single Scan':
 
@@ -678,26 +678,26 @@ class MainWindow(QMainWindow):
             self.cancelButton = QPushButton("Cancel (Return To Start)")
             self.cancelButton.clicked.connect(self.nextButtonClicked)
 
-            layout.addWidget(self.executeSingleScanButton, 24, 1)
-            layout.addWidget(self.cancelButton, 25, 1)
+            layout.addWidget(self.executeSingleScanButton, 25, 1)
+            layout.addWidget(self.cancelButton, 26, 1)
 
         if self.experimentType == 'Multiple Scans':
 
             self.multiScanTimeLabel = QLabel("Multiple Scan Times:")
-            layout.addWidget(self.multiScanTimeLabel, 24, 0)
-            layout.addWidget(self.scanIntervalLabel, 25, 0)
-            layout.addWidget(self.scanInterval, 25, 1)
-            layout.addWidget(self.numberOfScansLabel, 26, 0)
-            layout.addWidget(self.numberOfScans, 26, 1)
-            layout.addWidget(self.multiScanTimeExplanation, 27, 0)
+            layout.addWidget(self.multiScanTimeLabel, 25, 0)
+            layout.addWidget(self.scanIntervalLabel, 26, 0)
+            layout.addWidget(self.scanInterval, 26, 1)
+            layout.addWidget(self.numberOfScansLabel, 27, 0)
+            layout.addWidget(self.numberOfScans, 27, 1)
+            layout.addWidget(self.multiScanTimeExplanation, 28, 0)
 
             self.executeMultiScanButton = QPushButton("Execute Scans")
             self.executeMultiScanButton.clicked.connect(self.executeMultiScan)
             self.cancelButton = QPushButton("Cancel (Return To Start)")
             self.cancelButton.clicked.connect(self.nextButtonClicked)
 
-            layout.addWidget(self.executeMultiScanButton, 28, 1)
-            layout.addWidget(self.cancelButton, 29, 1)
+            layout.addWidget(self.executeMultiScanButton, 29, 1)
+            layout.addWidget(self.cancelButton, 30, 1)
 
         # for now just dumping all of the advanced pulse options over on the next column and not moving execute/cancel buttons
         layout.addWidget(self.advancedOptionsLabel, 0, 3)
