@@ -699,6 +699,39 @@ class MainWindow(QMainWindow):
             layout.addWidget(self.executeMultiScanButton, 28, 1)
             layout.addWidget(self.cancelButton, 29, 1)
 
+        # for now just dumping all of the advanced pulse options over on the next column and not moving execute/cancel buttons
+        layout.addWidget(self.advancedOptionsLabel, 0, 3)
+        layout.addWidget(self.multiplexerLabel, 1, 3)
+        layout.addWidget(self.multiplexer, 1, 4)
+        layout.addWidget(self.collectionModeLabel, 2, 3)
+        layout.addWidget(self.collectionMode, 2, 4)
+        layout.addWidget(self.collectionDirectionLabel, 3, 3)
+        layout.addWidget(self.collectionDirection, 3, 4)
+        layout.addWidget(self.autoRangeEchoLabel, 4, 3)
+        layout.addWidget(self.autoRangeEcho, 4, 4)
+        layout.addWidget(self.voltageOffsetForwardLabel, 5, 3)
+        layout.addWidget(self.voltageOffsetForward, 5, 4)
+        layout.addWidget(self.voltageOffsetReverseLabel, 6, 3)
+        layout.addWidget(self.voltageOffsetReverse, 6, 4)
+        layout.addWidget(self.gainForwardLabel, 7, 3)
+        layout.addWidget(self.gainForward, 7, 4)
+        layout.addWidget(self.gainReverseLabel, 8, 3)
+        layout.addWidget(self.gainReverse, 8, 4)
+        layout.addWidget(self.picoModuleLabel, 9, 3)
+        layout.addWidget(self.picoModule, 9, 4)
+        layout.addWidget(self.pulseModuleLabel, 10, 3)
+        layout.addWidget(self.pulseModule, 10, 4)
+        layout.addWidget(self.rfSwitchLabel, 11, 3)
+        layout.addWidget(self.rfSwitch, 11, 4)
+        layout.addWidget(self.t0PulseSwitchLabel, 12, 3)
+        layout.addWidget(self.t0PulseSwitch, 12, 4)
+        layout.addWidget(self.t0ReceiveSwitchLabel, 13, 3)
+        layout.addWidget(self.t0ReceiveSwitch, 13, 4)
+        layout.addWidget(self.t1PulseSwitchLabel, 14, 3)
+        layout.addWidget(self.t1PulseSwitch, 14, 4)
+        layout.addWidget(self.t1ReceiveSwitchLabel, 15, 3)
+        layout.addWidget(self.t1ReceiveSwitch, 15, 4)
+
         widget = QWidget()
         widget.setLayout(layout)
         return widget
@@ -1072,7 +1105,7 @@ class MainWindow(QMainWindow):
         waveTime = waveDict['time']
         fig = MplCanvas(width = 7.5, height = 6)
         for voltageKey in waveDict.keys():
-            if voltageKey != 'time':
+            if 'voltage' in voltageKey and 'Offset' not in voltageKey:
                 fig.axes.plot(waveTime, waveDict[voltageKey], label=voltageKey)
         fig.axes.set_xlabel('Time (us)')
         fig.axes.set_ylabel('Voltage (mV)')
