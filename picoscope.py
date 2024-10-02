@@ -78,7 +78,7 @@ class Picoscope():
         assert_pico_ok(self.openUnit)
 
     # setupPicoMeasurement takes experimental parameters and picoData dict and converts it to picoscope-readable data
-    #   More specifically, this sets up a measurement with a simple trigger on channel A and ultrasonic data collected on channel B
+    #   More specifically, this sets up a measurement with a simple trigger on channel B and ultrasonic data collected on channel A
     #       ps2000aSetChannel is run for both channels, the timebase is calculated, and ps2000aSetSimpleTrigger is run. Statuses are recorded in picoData
     # setupPicoMeasurement(delay, voltageRange, timeResolution, duration, numberToAverage, picoData)
     #   picoData - dict containing picoscope info and statuses. Note that the "cHandle" key must be filled for this function to run!
@@ -560,10 +560,32 @@ class Picoscope():
                 return self.optimizeEchoRange(multiplexer, direction, baselineTolerance, baselinePoints, minV, maxV)
 
             # otherwise the new measurement is good
-            return voltageG, timeG
+            else:
+                self.printEchoParams(direction)
+                return voltageG, timeG
 
         # gain did not need to be optimized, return values from offset optimization
+        self.printEchoParams(direction)
         return voltage, time
+
+    # helper function that outputs the optimal echo gain/offsets if it is a single pulse measurement
+    # used to run a single shot optimization before a longer scan for faster runtime
+    def printEchoParams(self, direction):
+
+        # check that the experiment is a single pulse
+        if self.params['experiment'] == 'single pulse':
+
+            # generate keys to gather depending on the direction
+            dir = direction.capitalize()
+            gainKey = 'gain' + dir
+            offsetKey = 'voltageOffset' + dir
+
+            # print offsets and gains
+            paramsToPrint = {gainKey : self.params[gainKey],
+                             offsetKey :self.params[offsetKey]}
+            print("Optimized Pulse-Echo parameters:")
+            print(paramsToPrint)
+
 
     # function that recursively runs runRapidBlock until the calculated baseline is within a set tolerance
     # inputs:
@@ -679,9 +701,10 @@ class Picoscope():
         currentLimit = self.params['voltageRange']
         currentTolerance = tolerance * currentLimit
 
-        # collect initial waveform and find maximum. Convert to mV
+        # collect initial waveform and find max. Convert to mV
         voltage, time = self.runRapidBlock(multiplexer, 'transmission', direction)
-        maxV = np.max(voltage)/1000
+        # needs to check vs the max and the min in case the negative portion exceeds the limit
+        maxV = max([abs(np.max(voltage)/1000), abs(np.min(voltage)/1000)])
 
         # base case 1 : currentLimit == lowest limit and max < current limit. return waveform
         if currentLimit == voltageLimits[0] and maxV < currentLimit:
