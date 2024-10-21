@@ -1157,6 +1157,16 @@ def baselineCorrectVoltage(voltage, baseline):
 
     return voltage - baseline
 
+# removes the effect of pulser gain from pulse-echo data by solving for VBaseline in 100log10(Vmeasured/VBaseline) = Gain
+# this uses a logarithm so input data must be positive
+def correctVoltageByGain(data, gain):
+
+    # note: pulser gain is in units of 10ths of a dB (i.e. 100ths of a power of ten)
+    # inverting the gain requires a negative power
+    gainExponent = np.log10(data) - (gain/100)
+
+    return 10**gainExponent
+
 # Applies a Savitzky-Golay filter to the data and optionally takes its first or second derivative
 # Inputs the y-data ('voltage'), x-data ('time') along with 3 auxiliary parameters: the window length of filtering (defaults to 9),
 #       the order of polynomials used to fit (defaults to 3), and the derivative order (default to 0, must be less than polynomial order)
