@@ -18,6 +18,11 @@ class Pulser():
         # Inform the pulserType
         self.type = pulserType
 
+        # Fill in some constants
+        self.minGain = -120
+        # maxGain is set below pulser maximum (840) because signals get distorted above 600
+        self.maxGain = 600
+
         # Initialize connection to the pulser based on the type
         self.connection = self.openPulser(pulserType, kwargs)
 
@@ -155,6 +160,7 @@ class Pulser():
 
         elif self.type == 'tone burst':
             return self.connection.shutdown_server32()
+
     def readGain(self):
         #start with self.writeToPulser('G?'), but then you need to read the value that comes out
         self.writeToPulser('G?')

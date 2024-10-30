@@ -46,18 +46,52 @@ experimentParams = {
     'pulserType' : 'standard',                       # Type of pulser. 'standard' is the single wave CompactPulser. 'tone burst' uses the USBUT350 tone burst pulser
     'measureTime' : 1,                               # Approx measurement time, in us. Note this can be changed by the picoscope time interval based on samples
                                                      #      Changes to the measureTime will be printed in the console when the script is run
-    'measureDelay' : 4,                           # Approx delay after trigger to start measuring, in us
-    'voltageRangeT' : 0.02,                            # For Transmission: Picoscope voltage range in V. Note this is the total range: 1 V = [-0.5 V, 0.5 V]
-    'voltageRangeP': 1,                              #For Pulse-echo: Picoscope voltage range in V. Note this is the total range: 1 V = [-0.5 V, 0.5 V]
-
-    # Allowed voltages = (0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20)
-    'voltageAutoRange' : True,                      # Set the oscilloscope to rerun measurements where the voltage range of the wave has significantly changed
+    'measureDelay' : 26,                           # Approx delay after trigger to start measuring, in us
+    'voltageRange' : 1,                            # Picoscope voltage range for transmission transducer in V. Note this is the total range: 1 V = [-0.5 V, 0.5 V]
+                                                     # Allowed voltages = (0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20)
+    # todo: separate autoRange and autoGain
+    'autoRange' : False,                            # Set the oscilloscope to rerun measurements where the voltage range of the wave has significantly changed
                                                      # This enables the tightest possible voltageRange to be used, increasing the accuracy of low intensity signals without cutting off high intensity ones
+                                                     # For transmission measurements, this changes the voltage range on the oscilloscope. For echo measurements, this changes the voltage offset on the scope and
+                                                    #  the gain setting on the pulser
                                                      # NOTE: this can add significant overhead (2-3x increase in collection time) for each waveform where the range changes
     'waves' : 1000,                                  # Number of waves to collect and average
     'samples': 1000,                                  # Number of data points per wave
     'halfCycles' : 16,                               # Tone burst pulser only. Number of half-cycles in a tone burst pulse. Minimum 1, maximum 32
-    'collectionMode': 'pulse-echo',                #transmission/pulse-echo/both
+
+    ##############################################################################################
+    ######################## Advanced Options ####################################################
+    ############# Parameters for multiplexed measurements ########################################
+    ##############################################################################################
+
+    #todo: add gain option here?
+    'multiplexer' : True,                            # Will the multiplexer be used in the measurement
+                                                    # If set to False, all other parameters in this section are ignored
+                                                    # and the system is assumed to be wired without the multiplexer (trigger to Channel B, receiver or RF data to Channel A)
+    'collectionMode': 'pulse-echo',                 #transmission/pulse-echo/both
+    'collectionDirection' : 'forward',              # Specifies the channels used for the transmitting and receiving transducers
+                                                    # 'forward' pulses on Channel A and (for collectionMode = transmision or both) collects on Channel B
+                                                    # 'reverse' pulses on Channel B and collects on Channel A
+                                                    # 'both' repeats the measurement in both directions
+    'autoRangeEcho': True,                          # Automatically calculate and adjust the offset and gain values. This may add significant measurement time
+    'voltageOffsetForward' : 0.0,                   # Voltage offset applied to pulse-echo measurements to fix large baseline added by pulser output
+    'voltageOffsetReverse': 0.0,                    #     Voltage offsets are directional since 1) echo baseline depends heavily on delay time and 2) delay time
+                                                    #     is a function of sample placement and could vary widely between the forward and reverse transducer
+    'gainForward' : 500,                            # Gain setting on pulser, used to maximize the signal of pulse-echo measurements
+    'gainReverse' : 500,                            #  similar to voltageOffsets, these can be set to different values for the forward and reverse directions
+    #todo: add pulse module and picoscope module, convert existing address params to just switch numbers
+    # todo: will need to add code to pulse.init to build the addresses from inputs
+    # advantage of this new method is safety - you cannot specify unsafe address combos
+    'picoModule' : 1,
+    'pulseModule' : 0,
+
+    'rfSwitch': 2,                            # Multiplexer switch number for all of the relevant channels
+    't0PulseSwitch': 0,                       #
+    't0ReceiveSwitch': 0,                     #   NOTE: all data channels (RF, transducer receive) should be on the same module as the picoscope
+    't1PulseSwitch': 1,                       #         and all pulsing transducer channels should be on the same module as the TX (pulser output)
+    't1ReceiveSwitch': 1,                     #   If you are not using a particular channel, using None as the value will
+                                                    #   will enable error checking that the channels used are compatible with the chosen
+                                                    #   collectionMode and collectionDirection
 
     ################################################################################
     ########################### Saving Names ##########################################
@@ -100,6 +134,7 @@ experimentParams = {
     'pulserPort' : '/dev/ttyUSB0',                          # Ultratek pulser port name
     'scannerPort' : '/dev/ttyUSB1',                         # Ender port name
     'dllFile' : 'C://USUTSDK//USBUTSDKC//USBUT.dll',        # Only used for 'pulserType' : 'tone burst'. Location of USBUT350 pulser SDK
+    'multiplexerPort' : '/dev/ttyUSB0',                     # Only used if 'multiplexer': True
 
     ##################################################################################
     ######################### Scanner Size Parameters ################################

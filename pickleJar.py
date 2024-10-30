@@ -89,7 +89,8 @@ def sqliteToPickle(file : str):
 
         for i in range(len(colNames)):
             # some tables have blank columns due to code bugs. This skips over them
-            if row[i] != None:
+            # needs to first check if the value is an array b/c truth values don't apply to whole arrays
+            if type(row[i]) == np.ndarray or row[i] != None:
                 dataDict[index][colNames[i]] = squ.stringConverter(row[i])
             else:
                 pass
@@ -922,9 +923,6 @@ def plotScan(dataDict, colorKey, colorRange = [None, None], scalePlot = False, s
         plt.axis('scaled')
     plt.colorbar()
 
-    if show == True:
-        plt.show()
-
     # save. generate a filename if it isn't specified
     if save == True:
 
@@ -935,7 +933,13 @@ def plotScan(dataDict, colorKey, colorRange = [None, None], scalePlot = False, s
         else:
             saveFile = fileName
         plt.savefig(saveFile)
-        plt.close()
+        if show == False:
+            plt.close()
+
+    if show == True:
+        plt.show()
+
+
 
 # helper function for plotScan that reverses coordinate lists that start negative
 # inputs an array. Outputs an array that is reversed if the input started negative
@@ -1156,6 +1160,16 @@ def absoluteSum(voltages):
 def baselineCorrectVoltage(voltage, baseline):
 
     return voltage - baseline
+
+# removes the effect of pulser gain from pulse-echo data by solving for VBaseline in 100log10(Vmeasured/VBaseline) = Gain
+# this uses a logarithm so input data must be positive
+def correctVoltageByGain(data, gain):
+
+    # note: pulser gain is in units of 10ths of a dB (i.e. 100ths of a power of ten)
+    # inverting the gain requires a negative power
+    gainExponent = np.log10(data) - (gain/100)
+
+    return 10**gainExponent
 
 # Applies a Savitzky-Golay filter to the data and optionally takes its first or second derivative
 # Inputs the y-data ('voltage'), x-data ('time') along with 3 auxiliary parameters: the window length of filtering (defaults to 9),

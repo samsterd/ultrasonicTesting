@@ -1,5 +1,5 @@
 import json
-import picosdkRapidblockPulse as pico
+import picoscope as picoscope
 import ultratekPulser as utp
 import time
 import tqdm
@@ -8,16 +8,20 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from database import Database
 import pickleJar as pj
-import picosdkRapidblockPulse as picoRapid
+import mux
 
 
 def repeatPulse(params):
 
-    # Connect to picoscope & Set up pico measurement
-    pico = picoRapid.picosdkRapidblockPulse(params)
-    # Connect to picoscope, ender, pulser
-    # picoConnection = picoRapid.openPicoscope()
+    # Connect to picoscope, pulser
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
+    pico = picoscope.Picoscope(params, pulser)
+
+    # connect to multiplexer, if applicable
+    if params['multiplexer']:
+        multiplexer = mux.Mux(params)
+    else:
+        multiplexer = None
 
     # generate filename for current scan
     params['fileName'] = params['experimentFolder'] + '//' + params['experimentName']
@@ -60,19 +64,10 @@ def repeatPulse(params):
         pulseStartTime = time.time()
 
         # collect data
-        if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
-            waveform, params = pico.voltageRangeFinder(params)
-        else:
-            waveform = pico.runPicoMeasurement(params['waves'])
+        waveDict = pico.runPicoMeasurement(multiplexer)
 
-        # Make a data dict for saving
-        waveData = {}
-
-        waveData['voltage'] = list(waveform[0])
-        waveData['time'] = list(waveform[1])
-
-        waveData['time_collected'] = time.time()
-        waveData['collection_index'] = collectionIndex
+        waveDict['time_collected'] = time.time()
+        waveDict['collection_index'] = collectionIndex
         collectionIndex += 1
 
         # CURRENTLY NOT SUPPORTED
@@ -81,13 +76,12 @@ def repeatPulse(params):
 
         # save data as sqlite database
         if params['saveFormat'] == 'sqlite':
-            query = database.parse_query(waveData)
-            database.write(query)
+            database.writeData(waveDict)
 
         # save data as json
         else:
             with open(params['fileName'], 'a') as file:
-                json.dump(waveData, file)
+                json.dump(waveDict, file)
                 file.write('\n')
 
         # calculate time elapsed in this iteration
@@ -109,8 +103,11 @@ def repeatPulse(params):
 
     pbar.close()
 
+    # close instrument and database connections
     pulser.pulserOff()
     pulser.closePulser()
     pico.closePicoscope()
+    if params['multiplexer']:
+        multiplexer.closeMux()
     if params['saveFormat'] == 'sqlite':
         database.connection.close()

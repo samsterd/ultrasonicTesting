@@ -3,14 +3,14 @@
 #   singlePulseMeasure - turns on pulser, takes a measurement with the picoscope at given parameters, outputs a plot
 #   repositionEnder - connects to Ender, moves, and disconnects so that it can be positioned at the starting point of a scan
 # This interface should be improved to better match setup protocols
-
 import ultratekPulser as utp
 import scanner as sc
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import time
-import picosdkRapidblockPulse as picoRapid
+import picoscope as picoscope
+import mux
 
 
 # Function to test collection parameters
@@ -24,13 +24,18 @@ def singlePulseMeasure(params):
     if params['gui'] == False:
         matplotlib.use('TkAgg')
 
-    # Connect to picoscope & Set up pico measurement
-    pico = picoRapid.picosdkRapidblockPulse(params)
+    # connect to multiplexer, if applicable
+    if params['multiplexer']:
+        multiplexer = mux.Mux(params)
+    else:
+        multiplexer = None
 
     # Open connection to pulser
-    pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
-    # between -120 and 840
-    pulser.setGain(500)
+    pulser = utp.Pulser(params['pulserType'], pulserPort=params['pulserPort'], dllFile=params['dllFile'])
+
+    # Connect to picoscope & Set up pico measurement
+    pico = picoscope.Picoscope(params, pulser)
+
     # Adjust pulser pulsewidth
     pulser.setFrequency(params['transducerFrequency'])
 
@@ -41,46 +46,37 @@ def singlePulseMeasure(params):
     # Turn on the pulser
     pulser.pulserOn()
 
-    # Run pico measurement
-    if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
-        waveform, params = pico.voltageRangeFinder(params)
-        if params['collectionMode'] == 'both':
-            volA, volB, times = waveform[0], waveform[1], waveform[2]
-        else:
-            voltages, times = waveform[0], waveform[1]
-    else:
-        if params['collectionMode'] == 'both':
-            volA, volB, times  = pico.runPicoMeasurement(params['waves'],params['collectionMode'])
-        else:
-            voltages, times = pico.runPicoMeasurement(params['waves'],params['collectionMode'])
+    waveDict = pico.runPicoMeasurement(multiplexer)
 
     # Turn off pulser
     pulser.pulserOff()
 
-    # Close connection to pulser and picoscope
+    # Close connection to pulser, picoscope, and multiplexer
     pulser.closePulser()
     pico.closePicoscope()
-
-    # Plot data
-    if params['collectionMode'] == 'both':
-        # fig = plt.plot(times, volA)
-        fig,ax = plt.subplots()
-        ax.plot(times,volA,color='r',label='pulse-echo')
-        ax.plot(times,volB,color='b',label='transmission')
-        plt.xlabel('Time (us)')
-        plt.ylabel('Voltage (mV)')
-        plt.legend()
-    else:
-        fig = plt.plot(times, voltages)
-        plt.xlabel('Time (us)')
-        plt.ylabel('Voltage (mV)')
+    if params['multiplexer']:
+        multiplexer.closeMux()
 
     if params['gui']:
-        if params['collectionMode']== 'both':
-            return volA,volB,times
-        return voltages, times
+        return waveDict
     else:
-        plt.show()
+        plotWaveDict(waveDict)
+
+# helper function to plot the waveDict returned by runPicoMeasurement()
+# handles arbitrary number of y-value keys, assumed x-axis is 'time'
+def plotWaveDict(waveDict):
+
+    time = waveDict['time']
+    fig, ax = plt.subplots()
+    for voltageKey in waveDict.keys():
+        # this isn't the best way to only select voltage keys but it works for now
+        if 'voltage' in voltageKey and 'Offset' not in voltageKey:
+            ax.plot(time, waveDict[voltageKey], label = voltageKey)
+
+    plt.xlabel('Time (us)')
+    plt.ylabel('Voltage (mV)')
+    plt.legend()
+    plt.show()
 
 # Helper function to connect to and move the scanner
 # Inputs the parameters dict, which must contain the scannerPort, axis, and distance keys
