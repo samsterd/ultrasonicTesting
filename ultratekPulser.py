@@ -126,6 +126,7 @@ class Pulser():
     # Returns None
     def pulserOn(self):
 
+        #TODO: make PRF an experiment parameter
         # Compact PUlser max PRF is 5000 Hz. P# command sets PRF to 10 * #, so P500 = 5000 Hz
         if self.type == 'standard':
             self.writeToPulser('P500')

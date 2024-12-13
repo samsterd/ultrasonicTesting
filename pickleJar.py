@@ -1157,15 +1157,15 @@ def baselineCorrectVoltage(voltage, baseline):
 
     return voltage - baseline
 
-# removes the effect of pulser gain from pulse-echo data by solving for VBaseline in 100log10(Vmeasured/VBaseline) = Gain
-# this uses a logarithm so input data must be positive
+# removes the effect of pulser gain from pulse-echo data by solving for linear gain from dB-gain
+# linear gain = 10**(decibel gain / 10), then v(input) = v(output) / linear gain
 def correctVoltageByGain(data, gain):
 
     # note: pulser gain is in units of 10ths of a dB (i.e. 100ths of a power of ten)
     # inverting the gain requires a negative power
-    gainExponent = np.log10(data) - (gain/100)
+    linearGain = 10**(gain / 100)
 
-    return 10**gainExponent
+    return data / linearGain
 
 # Applies a Savitzky-Golay filter to the data and optionally takes its first or second derivative
 # Inputs the y-data ('voltage'), x-data ('time') along with 3 auxiliary parameters: the window length of filtering (defaults to 9),
@@ -1261,8 +1261,9 @@ def simpleThresholdTOF(yDat, xDat, threshold = 0.1):
 # Calculate the time of flight for a signal by calculating the Hilbert envelope and returning the time value where it reaches
 # a certain fraction of its max value
 # Inputs y-data of the signal ('voltage'), x-data ('time') and the fraction of maximum for the threshold (number in (0,1))
+# Includes an option to linearly interpolate the ToF rather than return the closest measured value
 # Returns the time of flight
-def envelopeThresholdTOF(yDat, xDat, threshold = 0.5):
+def envelopeThresholdTOF(yDat, xDat, threshold = 0.5, linearInterpolation = True):
 
     if len(yDat) != len(xDat):
         print("envelopeThresholdTOF Error: x- and y- data must be the same length. Check that the correct keys are being used.")
@@ -1279,7 +1280,22 @@ def envelopeThresholdTOF(yDat, xDat, threshold = 0.5):
 
     firstBreakIndex = firstIndexAboveThreshold(envelope, thresholdValue)
 
-    return xDat[firstBreakIndex]
+    if linearInterpolation:
+
+        # handle edge case where first break is the first data point. In this case, do not interpolate
+        if firstBreakIndex == 0:
+            return xDat[0]
+        else:
+            # gather two points around the threshold crossing, perform linear interpolation
+            point0 = (xDat[firstBreakIndex - 1], envelope[firstBreakIndex - 1])
+            point1 = (xDat[firstBreakIndex], envelope[firstBreakIndex])
+            slope = (point1[1] - point0[1]) / (point1[0] - point0[0])
+            intercept = point0[1] - (slope * point0[0])
+            xInterp = (thresholdValue - intercept) / slope
+            return xInterp
+
+    else:
+        return xDat[firstBreakIndex]
 
 # Calculates the hilbert envelope of an input signal by taking the absolute value of the hilbert transform
 def hilbertEnvelope(array):

@@ -2,6 +2,7 @@ import sqlite3
 import numpy as np
 import io
 import time
+import os
 
 #todo: update documentation for overall class
 class Database:
@@ -18,7 +19,16 @@ class Database:
     def __init__(self, params : dict):
 
         #create db connection, create cursor
-        self.connection = sqlite3.connect(params['fileName'] + '.sqlite3')
+        # first check if the requested filename already exists. If so print a warning and generate a new filename with the timestamp
+        # todo: implement checks earlier in the experiment creation to prevent the user from inputting an existing file
+        if os.path.exists(params['fileName'] + '.sqlite3'):
+            # this is kind of cursed, sorry
+            fileName = params['fileName'] + str(int(time.time())) + '.sqlite3'
+            print("Database Warning: requested save file already exists. \nCurrent will be saved as " + fileName + " instead.")
+        else:
+            fileName = params['fileName'] + '.sqlite3'
+
+        self.connection = sqlite3.connect(fileName)
         self.cursor = self.connection.cursor()
 
         # register adapters for converting between numpy arrays and text
@@ -141,7 +151,7 @@ class Database:
     # initialize table to record all input parameters for the experiment
     def parameterTableInitializer(self, params : dict):
 
-        paramString = '''CREATE TABLE IF NOT EXISTS parameters (time_started REAL PRIMARY KEY,\n'''
+        paramString = '''CREATE TABLE IF NOT EXISTS parameters ('''
         for key in params.keys():
 
             keyString = key
@@ -164,12 +174,8 @@ class Database:
     # Generates a database query for writing the experimental parameters
     def writeParameterTable(self, params : dict):
 
-        # need to add 'time_started' to params dict
-        paramsWithTime = params
-        paramsWithTime['time_started'] = time.time()
-
         #create db query for the parameters to the parameters table
-        query, vals = self.parseQuery(paramsWithTime, 'parameters')
+        query, vals = self.parseQuery(params, 'parameters')
 
         # vals need extra formatting to ensure they are all either an int, float, or array. Anything that isn't one of these
         # i.e. tuples or None are converted to strings
