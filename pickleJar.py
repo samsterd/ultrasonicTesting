@@ -1032,7 +1032,7 @@ def plotScanDataAtCoorsVsTime(dirName : str, dataKey : str, coors : list, normal
 # Inputs: str directory of the multiscan data, a 2-tuple coordinate to take the data from, the key of the coordinate data, and the key of the single value
 #   Also takes an optional input for the colormap normalization scal. Defaults to linear but log or symlog may also be useful
 # Most common usage would be coorKey = 'extrema_coors' (from listExtrema)and dataKey = 'time_collected'
-def plotXYListVsTimeAtCoor(dir, coor, coorKey, dataKey, mapNorm = 'linear'):
+def plotXYListVsTimeAtCoor(dir, coor, coorKey, dataKey, mapNorm = 'linear', abs = False):
 
     # implementing this manually rather than using dataFromCoor functions because coorList could be a ragged array that doesn't stack
     files = listFilesInDirectory(dir)
@@ -1055,10 +1055,14 @@ def plotXYListVsTimeAtCoor(dir, coor, coorKey, dataKey, mapNorm = 'linear'):
         coorList = dataDict[coorIndex][coorKey]
         dataPoint = dataDict[coorIndex][dataKey]
 
-        # append data to the appropriate places. dataKey must be expanded using np.fill to index match to the coordinate data
-        xdat = np.concatenate((xdat, np.full(len(coorList), dataPoint)), axis = None)
-        ydat = np.concatenate((ydat, np.transpose(coorList)[0]), axis = None)
-        cdat = np.concatenate((cdat, np.transpose(coorList)[1]), axis = None)
+        if len(coorList) > 0:
+            # append data to the appropriate places. dataKey must be expanded using np.fill to index match to the coordinate data
+            xdat = np.concatenate((xdat, np.full(len(coorList), dataPoint)), axis = None)
+            ydat = np.concatenate((ydat, np.transpose(coorList)[0]), axis = None)
+            cdat = np.concatenate((cdat, np.transpose(coorList)[1]), axis = None)
+
+    if abs:
+        cdat = np.abs(cdat)
 
     # if the dataKey is 'time_collected', turn the time to a common baseline and convert to hours
     if dataKey == 'time_collected':
@@ -1221,8 +1225,9 @@ def zeroCrossings(yDat, xDat, linearInterp = False):
 # Similar to zeroCrossings, listExtrema takes y-values of a function, y-values of its derivative, and the x-values and returns
 # an 2 x number of extrema array that correspond to the extrema of the function (i.e. the (x, y) values where the derivative crosses zero)
 # inputs the yData array (i.e. 'voltage'), derivative of yData (i.e. 'savgol_1'), and the x-data ('time')
+#   optional input minimum to specify the minimum y-value of an extremum to count it
 # returns an array of coordinates
-def listExtrema(yDat, deriv, xDat):
+def listExtrema(yDat, deriv, xDat, minimum = None):
 
     # find the indices where zero crossing occurs
     # implementation taken from https://stackoverflow.com/questions/3843017/efficiently-detect-sign-changes-in-python
@@ -1230,7 +1235,10 @@ def listExtrema(yDat, deriv, xDat):
 
     extremaList = []
     for i in zeroCrossingIndices:
-        extremaList.append([xDat[i], yDat[i]])
+        if minimum == None:
+            extremaList.append([xDat[i], yDat[i]])
+        elif abs(yDat[i]) >= minimum:
+            extremaList.append([xDat[i], yDat[i]])
 
     return np.array(extremaList)
 
