@@ -488,12 +488,17 @@ class Picoscope():
             voltage, time =  self.voltageRangeFinder(multiplexer, direction)
 
         elif mode == 'echo':
+
+            # get the offset limits and optimize within those limits
+            self.offsetMinMax = self.getOffsetRanges(1)
             voltage, time =  self.optimizeEchoRange(multiplexer, direction)
+
             # generate key names for the gain and voltage. direction.title() converts e.g. 'forward' to 'Forward'
             gainString = 'gain' + direction.title()
             offsetString = 'voltageOffset' + direction.title()
             returnDict[gainString] = self.params[gainString]
             returnDict[offsetString] = self.params[offsetString]
+
         else:
             print("Picoscope.autoRange(): unable to run auto range function. An incorrect mode (" + str(mode) + ") was likely specified during execution.\nRunning without auto range...")
             voltage, time = self.runRapidBlock(multiplexer, mode, direction)
@@ -501,6 +506,24 @@ class Picoscope():
         returnDict[saveKeys[0]] = voltage
         returnDict[saveKeys[1]] = time
         return returnDict
+
+    # helper function to get the min/max offset for the given voltage range
+    # inputs the current voltage range of the picoscope, outputs a tuple of the min/max offset as python floats
+    def getOffsetRanges(self, voltageRange):
+
+        # convert voltage range to index
+        voltageIndex = self.voltageIndexFromRange(voltageRange)
+
+        # allocate memory for min/max values
+        minOffset = ctypes.c_float(0)
+        maxOffset = ctypes.c_float(0)
+
+        # call ps2000aGetAnalogueOffset()
+        # args: cHandle, range index, coupling (DC = 1), min float, max float
+        self.getOffsetReturn = ps.ps2000aGetAnalogueOffset(self.cHandle, voltageIndex, 1, minOffset, maxOffset)
+
+        # the returned values are re-cast as python floats to avoid later awkwardness with enforcing types later
+        return (minOffset.value, maxOffset.value)
 
     # helper function that calculates the baseline of a given voltage array for the purposes of specifying a new voltage offset
     # inputs measurement direction string, the voltage array, and the number of points to average to calculate the baseline from
@@ -518,17 +541,29 @@ class Picoscope():
         if direction == 'forward':
             newOffset = self.params['voltageOffsetForward'] + baseline
             self.baseline = baseline
-            self.params['voltageOffsetForward'] = newOffset
         elif direction == 'reverse':
             newOffset = self.params['voltageOffsetReverse'] + baseline
             self.baseline = baseline
-            self.params['voltageOffsetReverse'] = newOffset
         else:
             print("Picoscope.measureVoltageOffset: invalid direction (" + str(
                 direction) + "). Check Pico.RunPicoMeasurement call to debug.")
             return -1
 
-        return baseline
+        # check that the offset is within the allowable range, truncating the value to be within range
+        if newOffset < self.offsetMinMax[0]:
+            offset = self.offsetMinMax[0]
+        elif newOffset > self.offsetMinMax[1]:
+            offset = self.offsetMinMax[1]
+        else:
+            offset = newOffset
+
+        # set parameters based on direction
+        if direction == 'forward':
+            self.params['voltageOffsetForward'] = offset
+        elif direction == 'reverse':
+            self.params['voltageOffsetReverse'] = offset
+
+        return offset
 
     # function that finds acceptable gain and baseline correction values for pulse-echo measurements
     # First determines the optimal voltage offset
@@ -542,6 +577,7 @@ class Picoscope():
     #   baselineTolerance: amount of V the baseline can drift from 0 before the baseline is recalculated
     #   baselinePoints: number of points in the beginning of the wave to average when calculating baseline
     #   minV, maxV: the target range in mV of the wave maximum. If it is outside this range, gain and baseline are remeasured until within tolerance
+    #       default values chosen empirically to get reasonable results
     # outputs the voltage, time arrays collected at the optimal conditions
     def optimizeEchoRange(self, multiplexer, direction : str, baselineTolerance=0.05, baselinePoints=50, minV=400, maxV=920):
 
@@ -597,16 +633,19 @@ class Picoscope():
 
         # run initial measurement and update offsets
         voltage, time = self.runRapidBlock(multiplexer, 'echo', direction)
-        self.calculateVoltageOffset(direction, voltage, baselinePoints)
+        offset = self.calculateVoltageOffset(direction, voltage, baselinePoints)
 
         # base case: offset is within tolerance, so return the data
         if abs(self.baseline) < baselineTolerance:
             return voltage, time
 
+        # other base case: offset is at one of the limits. then rerun the measurement one last time and return
+        elif offset == self.offsetMinMax[0] or offset == self.offsetMinMax[1]:
+            return self.runRapidBlock(multiplexer, 'echo', direction)
+
         # recursive case: offset is outside of tolerance, so rerun the function
         else:
             return self.optimizeOffset(multiplexer, direction, baselineTolerance, baselinePoints)
-        # todo: handle error where requested offset is out of possible ranges
 
     # maximizes the echo signal by changing the gain on the pulser
     # The pulser limits the signal to +/- 1 V. Gain settings are -120 to 840
