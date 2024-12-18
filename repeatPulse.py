@@ -1,5 +1,5 @@
 import json
-import picosdkRapidblockPulse as pico
+import picosdkRapidblockPulse as picoscope
 import ultratekPulser as utp
 import time
 import tqdm
@@ -8,13 +8,12 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from database import Database
 import pickleJar as pj
-import picosdkRapidblockPulse as picoRapid
 
 
 def repeatPulse(params):
 
     # Connect to picoscope & Set up pico measurement
-    pico = picoRapid.picosdkRapidblockPulse(params)
+    pico = picoscope.Picoscope(params)
     # Connect to picoscope, ender, pulser
     # picoConnection = picoRapid.openPicoscope()
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
@@ -61,18 +60,12 @@ def repeatPulse(params):
 
         # collect data
         if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
-            waveform, params = pico.voltageRangeFinder(params)
+            waveDict = pico.voltageRangeFinder()
         else:
-            waveform = pico.runPicoMeasurement(params['waves'])
+            wavewaveDict = pico.runPicoMeasurement()
 
-        # Make a data dict for saving
-        waveData = {}
-
-        waveData['voltage'] = list(waveform[0])
-        waveData['time'] = list(waveform[1])
-
-        waveData['time_collected'] = time.time()
-        waveData['collection_index'] = collectionIndex
+        waveDict['time_collected'] = time.time()
+        waveDict['collection_index'] = collectionIndex
         collectionIndex += 1
 
         # CURRENTLY NOT SUPPORTED
@@ -81,13 +74,12 @@ def repeatPulse(params):
 
         # save data as sqlite database
         if params['saveFormat'] == 'sqlite':
-            query = database.parse_query(waveData)
-            database.write(query)
+            database.writeData(waveDict)
 
         # save data as json
         else:
             with open(params['fileName'], 'a') as file:
-                json.dump(waveData, file)
+                json.dump(waveDict, file)
                 file.write('\n')
 
         # calculate time elapsed in this iteration

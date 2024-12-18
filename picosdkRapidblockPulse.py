@@ -53,19 +53,15 @@ import matplotlib.pyplot as plt
 
 # Control of picoscope handled by a custom class
 # Connection data is stored as class variables and connection/setup/running are handled by class functions
-# TODO: add tests (check cHandle is generated, errors are properly raised)
-class picosdkRapidblockPulse():
+class Picoscope():
 
     # initializing object requires experimental parameters as input
     def __init__(self,params: dict):
 
-        measureDelay = params['measureDelay']
-        voltageRangeT = params['voltageRangeT']
-        voltageRangeP = params['voltageRangeP']
-        samples = params['samples']
-        measureTime = params['measureTime']
+        self.params = params
+
         self.openPicoscope()
-        self.setupPicoMeasurement(measureDelay, voltageRangeT, voltageRangeP, samples, measureTime)
+        # self.setupPicoMeasurement(measureDelay, voltageRangeT, voltageRangeP, samples, measureTime, collectionDirection)
 
     # opens connection to the picoscope, generates cHandle
     def openPicoscope(self):
@@ -101,176 +97,128 @@ class picosdkRapidblockPulse():
     #   measureTime - the duration of the measurement, in microseconds. Defaults to 10 us. The time interval between data points is duration / numberOfSamples
     #       Note that minimum time interval for measurements with 2 channels is 2 ns
 
-    def setupPicoMeasurement(self, measureDelay = 3, voltageRangeT = 1, voltageRangeP = 1,samples = 512, measureTime = 10):
+    # * part of process that needs to be changed to run on arbitrary channels
+    #SETUP PROCESS
+    # 1) Set voltage limits (convert voltage to voltage index)
+    # x*2) Run setchannel functions
+    # 3) Calculate timebase, delay intervals
+    # x*4) Set trigger
+    #RUN PROCESS
+    # 5) Create pointers/memory buffers
+    #   a) Number of Samples
+    #   b) overflow
+    #   c) data buffers
+    # 6) Divide memory segments, set number of captures, connect data buffers to pico memory
+    # 7) Run rapid block
+    # 8) Get values
+    # 9) Post processing (mean, convert to voltage, generate time axis)
+    # *10) Return, delete buffers
+    #   a) will need to start return a list of voltages instead of a single voltage
+    #   b) database code needs to handle a list of arrays passed into it. Add labels when multiple voltages returned. Add collection mode to params list
+    # How to do it:
+    #   have a 'directionality' parameter with options 'forward' 'reverse' 'both'
+    #   use 'collectionMode' and 'directionality' to assign which channel is transmission and which is echo
+    #       -for directionality == 'both' it needs to run twice - maybe have that as a wrapper to setup/run? or implement in experiment function at higher abstraction?
+    #    (time setup function) make setup part of run, not init
+    def setupPicoMeasurement(self,  direction = 'forward'):
 
-        #Retrieve cHandle and make sure it is properly assigned
+        #Retrieve important parameters for later use
         cHandle = self.cHandle
+        measureDelay = self.params['measureDelay']
+        voltageRangeT = self.params['voltageRangeT']
+        voltageRangeP = self.params['voltageRangeP']
+        self.samples = self.params['samples']
+        measureTime = self.params['measureTime']
 
-        #Raise error if cHandle == 0 or -1
-        # (this was not implemented...)
-
-        #Calculate voltage range for channel B (channel A is the trigger and will be kept constant)
-        #voltageLimits taken from API ps2000aSetChannel() documentation, they are hard coded in the picoscope
-        voltageLimits = [0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20]
-
-        # checking the voltage range for transmission
-        #get the first voltage that is above the voltageRange input
-        try:
-            voltageLimitT = next(v for v in voltageLimits if v >= voltageRangeT)
-        # next raises StopIteration if the criteria is not met. In that case print a warning and use the maximum range
-        except StopIteration:
-            print("Warning: Input voltageRange is greater than the maximum Picoscope range (" + str(voltageLimits[-1]) + " V). Voltage range is set to the maximum value, but be careful not to overload the scope!")
-            voltageLimitT = voltageLimits[-1]
-
-        #now get the index of the voltageLimit, which is what actually gets passed to the scope
-        # Note that this is 1-indexed rather than 0, so +1 is added
-        voltageIndexT =voltageLimits.index(voltageLimitT) + 1
-        self.voltageIndexT = voltageIndexT
-
-        # checking the voltage range for pulse-echo
-        # get the first voltage that is above the voltageRange input
-        try:
-            voltageLimitP = next(v for v in voltageLimits if v >= voltageRangeP)
-        # next raises StopIteration if the criteria is not met. In that case print a warning and use the maximum range
-        except StopIteration:
-            print("Warning: Input voltageRange is greater than the maximum Picoscope range (" + str(voltageLimits[-1]) + " V). Voltage range is set to the maximum value, but be careful not to overload the scope!")
-            voltageLimitP = voltageLimits[-1]
-
-        # now get the index of the voltageLimit, which is what actually gets passed to the scope
-        # Note that this is 1-indexed rather than 0, so +1 is added
-        voltageIndexP = voltageLimits.index(voltageLimitP) + 1
-        self.voltageIndexP = voltageIndexP
-        #Channel A is used for pulse-echo
-        #edit the voltageRange def for setchanel could get input as like channel B
-
-        # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now
-        # handle = chandle
-        # channel = ps2000a_CHANNEL_A = 0
-        # enabled = 1
-        # coupling type = ps2000a_DC = 1
-        # range = ps2000a_1V = 6==>voltageIndexP
-        # analogue offset = 0 V
-        setChA = ps.ps2000aSetChannel(cHandle, 0, 1, 1, voltageIndexP, 0)
-
-        #Error check channel A
-        if setChA == "PICO_OK":
-            self.setChA = setChA
-        else:
-            # print("Error: Problem connecting to picoscope channel A: " + setChA)
-            #Raise error and break
-            assert_pico_ok(setChA)
-
-        #Setup channel B. B records the transducer data and its range is set by the user
-        # handle = chandle
-        # channel = ps2000a_CHANNEL_B = 1
-        # enabled = 1
-        # coupling type = ps2000a_DC = 1
-        # range = ps2000a_1V = voltageIndexT
-        # analogue offset = 0 V
-        setChB = ps.ps2000aSetChannel(cHandle, 1, 1, 1, voltageIndexT, 0)
-
-        #Error check channel B
-        if setChB == "PICO_OK":
-            self.setChB = setChB
-        else:
-            # print("Error: Problem connecting to picoscope channel B: " + setChB)
-            #Raise error and break
-            assert_pico_ok(setChB)
+        # get voltage indices from input voltage ranges
+        self.voltageIndexT = self.voltageIndexFromRange(voltageRangeT)
+        self.voltageIndexP = self.voltageIndexFromRange(voltageRangeP)
 
         # calculate and save measurement parameters (timebase, timeinterval, samples, delayintervals)
         # Calculate timebase and timeInterval (in ns) by making a call to a helper function
-        self.timebase, self.timeInterval = self.timebaseFromDurationSamples(samples, measureTime)
-        self.samples = samples
+        self.timebase, self.timeInterval = self.timebaseFromDurationSamples(self.samples, measureTime)
 
         # Convert delay time (in us) to delay samples
         self.delayIntervals = math.floor((measureDelay * 1000) / self.timeInterval)
 
-            # Setup trigger on channel A
-            # cHandle = cHandle
-            # Enable = 1
-            # Source = ps2000a_channel_A = 0
-            # Note on threshold: must be greater than 1024. 10000 chosen because it works, but this will vary depending on the voltage range
-            # Threshold = 10000 ADC counts
-            # Direction = ps2000a_Above = 0
-            # Delay = delayIntervals
-            # autoTrigger_ms = 1
-        trigger = ps.ps2000aSetSimpleTrigger(cHandle, 1, 0, 10000, 0, self.delayIntervals, 100)
-        #
-        # # Set up channel A. Channel A is the trigger channel and is not exposed to the user for now
-        # # handle = chandle
-        # # channel = ps2000a_CHANNEL_A = 0
-        # # enabled = 0 Off
-        # # coupling type = ps2000a_DC = 1
-        # # range = ps2000a_1V = 6 --> (upated)voltageIndex
-        # # analogue offset = 0 V
-        # setChA = ps.ps2000aSetChannel(cHandle, 0, 1, 1, voltageIndex, 0)
-        #
-        # #Error check channel A
-        # if setChA == "PICO_OK":
-        #     self.picoData["setChA"] = setChA
-        # else:
-        #     # print("Error: Problem connecting to picoscope channel A: " + setChA)
-        #     #Raise error and break
-        #     assert_pico_ok(setChA)
-        #
-        # #Setup channel B. B records the transducer data and its range is set by the user
-        # # handle = chandle
-        # # channel = ps2000a_CHANNEL_B = 1
-        # # enabled = 1
-        # # coupling type = ps2000a_DC = 1
-        # # range = ps2000a_1V = voltageIndex
-        # # analogue offset = 0 V
-        # setChB = ps.ps2000aSetChannel(cHandle, 1, 1, 1, voltageIndex, 0)
-        #
-        # #Error check channel B
-        # if setChB == "PICO_OK":
-        #     self.picoData["setChB"] = setChB
-        # else:
-        #     # print("Error: Problem connecting to picoscope channel B: " + setChB)
-        #     #Raise error and break
-        #     assert_pico_ok(setChB)
+        # set channels and triggers based on collectionMode and direction
+        setErrorCheck = self.setChannels(direction)
+        if setErrorCheck == -1:
+            assert_pico_ok(self.setChA)
 
-        # Calculate timebase and timeInterval (in ns) by making a call to a helper function
-        # timebase, timeInterval = self.timebaseFromDurationSamples(samples, measureTime)
-        # #Record timebase, timeInterval and numberOfSamples in picoData
-        # self.picoData["timebase"] = timebase
-        # self.picoData["timeInterval"] = timeInterval
-        # self.picoData["samples"] = samples
-        #
-        # # Convert delay time (in us) to delay samples
-        # delayIntervals = math.floor((measureDelay * 1000) / timeInterval)
-        # self.picoData["delayIntervals"] = delayIntervals
+    # helper function to convert an input voltage range to the index used in setChannel()
+    def voltageIndexFromRange(self, voltageRange):
 
-        # Setup trigger on channel B
+        # voltageLimits taken from API ps2000aSetChannel() documentation, they are hard coded in the picoscope
+        voltageLimits = [0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20]
+
+        try:
+            # get the first voltage that is above the voltageRange input
+            voltageLimit = next(v for v in voltageLimits if v >= voltageRange)
+        # next raises StopIteration if the criteria is not met. In that case print a warning and use the maximum range
+        except StopIteration:
+            print("Warning: Input voltageRange is greater than the maximum Picoscope range (" + str(voltageLimits[-1]) + " V). Voltage range is set to the maximum value, but be careful not to overload the scope!")
+            voltageLimit = voltageLimits[-1]
+
+        # now get the index of the voltageLimit, which is what actually gets passed to the scope
+        # Note that this is 1-indexed rather than 0, so +1 is added
+        voltageIndex = voltageLimits.index(voltageLimit) + 1
+
+        return voltageIndex
+
+    # helper function to run ps2000aSetChannel appropriately depending on the input direction
+    # Inputs direction, which is either 'forward' or 'reverse'
+    # forward: A is pulser, B is transmission receiver
+    # reverse: B is pulser, A is transmission receiver
+    # trigger is set on the pulser channel
+    # return -1 and print error message for all other input
+    def setChannels(self, direction : str):
+
+        # input for ps2000aSetChannel is as follows:
+        # handle = chandle
+        # channel = 0 for A, 1 for B
+        # enabled = 1
+        # coupling type = ps2000a_DC = 1
+        # range = voltageIndex
+        # analogue offset = 0 V
+        # Input for ps2000aSetTrigger is as follow:
         # cHandle = cHandle
         # Enable = 1
-        # Source = ps2000a_channel_B = 0
+        # Source = 0 for A, 1 for B
         # Note on threshold: must be greater than 1024. 10000 chosen because it works, but this will vary depending on the voltage range
         # Threshold = 10000 ADC counts
         # Direction = ps2000a_Above = 0
         # Delay = delayIntervals
         # autoTrigger_ms = 1
-        # trigger = ps.ps2000aSetSimpleTrigger(cHandle, 1, 1, 10000, 0, delayIntervals, 100)
-
-        # Error check trigger
-        if trigger == "PICO_OK":
-            self.trigger = trigger
+        if direction == 'forward':
+            self.setChA = ps.ps2000aSetChannel(self.cHandle, 0, 1, 1, self.voltageIndexP, 0)
+            self.setChB = ps.ps2000aSetChannel(self.cHandle, 1, 1, 1, self.voltageIndexT, 0)
+            self.trigger = ps.ps2000aSetSimpleTrigger(self.cHandle, 1, 0, 10000, 0, self.delayIntervals, 10)
+        elif direction == 'reverse':
+            self.setChA = ps.ps2000aSetChannel(self.cHandle, 0, 1, 1, self.voltageIndexT, 0)
+            self.setChB = ps.ps2000aSetChannel(self.cHandle, 1, 1, 1, self.voltageIndexP, 0)
+            self.trigger = ps.ps2000aSetSimpleTrigger(self.cHandle, 1, 1, 10000, 0, self.delayIntervals, 10)
         else:
-            # print("Error: Problem setting trigger on channel A: " + trigger)
-            #Raise error and break
-            assert_pico_ok(self.trigger)
+            print("Picoscope setChannels error: input direction is \"" + direction + "\" but only \"forward\" and \"reverse\" are accepted.")
+            return -1
 
-        # TODO: separate everything below (running the measurement) into a separate function?
-        #  #add getTimebase2 call so that memory can be allocated properly
-        # actually, this may need to be added to the run call rather than the set up call - i don't know if the ctypes memory allocation moves between functions?
-        # self.class_picoData = self.picoData
+        #error check setting channels
+        if self.setChA != 0 or self.setChB != 0 or self.trigger != 0:
+            print("Picoscope setChannels error: an error occurred run ps2000aSetChannel or ps2000aSetSimpleTrigger. Try restarting the program or checking the picoscope connection.")
+            assert_pico_ok(self.setChA)
+            assert_pico_ok(self.setChB)
+            assert_pico_ok(self.trigger)
+        return 0
 
     # runPicoMeasurement runs a rapidblock measurement on the picoscope and returns the waveform data
     #   Inputs are the picoData dict. Note that setupPicoMeasurement must have been run or the dict will not have necessary fields informed and errors will occur
     #   Second input is the number of waveforms to collect in rapid block. Choosing a larger number will result in more waves to average,
     #       but may use up memory. The Picoscope2208B has 64MS buffer memory w/ 2 channels, meaning it can store ~64000 waves with 1000 samples/wave
     #   Returns a numpy array of the average of the numberOfWaves
-    def runPicoMeasurement(self, numberOfWaves = 64, collectionMode = 'transmission'):
+    def runRapidBlock(self,  direction = 'forward'):
+
+        # run setup first
+        self.setupPicoMeasurement(direction)
 
         #TODO: add error checking here, need to assert that all necessary self.picoData fields are informed
         #these include: cHandle, timebase, numberOfSamples, all channel and trigger statuses
@@ -278,6 +226,7 @@ class picosdkRapidblockPulse():
         cHandle = self.cHandle
         timebase = self.timebase
         samples = self.samples
+        numberOfWaves = self.params['waves']
 
         #Create a c type for numberOfSamples that can be passed to the ps2000a functions
         cNumberOfSamples = ctypes.c_int32(self.samples)
@@ -297,7 +246,7 @@ class picosdkRapidblockPulse():
         if self.setCaptures == "PICO_OK":
             pass
         else:
-            print("Error: Problem setting number of captures on picoscope: " + self.setCaptures)
+            # print("Error: Problem setting number of captures on picoscope: " + self.setCaptures)
             assert_pico_ok(self.setCaptures)
 
         #Set up memory buffers to receive data from channel B
@@ -326,8 +275,6 @@ class picosdkRapidblockPulse():
             dataBufferA = ps.ps2000aSetDataBuffer(self.cHandle, 0, ctypes.byref(bufferArrayChannelACtype[wave]), self.samples, waveC, 0)
             assert_pico_ok(dataBufferA)
 
-
-
         # Start block capture
         # handle = cHandle
         # Number of prTriggerSamples = 0
@@ -339,7 +286,6 @@ class picosdkRapidblockPulse():
         # LpReady = None (not used)
         # pParameter = None (not used)
         self.runblock = ps.ps2000aRunBlock(self.cHandle, 0, self.samples, self.timebase, 0, None, 0, None, None)
-        #TODO: add better error handling
         assert_pico_ok(self.runblock)
 
         #Wait until data collection is finished
@@ -388,17 +334,103 @@ class picosdkRapidblockPulse():
         del bufferArrayChannelB
         del bufferArrayChannelA
 
-        # return data based on experiment type
+        # return data all data
+        return buffermVA, buffermVB, waveTime
+
+    # a wrapper for the runRapidBlock() function that manages calls and returns
+    # uses the experimental parameters saved as self.params, so it requires no inputs
+    # outputs a dict with keys labeling the data and values being arrays of time or voltage data
+    # needs to take in parameters, run self.runRapidBlock() appropriately (i.e. double for direction = 'both')
+    # then sort how the data is returned based on collectionMode and collectionDirection
+    # return all data as a list of arrays and also add a list of strings that label the data?
+    def runPicoMeasurement(self):
+
+        collectionMode = self.params['collectionMode']
+        direction = self.params['collectionDirection']
+        returnDict = {}
+
+        # match all cases of collectionMode and direction
+        # while some of these are redundant and could be combined, it is better to separate them for clarity
         match collectionMode:
             case 'transmission':
-                return buffermVB, waveTime
+                match direction:
+                    case 'forward':
+                        # we will break the naming conventions for the transmission forward case to maintain backward compatibility
+                        buffermVA, buffermVB, waveTime = self.runRapidBlock(direction)
+                        returnDict['voltage'] = buffermVB
+                        returnDict['time'] = waveTime
+                        return returnDict
+                    case 'reverse':
+                        buffermVA, buffermVB, waveTime = self.runRapidBlock(direction)
+                        returnDict['voltage_transmission_reverse'] = buffermVA
+                        returnDict['time'] = waveTime
+                        return returnDict
+                    case 'both':
+                        buffermVAf, buffermVBf, waveTimef = self.runRapidBlock('forward')
+                        buffermVAr, buffermVBr, waveTimer = self.runRapidBlock('reverse')
+                        returnDict['voltage_transmission_forward'] = buffermVBf
+                        returnDict['voltage_transmission_reverse'] = buffermVAr
+                        returnDict['time'] = waveTimef  # waveTime is constant for either measurement, so choice is arbitrary
+                        return returnDict
+                    case _:
+                        print(
+                            "Invalid collection direction. Make sure collectionDirection is set to 'forward', 'reverse', or 'both' and retry.")
+                        return None
             case 'pulse-echo':
-                return buffermVA, waveTime
+                match direction:
+                    case 'forward':
+                        buffermVA, buffermVB, waveTime = self.runRapidBlock(direction)
+                        returnDict['voltage_echo_forward'] = buffermVA
+                        returnDict['time'] = waveTime
+                        return returnDict
+                    case 'reverse':
+                        buffermVA, buffermVB, waveTime = self.runRapidBlock(direction)
+                        returnDict['voltage_echo_reverse'] = buffermVB
+                        returnDict['time'] = waveTime
+                        return returnDict
+                    case 'both':
+                        buffermVAf, buffermVBf, waveTimef = self.runRapidBlock('forward')
+                        buffermVAr, buffermVBr, waveTimer = self.runRapidBlock('reverse')
+                        returnDict['voltage_echo_forward'] = buffermVAf
+                        returnDict['voltage_echo_reverse'] = buffermVBr
+                        returnDict['time'] = waveTimef
+                        return returnDict
+                    case _:
+                        print(
+                            "Invalid collection direction. Make sure collectionDirection is set to 'forward', 'reverse', or 'both' and retry.")
+                        return None
             case 'both':
-                return buffermVA, buffermVB, waveTime
+                match direction:
+                    case 'forward':
+                        buffermVA, buffermVB, waveTime = self.runRapidBlock(direction)
+                        returnDict['voltage_echo_forward'] = buffermVA
+                        returnDict['voltage_transmission_forward'] = buffermVB
+                        returnDict['time'] = waveTime
+                        return returnDict
+                    case 'reverse':
+                        buffermVA, buffermVB, waveTime = self.runRapidBlock(direction)
+                        returnDict['voltage_echo_reverse'] = buffermVB
+                        returnDict['voltage_transmission_reverse'] = buffermVA
+                        returnDict['time'] = waveTime
+                        return returnDict
+                    case 'both':
+                        buffermVAf, buffermVBf, waveTimef = self.runRapidBlock('forward')
+                        buffermVAr, buffermVBr, waveTimer = self.runRapidBlock('reverse')
+                        returnDict['voltage_echo_forward'] = buffermVAf
+                        returnDict['voltage_transmission_forward'] = buffermVBf
+                        returnDict['voltage_echo_reverse'] = buffermVBr
+                        returnDict['voltage_transmission_reverse'] = buffermVAr
+                        returnDict['time'] = waveTimef
+                        return returnDict
+                    case _:
+                        print(
+                            "Invalid collection direction. Make sure collectionDirection is set to 'forward', 'reverse', or 'both' and retry.")
+                        return None
             case _:
-                print("Invalid collection mode. Make sure collectionMode is set to 'transmission', 'pulse-echo', or 'both' and retry.")
+                print(
+                    "Invalid collection mode. Make sure collectionMode is set to 'transmission', 'pulse-echo', or 'both' and retry.")
                 return None, None
+
 
     #ends the connection to the picoscope
     #Input: picoData with the cHandle field filled
@@ -452,7 +484,8 @@ class picosdkRapidblockPulse():
     # Recursively determines the minimum voltage range needed to capture data at the current location
     # Returns the waveform data at the proper rang and the updated params dict
     # This should only add extra time if the voltage range has changed from the previous pixel
-    def voltageRangeFinder(self, params : dict):
+    # NOTE: this only works for the transmission voltage currently
+    def voltageRangeFinder(self):
 
         # hardcoded voltage limits
         voltageLimits = np.array([0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20])
@@ -461,24 +494,22 @@ class picosdkRapidblockPulse():
         tolerance = 0.95
         voltageTolerances = tolerance * voltageLimits
 
-        currentLimit = params['voltageRangeT']
+        currentLimit = self.params['voltageRangeT']
         currentTolerance = tolerance * currentLimit
 
-        # collect initial waveform
-        waveform = self.runPicoMeasurement(params['waves'],params['collectionMode'])
-
-        # find max of the waveform, divide by 1000 to convert to V
-        maxV = np.max(abs(waveform[0])) / 1000
+        # collect initial waveform and find maximum
+        waveDict = self.runPicoMeasurement()
+        maxV = self.transmissionMaximum(waveDict)
 
         # base case 1 : currentLimit == lowest limit and max < current limit. return waveform
         if currentLimit == voltageLimits[0] and maxV < currentLimit:
-            return waveform, params
+            return waveDict
 
         # base case 2 : currentLimit == highest limit and max > highest tolerance. return waveform and print a warning
         elif currentLimit == voltageLimits[-1] and maxV >= currentTolerance:
             print(
                 "Warning: voltageRangeFinder- waveform voltage exceeds oscilloscope maximum. Peaks are likely to be cutoff.")
-            return waveform, params
+            return waveDict
 
         # base case 3 : max < current limit. set voltage range to be lowest range within tolerance, rerun measurement and return waveform, params
         elif maxV <= currentTolerance:
@@ -490,19 +521,13 @@ class picosdkRapidblockPulse():
 
             # if that tolerance is the current tolerance, return waveform, params
             if limit == currentLimit:
-                return waveform, params
+                return waveDict
 
             # if not, setup a new measurement with the tighter voltage limit and return that data
             else:
-                params['voltageRangeT'] = limit
-                self.setupPicoMeasurement(
-                    params['measureDelay'],
-                    params['voltageRangeT'],
-                    params['voltageRangeP'],
-                    params['samples'],
-                    params['measureTime'])
-                waveform = self.runPicoMeasurement(params['waves'],params['collectionMode'])
-                return waveform, params
+                self.params['voltageRangeT'] = limit
+                waveform = self.runPicoMeasurement()
+                return waveform
 
         # recursion case : max > current tolerance. try again at the next highest voltage limit
         else:
@@ -512,17 +537,40 @@ class picosdkRapidblockPulse():
 
             # just for safety, check that range index is not the last index. this shouldn't be possible, but just in case I'm missing a case
             if rangeIndex == len(voltageLimits) - 1:
-                return waveform, params
+                return waveDict
 
             # move to the next higher voltage limit and try again
             else:
-                params['voltageRangeT'] = voltageLimits[rangeIndex + 1]
-                self.setupPicoMeasurement(params['measureDelay'],
-                                                           params['voltageRangeT'],
-                                                           params['voltageRangeP'],
-                                                           params['samples'],
-                                                           params['measureTime'])
-                return self.voltageRangeFinder(params)
+                self.params['voltageRangeT'] = voltageLimits[rangeIndex + 1]
+                return self.voltageRangeFinder()
+            
+    # helper function that finds the maximum voltage from transmission data
+    # inputs the dict returned from running runPicoMeasurement()
+    # returns the max value in mV
+    def transmissionMaximum(self, waveDict):
+        
+        # determine the key string for the transmission voltage
+        mode = self.params['collectionMode']
+        direction = self.params['collectionDirection']
+        
+        if mode == 'pulse-echo':
+            return -1 # no transmission data collected
+        
+        else:
+            match direction:
+                case 'forward':
+                    return np.max(waveDict['voltage_transmission_forward'])/1000
+                case 'reverse':
+                    return np.max(waveDict['voltage_transmission_reverse'])/1000
+                case 'both':
+                    return np.max(np.array([
+                        np.max(waveDict['voltage_transmission_forward'])/1000,
+                        np.max(waveDict['voltage_transmission_reverse'])/1000
+                    ]))
+                case _:
+                    print("transmissionMaximum error: not able to identify transmission data. Unclear how this happened. Check "
+                          "collectionMode and collectionDirection and try again.")
+                    return -1
 
 
 

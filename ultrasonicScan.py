@@ -1,6 +1,5 @@
 # Script to run a 2D ultrasonic scan
 
-import picosdkRapidblockPulse as pico
 import ultratekPulser as utp
 import scanner as sc
 import math
@@ -9,7 +8,7 @@ import json
 from tqdm import tqdm
 from database import Database
 import pickleJar as pj
-import picosdkRapidblockPulse as picoRapid
+import picosdkRapidblockPulse as picoscope
 
 # Runs a 2D scan, taking ultrasonic pulse data at every point, and saves to the specified folder
 # Inputs: parameters specified above
@@ -26,7 +25,7 @@ def runScan(params):
     # picoConnection = picoRapid.openPicoscope()
     
     #openPicoscope and setupPicoMeasurement
-    pico = picoRapid.picosdkRapidblockPulse(params)
+    pico = picoscope.Picoscope(params)
     
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
     scanner = sc.Scanner(params)
@@ -58,16 +57,9 @@ def runScan(params):
 
             #collect data
             if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
-                waveform, params = pico.voltageRangeFinder(params)
+                pixelData = pico.voltageRangeFinder()
             else:
-                waveform = pico.runPicoMeasurement(params['waves'])
-
-            #Make a data dict for saving
-            pixelData = {}
-
-            #Add waveform data to pixelData
-            pixelData['voltage'] = list(waveform[0])
-            pixelData['time'] = list(waveform[1])
+                pixelData = pico.runPicoMeasurement()
 
             #Add collection metadata
             pixelData['time_collected'] = time.time()
@@ -85,15 +77,9 @@ def runScan(params):
             pixelData[iKey] = iLoc
             pixelData[jKey] = jLoc
 
-            #if voltage auto range is on, record the voltage range for this pixel
-            #CURRENTLY NOT SUPPORTED
-            # if params['voltageAutoRange']:
-            #     pixelData['voltageRange'] = params['voltageRange']
-
             # save data as sqlite database
             if params['saveFormat'] == 'sqlite':
-                query = database.parse_query(pixelData)
-                database.write(query)
+                database.writeData(pixelData)
 
             # save format is json, so dump data, then dump metadata
             else:
