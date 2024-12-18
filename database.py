@@ -4,17 +4,9 @@ import io
 import time
 import os
 
-#todo: update documentation for overall class
+# Class for creating/saving into SQlite Database during ultrasound experiments
+# Contains functions for initializing databases, saving experimental parameters, and reformatting/saving data from dictionaries
 class Database:
-    """Writes to a local database.
-
-    Example:
-        db = database.Database(db_filename='INL_GT_DE_2022_08_01_1')
-        while *data is being updated*:
-            *make some payload*
-            query: str = database.parseQuery(payload=payload)
-            database.write(query)
-    """
 
     def __init__(self, params : dict):
 
