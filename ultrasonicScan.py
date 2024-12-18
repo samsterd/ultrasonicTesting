@@ -1,6 +1,5 @@
 # Script to run a 2D ultrasonic scan
 
-import picosdkRapidblockPulse as pico
 import ultratekPulser as utp
 import scanner as sc
 import math
@@ -9,7 +8,8 @@ import json
 from tqdm import tqdm
 from database import Database
 import pickleJar as pj
-import picosdkRapidblockPulse as picoRapid
+import picoscope as picoscope
+import mux
 
 # Runs a 2D scan, taking ultrasonic pulse data at every point, and saves to the specified folder
 # Inputs: parameters specified above
@@ -22,13 +22,15 @@ def runScan(params):
     if params['saveFormat'] == 'sqlite':
         database = Database(params)
 
-    #Connect to picoscope, ender, pulser#here
-    # picoConnection = picoRapid.openPicoscope()
+    # connect to multiplexer, if applicable
+    if params['multiplexer']:
+        multiplexer = mux.Mux(params)
+    else:
+        multiplexer = None
     
-    #openPicoscope and setupPicoMeasurement
-    pico = picoRapid.picosdkRapidblockPulse(params)
-    
-    pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
+    # open instrument connections
+    pulser = utp.Pulser(params['pulserType'], pulserPort=params['pulserPort'], dllFile=params['dllFile'])
+    pico = picoscope.Picoscope(params, pulser)
     scanner = sc.Scanner(params)
 
     # Adjust pulser pulsewidth
@@ -55,19 +57,8 @@ def runScan(params):
 
         for j in range(primaryAxisSteps):
 
-
             #collect data
-            if params['voltageAutoRange'] and (params['collectionMode'] == 'transmission' or params['collectionMode'] == 'both'):
-                waveform, params = pico.voltageRangeFinder(params)
-            else:
-                waveform = pico.runPicoMeasurement(params['waves'])
-
-            #Make a data dict for saving
-            pixelData = {}
-
-            #Add waveform data to pixelData
-            pixelData['voltage'] = list(waveform[0])
-            pixelData['time'] = list(waveform[1])
+            pixelData = pico.runPicoMeasurement(multiplexer)
 
             #Add collection metadata
             pixelData['time_collected'] = time.time()
@@ -85,15 +76,9 @@ def runScan(params):
             pixelData[iKey] = iLoc
             pixelData[jKey] = jLoc
 
-            #if voltage auto range is on, record the voltage range for this pixel
-            #CURRENTLY NOT SUPPORTED
-            # if params['voltageAutoRange']:
-            #     pixelData['voltageRange'] = params['voltageRange']
-
             # save data as sqlite database
             if params['saveFormat'] == 'sqlite':
-                query = database.parse_query(pixelData)
-                database.write(query)
+                database.writeData(pixelData)
 
             # save format is json, so dump data, then dump metadata
             else:
@@ -121,12 +106,15 @@ def runScan(params):
     #Turn off pulser
     pulser.pulserOff()
 
-    #Close connection to pulser, picoscope, database and ender
+    #Close connection to pulser, picoscope, database, multiplexer and scanner
     pulser.closePulser()
     scanner.close()
     pico.closePicoscope()
+    if params['multiplexer']:
+        multiplexer.closeMux()
 
     if params['saveFormat'] == 'sqlite':
         database.connection.close()
         if params['postAnalysis']:
             pj.simplePostAnalysis(params)
+

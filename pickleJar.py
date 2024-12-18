@@ -89,7 +89,8 @@ def sqliteToPickle(file : str):
 
         for i in range(len(colNames)):
             # some tables have blank columns due to code bugs. This skips over them
-            if row[i] != None:
+            # needs to first check if the value is an array b/c truth values don't apply to whole arrays
+            if type(row[i]) == np.ndarray or row[i] != None:
                 dataDict[index][colNames[i]] = squ.stringConverter(row[i])
             else:
                 pass
@@ -922,9 +923,6 @@ def plotScan(dataDict, colorKey, colorRange = [None, None], scalePlot = False, s
         plt.axis('scaled')
     plt.colorbar()
 
-    if show == True:
-        plt.show()
-
     # save. generate a filename if it isn't specified
     if save == True:
 
@@ -935,7 +933,13 @@ def plotScan(dataDict, colorKey, colorRange = [None, None], scalePlot = False, s
         else:
             saveFile = fileName
         plt.savefig(saveFile)
-        plt.close()
+        if show == False:
+            plt.close()
+
+    if show == True:
+        plt.show()
+
+
 
 # helper function for plotScan that reverses coordinate lists that start negative
 # inputs an array. Outputs an array that is reversed if the input started negative
@@ -1157,6 +1161,16 @@ def baselineCorrectVoltage(voltage, baseline):
 
     return voltage - baseline
 
+# removes the effect of pulser gain from pulse-echo data by solving for linear gain from dB-gain
+# linear gain = 10**(decibel gain / 10), then v(input) = v(output) / linear gain
+def correctVoltageByGain(data, gain):
+
+    # note: pulser gain is in units of 10ths of a dB (i.e. 100ths of a power of ten)
+    # inverting the gain requires a negative power
+    linearGain = 10**(gain / 100)
+
+    return data / linearGain
+
 # Applies a Savitzky-Golay filter to the data and optionally takes its first or second derivative
 # Inputs the y-data ('voltage'), x-data ('time') along with 3 auxiliary parameters: the window length of filtering (defaults to 9),
 #       the order of polynomials used to fit (defaults to 3), and the derivative order (default to 0, must be less than polynomial order)
@@ -1255,8 +1269,9 @@ def simpleThresholdTOF(yDat, xDat, threshold = 0.1):
 # Calculate the time of flight for a signal by calculating the Hilbert envelope and returning the time value where it reaches
 # a certain fraction of its max value
 # Inputs y-data of the signal ('voltage'), x-data ('time') and the fraction of maximum for the threshold (number in (0,1))
+# Includes an option to linearly interpolate the ToF rather than return the closest measured value
 # Returns the time of flight
-def envelopeThresholdTOF(yDat, xDat, threshold = 0.5):
+def envelopeThresholdTOF(yDat, xDat, threshold = 0.5, linearInterpolation = True):
 
     if len(yDat) != len(xDat):
         print("envelopeThresholdTOF Error: x- and y- data must be the same length. Check that the correct keys are being used.")
@@ -1273,7 +1288,22 @@ def envelopeThresholdTOF(yDat, xDat, threshold = 0.5):
 
     firstBreakIndex = firstIndexAboveThreshold(envelope, thresholdValue)
 
-    return xDat[firstBreakIndex]
+    if linearInterpolation:
+
+        # handle edge case where first break is the first data point. In this case, do not interpolate
+        if firstBreakIndex == 0:
+            return xDat[0]
+        else:
+            # gather two points around the threshold crossing, perform linear interpolation
+            point0 = (xDat[firstBreakIndex - 1], envelope[firstBreakIndex - 1])
+            point1 = (xDat[firstBreakIndex], envelope[firstBreakIndex])
+            slope = (point1[1] - point0[1]) / (point1[0] - point0[0])
+            intercept = point0[1] - (slope * point0[0])
+            xInterp = (thresholdValue - intercept) / slope
+            return xInterp
+
+    else:
+        return xDat[firstBreakIndex]
 
 # Calculates the hilbert envelope of an input signal by taking the absolute value of the hilbert transform
 def hilbertEnvelope(array):
