@@ -519,8 +519,8 @@ class Picoscope():
         maxOffset = ctypes.c_float(0)
 
         # call ps2000aGetAnalogueOffset()
-        # args: cHandle, range index, coupling (DC = 1), pointers to min and max
-        self.getOffsetReturn = ps.ps2000aGetAnalogueOffset(self.cHandle, voltageIndex, 1, ctypes.byref(minOffset), ctypes.byref(maxOffset))
+        # args: cHandle, range index, coupling (DC = 1), pointers too max and min
+        self.getOffsetReturn = ps.ps2000aGetAnalogueOffset(self.cHandle, voltageIndex, 1, ctypes.byref(maxOffset), ctypes.byref(minOffset))
 
         # the returned values are re-cast as python floats to avoid later awkwardness with enforcing types later
         return (minOffset.value, maxOffset.value)
