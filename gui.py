@@ -1213,7 +1213,7 @@ class MainWindow(QMainWindow):
         self.params['measureTime'] = float(self.measureTime.text())
         self.params['measureDelay'] = float(self.measureDelay.text())
         self.params['voltageRange'] = float(self.voltageRange.currentText())
-        self.params['voltageAutoRange'] = self.voltageAutoRange.isChecked()
+        self.params['autoRange'] = self.voltageAutoRange.isChecked() # parameter name changed internally to autoRange
         self.params['waves'] = int(self.waves.text())
         self.params['samples'] = int(self.samples.text())
         self.params['halfCycles'] = int(self.halfCycles.text())
