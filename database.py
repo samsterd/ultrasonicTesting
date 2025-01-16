@@ -100,10 +100,11 @@ class Database:
         baseString = 'voltage_'
         mode = params['collectionMode']
         direction = params['collectionDirection']
+        mux = params['multiplexer']
         modeStrings = []
 
         # short circuit in the simplest case and default to 'voltage' to maintain backward compatibility
-        if mode == 'transmission' and direction == 'forward':
+        if (mode == 'transmission' and direction == 'forward') or mux == False:
             return 'voltage array,\n'
 
         # in other cases, build the more complex labels
