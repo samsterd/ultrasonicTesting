@@ -1221,6 +1221,8 @@ class MainWindow(QMainWindow):
         self.params['collectionDirection'] = self.collectionDirection.currentText().lower()
         self.params['multiplexer'] = self.multiplexer.isChecked()
         self.params['collectionMode'] = self.collectionMode.currentText().lower()
+        if self.params['collectionMode'] == 'pulse-echo':
+            self.params['collectionMode'] = 'echo'
         self.params['collectionDirection'] = self.collectionDirection.currentText().lower()
         self.params['autoRangeEcho'] = self.autoRangeEcho.isChecked()
         self.params['voltageOffsetForward'] = float(self.voltageOffsetForward.text())
