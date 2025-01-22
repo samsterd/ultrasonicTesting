@@ -350,6 +350,7 @@ class Picoscope():
         # first handle non-muliplexed case which do not need mode/direction appended to voltages
         if multiplexer == None:
             returnDict = self.autoRange(multiplexer, collectionMode, direction, ['voltage', 'time'])
+            return returnDict
 
         # now handle all the multiplexed cases
         else:

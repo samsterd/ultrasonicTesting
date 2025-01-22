@@ -42,7 +42,8 @@ experimentParams = {
     #### Applies to 'single pulse', 'single scan', and 'multi scan' experiments #####
     #################################################################################
 
-    'transducerFrequency' : 50,                    # Central frequency of the ultrasonic transducer, in MHz. Current options are 2.25 or 50
+    'transducerFrequency' : 5,                    # Central frequency of the ultrasonic transducer, in MHz. Current options are 2.25 or 50
+    'collectionMode': 'transmission',                       #transmission/echo/both
     'pulserType' : 'standard',                       # Type of pulser. 'standard' is the single wave CompactPulser. 'tone burst' uses the USBUT350 tone burst pulser
     'measureTime' : 1,                               # Approx measurement time, in us. Note this can be changed by the picoscope time interval based on samples
                                                      #      Changes to the measureTime will be printed in the console when the script is run
@@ -52,9 +53,9 @@ experimentParams = {
     # todo: separate autoRange and autoGain
     'autoRange' : False,                            # Set the oscilloscope to rerun measurements where the voltage range of the wave has significantly changed
                                                      # This enables the tightest possible voltageRange to be used, increasing the accuracy of low intensity signals without cutting off high intensity ones
-                                                     # For transmission measurements, this changes the voltage range on the oscilloscope. For echo measurements, this changes the voltage offset on the scope and
-                                                    #  the gain setting on the pulser
+                                                     # For transmission measurements, this changes the voltage range on the oscilloscope.
                                                      # NOTE: this can add significant overhead (2-3x increase in collection time) for each waveform where the range changes
+    'autoRangeEcho': True,                          # Automatically calculate and adjust the offset and gain values. This may add significant measurement time
     'waves' : 1000,                                  # Number of waves to collect and average
     'samples': 1000,                                  # Number of data points per wave
     'halfCycles' : 16,                               # Tone burst pulser only. Number of half-cycles in a tone burst pulse. Minimum 1, maximum 32
@@ -68,12 +69,11 @@ experimentParams = {
     'multiplexer' : True,                            # Will the multiplexer be used in the measurement
                                                     # If set to False, all other parameters in this section are ignored
                                                     # and the system is assumed to be wired without the multiplexer (trigger to Channel B, receiver or RF data to Channel A)
-    'collectionMode': 'pulse-echo',                 #transmission/pulse-echo/both
+
     'collectionDirection' : 'forward',              # Specifies the channels used for the transmitting and receiving transducers
                                                     # 'forward' pulses on Channel A and (for collectionMode = transmision or both) collects on Channel B
                                                     # 'reverse' pulses on Channel B and collects on Channel A
                                                     # 'both' repeats the measurement in both directions
-    'autoRangeEcho': True,                          # Automatically calculate and adjust the offset and gain values. This may add significant measurement time
     'voltageOffsetForward' : 0.0,                   # Voltage offset applied to pulse-echo measurements to fix large baseline added by pulser output
     'voltageOffsetReverse': 0.0,                    #     Voltage offsets are directional since 1) echo baseline depends heavily on delay time and 2) delay time
                                                     #     is a function of sample placement and could vary widely between the forward and reverse transducer
