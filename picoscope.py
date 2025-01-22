@@ -343,82 +343,85 @@ class Picoscope():
     # this data dict can be fed directly into Database.writeData(dict) to save data
     def runPicoMeasurement(self, multiplexer = None):
 
-        # if a multiplexer is not provided, assume default mode = transmission and direction = forward
-        if multiplexer != None:
-            collectionMode = self.params['collectionMode']
-            direction = self.params['collectionDirection']
-        else:
-            collectionMode = 'transmission'
-            direction = 'forward'
+        # gather collection mode and direction
+        collectionMode = self.params['collectionMode']
+        direction = self.params['collectionDirection']
 
-        # match all cases of collectionMode and direction and call self.autoRange for each combination
-        # the resulting dicts with data are then merged by {**x, **y} and then returned
-        match collectionMode:
-            case 'transmission':
-                match direction:
-                    case 'forward':
-                        # we will break the naming conventions for the transmission forward case to maintain backward compatibility
-                        returnDict = self.autoRange(multiplexer, collectionMode, direction, ['voltage', 'time'])
-                        return returnDict
-                    case 'reverse':
-                        returnDict = self.autoRange(multiplexer, collectionMode, direction, ['voltage_transmission_reverse', 'time'])
-                        return returnDict
-                    case 'both':
-                        returnDict = {**self.autoRange(multiplexer, collectionMode, 'forward', ['voltage_transmission_forward', 'time']),
-                                      **self.autoRange(multiplexer, collectionMode, 'reverse', ['voltage_transmission_reverse', 'time'])}
-                        return returnDict
-                    case _:
-                        print(
-                            "Invalid collection direction. Make sure collectionDirection is set to 'forward', 'reverse', or 'both' and retry.")
-                        return None
-            case 'echo':
-                match direction:
-                    case 'forward':
-                        returnDict = self.autoRange(multiplexer, collectionMode, direction, ['voltage_echo_forward', 'time'])
-                        return returnDict
-                    case 'reverse':
-                        returnDict = self.autoRange(multiplexer, collectionMode, direction,
-                                                    ['voltage_echo_reverse', 'time'])
-                        return returnDict
-                    case 'both':
-                        returnDict = {**self.autoRange(multiplexer, collectionMode, 'forward', ['voltage_echo_forward', 'time']),
-                            **self.autoRange(multiplexer, collectionMode, 'reverse', ['voltage_echo_reverse', 'time'])}
-                        return returnDict
-                    case _:
-                        print(
-                            "Invalid collection direction. Make sure collectionDirection is set to 'forward', 'reverse', or 'both' and retry.")
-                        return None
-            case 'both':
-                match direction:
-                    case 'forward':
-                        returnDict = {
-                            **self.autoRange(multiplexer, 'transmission', direction, ['voltage_transmission_forward', 'time']),
-                            **self.autoRange(multiplexer, 'echo', direction, ['voltage_echo_forward', 'time'])}
-                        return returnDict
-                    case 'reverse':
-                        returnDict = {
-                            **self.autoRange(multiplexer, 'transmission', direction,
-                                             ['voltage_transmission_reverse', 'time']),
-                            **self.autoRange(multiplexer, 'echo', direction, ['voltage_echo_reverse', 'time'])}
-                        return returnDict
-                    case 'both':
-                        returnDict = {
-                            **self.autoRange(multiplexer, 'transmission', 'forward',
-                                             ['voltage_transmission_forward', 'time']),
-                            **self.autoRange(multiplexer, 'echo', 'forward', ['voltage_echo_forward', 'time']),
-                            **self.autoRange(multiplexer, 'transmission', 'reverse',
-                                             ['voltage_transmission_reverse', 'time']),
-                            **self.autoRange(multiplexer, 'echo', 'reverse', ['voltage_echo_reverse', 'time'])
-                        }
-                        return returnDict
-                    case _:
-                        print(
-                            "Invalid collection direction. Make sure collectionDirection is set to 'forward', 'reverse', or 'both' and retry.")
-                        return None
-            case _:
-                print(
-                    "Invalid collection mode. Make sure collectionMode is set to 'transmission', 'echo', or 'both' and retry.")
-                return None, None
+        # first handle non-muliplexed case which do not need mode/direction appended to voltages
+        if multiplexer == None:
+            returnDict = self.autoRange(multiplexer, collectionMode, direction, ['voltage', 'time'])
+
+        # now handle all the multiplexed cases
+        else:
+
+            # match all cases of collectionMode and direction and call self.autoRange for each combination
+            # the resulting dicts with data are then merged by {**x, **y} and then returned
+            match collectionMode:
+                case 'transmission':
+                    match direction:
+                        case 'forward':
+                            # we will break the naming conventions for the transmission forward case to maintain backward compatibility
+                            returnDict = self.autoRange(multiplexer, collectionMode, direction, ['voltage', 'time'])
+                            return returnDict
+                        case 'reverse':
+                            returnDict = self.autoRange(multiplexer, collectionMode, direction, ['voltage_transmission_reverse', 'time'])
+                            return returnDict
+                        case 'both':
+                            returnDict = {**self.autoRange(multiplexer, collectionMode, 'forward', ['voltage_transmission_forward', 'time']),
+                                          **self.autoRange(multiplexer, collectionMode, 'reverse', ['voltage_transmission_reverse', 'time'])}
+                            return returnDict
+                        case _:
+                            print(
+                                "Invalid collection direction. Make sure collectionDirection is set to 'forward', 'reverse', or 'both' and retry.")
+                            return None
+                case 'echo':
+                    match direction:
+                        case 'forward':
+                            returnDict = self.autoRange(multiplexer, collectionMode, direction, ['voltage_echo_forward', 'time'])
+                            return returnDict
+                        case 'reverse':
+                            returnDict = self.autoRange(multiplexer, collectionMode, direction,
+                                                        ['voltage_echo_reverse', 'time'])
+                            return returnDict
+                        case 'both':
+                            returnDict = {**self.autoRange(multiplexer, collectionMode, 'forward', ['voltage_echo_forward', 'time']),
+                                **self.autoRange(multiplexer, collectionMode, 'reverse', ['voltage_echo_reverse', 'time'])}
+                            return returnDict
+                        case _:
+                            print(
+                                "Invalid collection direction. Make sure collectionDirection is set to 'forward', 'reverse', or 'both' and retry.")
+                            return None
+                case 'both':
+                    match direction:
+                        case 'forward':
+                            returnDict = {
+                                **self.autoRange(multiplexer, 'transmission', direction, ['voltage_transmission_forward', 'time']),
+                                **self.autoRange(multiplexer, 'echo', direction, ['voltage_echo_forward', 'time'])}
+                            return returnDict
+                        case 'reverse':
+                            returnDict = {
+                                **self.autoRange(multiplexer, 'transmission', direction,
+                                                 ['voltage_transmission_reverse', 'time']),
+                                **self.autoRange(multiplexer, 'echo', direction, ['voltage_echo_reverse', 'time'])}
+                            return returnDict
+                        case 'both':
+                            returnDict = {
+                                **self.autoRange(multiplexer, 'transmission', 'forward',
+                                                 ['voltage_transmission_forward', 'time']),
+                                **self.autoRange(multiplexer, 'echo', 'forward', ['voltage_echo_forward', 'time']),
+                                **self.autoRange(multiplexer, 'transmission', 'reverse',
+                                                 ['voltage_transmission_reverse', 'time']),
+                                **self.autoRange(multiplexer, 'echo', 'reverse', ['voltage_echo_reverse', 'time'])
+                            }
+                            return returnDict
+                        case _:
+                            print(
+                                "Invalid collection direction. Make sure collectionDirection is set to 'forward', 'reverse', or 'both' and retry.")
+                            return None
+                case _:
+                    print(
+                        "Invalid collection mode. Make sure collectionMode is set to 'transmission', 'echo', or 'both' and retry.")
+                    return None, None
 
 
     #ends the connection to the picoscope
