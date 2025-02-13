@@ -20,8 +20,9 @@ class Pulser():
 
         # Fill in some constants
         self.minGain = -120
-        # maxGain is set below pulser maximum (840) because signals get distorted above 600
-        self.maxGain = 600
+        self.maxGain = 600 # maxGain is set below pulser maximum (840) because signals get distorted above 600
+        self.minPulserVoltage = 40
+        self.maxPulserVoltage = 300
 
         # Initialize connection to the pulser based on the type
         self.connection = self.openPulser(pulserType, kwargs)
@@ -106,6 +107,25 @@ class Pulser():
             # send command
             self.connection.setFrequency(freqkhz)
 
+    # set the voltage of the pulse sent to the transducer
+    # range is 40 to 300
+    def setPulseVoltage(self, voltage = 300):
+
+        if self.type == 'standard':
+
+            # print a warning message if input voltage is out of bounds
+            # note that the pulser hardware properly truncates out of bounds inputs so the command itself does not need
+            # to be changed
+            if voltage < self.minPulserVoltage:
+                print('pulser.setPulseVoltage: input voltage is below hardware minimum. Set to ' + str(self.minPulserVoltage) + ' V instead.')
+            elif voltage > self.maxPulserVoltage:
+                print('pulser.setPulseVoltage: input voltage is above hardware maximum. Set to ' + str(self.maxPulserVoltage) + ' V instead.')
+            pulseVoltageCommand = 'V' + str(voltage)
+            self.writeToPulser(pulseVoltageCommand)
+
+        elif self.type == 'tone busrt':
+            print("pulser.setPulseVoltage: set voltage not yet implemented on tone burst pulser. Command ignored.")
+
     def setHalfCycles(self, halfCycles : int):
 
         if self.type == 'standard':
@@ -130,6 +150,7 @@ class Pulser():
         # Compact PUlser max PRF is 5000 Hz. P# command sets PRF to 10 * #, so P500 = 5000 Hz
         if self.type == 'standard':
             self.writeToPulser('P500')
+            self.setPulseVoltage(self.maxPulserVoltage)
 
         # Tone burst max PRF is 1000 Hz
         elif self.type == 'tone burst':
