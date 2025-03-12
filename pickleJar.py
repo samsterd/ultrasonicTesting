@@ -1310,6 +1310,34 @@ def hilbertEnvelope(array):
 
     return np.abs(scipy.signal.hilbert(array))
 
+# creates a butterworth high pass filter for processing pulse-echo data
+# takes the time as argument, with additional arguments for the transducer frequency (in MHz, default 2.25), filter order (default 5),
+#   and fraction of the transducer frequency to create the filter critical frequency (default 0.2 e.g. 5 MHz transducer -> 1 MHz filter freq)
+def createButterFilter(time, frequency = 2.25, order = 5, criticalFreqFraction = 0.2):
+
+    criticalFreq = frequency * criticalFreqFraction * (10**6) # convert to Hz
+    sampleRate = (time[1] - time[0]) * (10**-9) # convert ns to s
+    sampleFreq = 1 / sampleRate
+
+    # N = order of filter. Higher number = slower calculation but steeper cutoff
+    # Wn = critical frequency (gain drops by -3 dB vs passband)
+    # btype = highpass
+    # analog = False (this is a digital signal)
+    # fs = sampling rate (500,000,000 Hz for 2 ns step size)
+    return scipy.signal.butter(order, criticalFreq, btype = 'highpass', analog = False, fs = sampleFreq, output = 'sos')
+
+# process pulse-echo data by
+#   1) applying a Butterworth filter
+#   2) baseline correct by the mean of the signal beginning
+# inputs are the voltage and time, followed by the optional parameters of createButterFilter(),
+# followed by the parameters of baselineCorrectByStartingValues
+def processEchoData(voltage, time, frequency = 2.25, order = 5, criticalFreqFraction = 0.2, startWindow = 50):
+
+    filt = createButterFilter(time, frequency, order, criticalFreqFraction)
+    filteredVoltage = scipy.signal.sosfiltfilt(filt, voltage)
+
+    return baselineCorrectByStartingValues(filteredVoltage, startWindow)
+
 # helper function that returns the index of the first value in the input array that exceeds a given threshold
 # Used to pick first break data
 def firstIndexAboveThreshold(array, threshold):
