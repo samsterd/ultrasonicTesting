@@ -1,6 +1,7 @@
 Software and instructions for running a low cost ultrasonic testing apparatus for battery research.
 
-More information can be found at doi.org/10.26434/chemrxiv-2024-qbq8q
+Please cite https://doi.org/10.1016/j.electacta.2025.146012 if you use any part of this software in your work. See that paper (or the preprint: https://doi.org/10.26434/chemrxiv-2024-qbq8q) for more background information 
+
 # Setup Instructions
 ### Software
 
