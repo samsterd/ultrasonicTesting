@@ -26,6 +26,8 @@ def repeatPulse(params):
     plt.ylabel('Intensity (mV)')
     plt.show(block = False)
 
+    #test
+
     #Copy figure background to allow fast updating
     background = fig.canvas.copy_from_bbox(fig.boox)
     # Draw initial filler data
