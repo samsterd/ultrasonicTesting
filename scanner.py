@@ -25,13 +25,33 @@
 import serial
 import numpy as np
 
-# Scanner class controls the 3D motion of the gantry via pyserial. Tested on Ender-3 3D printer gantry, but should work
-# with any gantry that operates on GCode
+#
 class Scanner():
 
     # establish connection via Serial object
     # the parameterDict must contain the keys 'scannerPort', 'transducerHolderHeight' and 'scannerMaxDimensions'
     def __init__(self, parameters : dict, baudRate = 115200):
+        """
+        The Scanner class controls the 3D motion of the gantry via pyserial. Tested on Ender-3 3D printer gantry, but should work
+        with any gantry that operates on GCode.
+
+        Class methods:
+            init(params: dict, baudRate: int): establishes serial connection and initializes several variables
+            write(command: str): encodes a string and sends it to the scanner
+            move(axis: str, distance: float, checkMoveSafety: bool): creates and executes the specified move command
+            currentPosition(): queries the scanner for its current position
+            safeMoveQ(axis: str, distance: float): tests whether a specified move can execute without crashing
+            home(): executes a homing command
+            cancel(): cancels the previous command
+            close(): closes the serial connection
+            axisDistanceToArray(axis: str, distance: float): converts and axis and distance pair into a vector
+            validAxisQ(axis: str): tests whether a specified string is 'X', 'Y', or 'Z'
+        Class variables:
+            self.serial: pyserial Serial object for the connection to the scanner
+            self.port: the string naming the USB port the scanner is plugged into
+            self.minDimensions: the lowest coordinate the scanner can be placed in. Used to evaluate move safety
+            self.maxDimensions: the largest coordinate the scanner can be placed in. Used to evaluate move safety
+        """
 
         if 'scannerPort' not in parameters.keys() or 'transducerHolderHeight' not in parameters.keys() or 'scannerMaxDimensions' not in parameters.keys():
             raise KeyError("Scanner: input parameters does not contain enough information. "
@@ -51,8 +71,15 @@ class Scanner():
 
             raise serial.SerialException
 
-    # encode strings to the proper format and send to the scanner via serial
     def write(self, command):
+        """
+        Encodes a string into the proper format and sends it to the scanner via serial port
+
+        Args:
+            command (str): the string representing the command
+        Returns:
+            None
+        """
 
         # commands need a space, carriage return, and newline to be accepted
         formattedCommand = command + " \r\n"
@@ -64,11 +91,19 @@ class Scanner():
             print(f"Scanner.write: Error writing command to scanner: {error}")
             raise serial.SerialException
 
-    # Writes a series of commands to perform relative movements with the scanner
-    # Inputs the axis of motion as a string ('X','Y', or 'Z'), and the distance to move (in mm) (can be negative)
-    #   Also an optional checkMoveSafety flag which should always be set to true unless debugging a scanner that has not been homed
-    # function translates the movement to GCode and passes it to the scanner
     def move(self, axis : str, distance, checkMoveSafety = True):
+        """
+        Converts a specified axis and distance movement into a GCode command string which is then executed by the scanner
+
+        Args:
+            axis (str): The axis of the motion ('X', 'Y', or 'Z')
+            distance (float): How far to move, in mm
+            checkMoveSafety (bool): flag for checking if the requested move will crash the transducer holder
+        Returns:
+            None
+
+        If the specified move does not occur, check for printed messages or errors.
+        """
 
         if not self.validAxisQ(axis):
             raise ValueError('Input axis is not \'X\', \'Y\', or \'Z\'')
@@ -103,6 +138,14 @@ class Scanner():
                 self.serial.read_until()
 
     def currentPosition(self):
+        """
+        Queries the scanner for the current coordinates of the printer head
+
+        Args:
+            None
+        Returns:
+            position (tuple): The (x,y,z) coordinate of the printer head
+        """
 
         # set to absolute positioning
         self.write("G90")
@@ -123,6 +166,15 @@ class Scanner():
 
     # test whether a given move is safe based on the measurements of the scanner and transducer holder
     def safeMoveQ(self, axis, distance):
+        """
+        Checks whether a specified move is safe - will it crash the transducers or go outside of the scanner bounds?
+
+        Args:
+            axis (str): axis of the movement ('X', 'Y', or 'Z')
+            distance (float): distance of the move, in mm
+        Returns:
+            bool: True if the move is safe, else false
+        """
 
         if not self.validAxisQ(axis):
             raise ValueError('Input axis is not \'X\', \'Y\', or \'Z\'')
@@ -139,15 +191,39 @@ class Scanner():
 
         return True
 
-    # NOTE: DO NOT RUN WHILE THE TRANSDUCER HOLDER IS ATTACHED
     def home(self):
+        """
+        Runs the Homing protocol on the scanner for establishing the printer head position. This should be run when
+        when setting up the instrument or after a power outage.
+        NOTE: DO NOT RUN THIS WHILE THE TRANSDUCER HOLDER IS ATTACHED
+
+        Args:
+            None
+        Returns:
+            None
+        """
         self.write("G28")
 
-    # NOTE: this will not cancel the home command, it can only cancel ongoing move commands
     def cancel(self):
+        """
+        Cancels the previously input command. NOTE: this will not cancel a homing command
+
+        Args:
+            None
+        Returns:
+            None
+        """
         self.write("G80")
 
     def close(self):
+        """
+        Close the pyserial connection to the scanner
+
+        Args:
+            None
+        Returns:
+            None
+        """
 
         try:
            self.serial.close()
@@ -156,10 +232,18 @@ class Scanner():
             print(f"Scanner.close error: {error}")
             raise serial.SerialException
 
-    # helper function to convert an axis, distance pair to a numpy array
-    # i.e. 'X', 3 to [3,0,0] or 'Z', -5 to [0,0,-5]
     @classmethod
     def axisDistanceToArray(self, axis : str, distance):
+        """
+        Helper function to convert an axis and distance pair to a numpy array representing the move as a vector
+        e.g. 'X', 3 to [3,0,0] or 'Z', -5 to [0,0,-5]
+
+        Args:
+            axis (str): The axis of the motion ('X', 'Y', or 'Z')
+            distance (float): How far to move, in mm
+        Returns:
+            movement (array): a 3 member array of the movement as [x, y, z]
+        """
 
         if not self.validAxisQ(axis):
             raise ValueError('Input axis is not \'X\', \'Y\', or \'Z\'')
@@ -170,9 +254,17 @@ class Scanner():
         elif axis.upper() == 'Z':
             return np.array([0,0,distance])
 
-    # helper function to check if a given input string is 'X', 'Y', or 'Z'
+    #
     @staticmethod
     def validAxisQ(axis : str):
+        """
+        Helper function to check if a given input string is 'X', 'Y', or 'Z'
+
+        Args:
+            axis (str): a potential malformed axis string
+        Returns:
+            validAxis (bool): was the string a properly formatted axis
+        """
 
         if axis.upper() in ['X', 'Y', 'Z']:
             return True

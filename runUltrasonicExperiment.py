@@ -162,6 +162,16 @@ experimentParams = {
 
 # Function to choose experiment function based on parameters
 def runExperiment(params : dict):
+    """
+    Wrapper function which takes the experiment params dict and calls the correct experiment function
+
+    Args:
+        params (dict): A dict of experimental parameters filled out in the script above
+    Returns:
+        None
+
+    Depending on the experiment, a data file may be created with the results.
+    """
 
     if params['gui']:
         gui.startGUI(params)
