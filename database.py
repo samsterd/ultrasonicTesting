@@ -9,6 +9,27 @@ import os
 class Database:
 
     def __init__(self, params : dict):
+        """
+        A class for creating/saving/loading an SQlite database during ultrasound experiments. A new Database object is
+        created for every ultrasound experiment
+
+        Class methods:
+            init(params : dict) : initialize the Database object, extract necessary information from the experimental parameters dict,
+                and create the database file to hold the experimental data
+            adaptArray(arr: numpy array): defines an adapter for converting numpy arrays to an sqlite-usable format
+            convertArray(text): defines a converter for reading numpy arrays that have been saved using adaptArray
+            dataTableInitializer(params : dict): creates the data table based on the experimental parameters
+            generateVoltageString(params : dict): creates column titles for the voltage readings based on experimental parameters
+            generateOffsetString(params : dict): creates column titles for the voltage offset if it is used in the experiment
+            parameterTableInitializer(params : dict): creates a data table for saving the experimental parameters
+            writeParameterTable(params : dict): creates a database query that writes the experimental parameters to the table
+            parseQuery(inputDict: dict, table : str): generates an SQlite query string and a list of data in order to write the input dict into a table
+            write(query : str, vals : list): takes the output string from parseQuery and writes it into the database
+            writeData(dataDict : dict, table : str): a wrapper function which combines parseQuery and write into a single function
+        Class variables:
+            connection: sqlite3 database connection
+            cursor: sqlite3 cursor for interacting with the database
+        """
 
         #create db connection, create cursor
         # first check if the requested filename already exists. If so print a warning and generate a new filename with the timestamp
@@ -51,7 +72,15 @@ class Database:
     @staticmethod
     def adaptArray(arr):
         """
-        http://stackoverflow.com/a/31312102/190597 (SoulNibbler)
+        Define adapters for converting numpy arrays to sqlite-usable format
+        Taken from http://stackoverflow.com/a/31312102/190597 (SoulNibbler)
+        This operation of storing numpy arrays as raw binary in an sqlite3 table is mildly cursed, but it makes a MASSIVE
+        speed improvement versus converting the data arrays to strings
+
+        Args:
+            arr (numpy array) : the array to be converted
+        Returns:
+            Raw binary of the numpy array
         """
         out = io.BytesIO()
         np.save(out, arr)
@@ -62,12 +91,30 @@ class Database:
     # copied from stackoverflow: https://stackoverflow.com/questions/18621513/python-insert-numpy-array-into-sqlite3-database
     @staticmethod
     def convertArray(text):
+        """
+        Defines a converter for reading binary "array" types in the saved sqlite file and interpreting them as numpy arrays
+        copied from stackoverflow: https://stackoverflow.com/questions/18621513/python-insert-numpy-array-into-sqlite3-database
+        This operation of storing numpy arrays as raw binary in an sqlite3 table is mildly cursed, but it makes a MASSIVE
+        speed improvement versus converting the data arrays to strings
+
+        Args:
+            text ("array" binary read from sqlite3 table)
+        Returns:
+            numpy array
+        """
         out = io.BytesIO(text)
         out.seek(0)
         return np.load(out)
 
-    # Generates an SQL query string to intialize the data table based on the experiment function
     def dataTableInitializer(self, params : dict):
+        """
+        Generates an SQL query string to intialize the data table based on the experiment function
+
+        Args:
+            params (dict): the experimental parameters dict
+        Returns:
+            query (str): an sqlite3 query string for creating the table with all appropriate columns
+        """
 
         # acoustics is name of TABLE. Not sure if we want this hardcoded
         # general table structure that is true in all experiments
@@ -94,8 +141,15 @@ class Database:
 
         return initTable + ')'
 
-    # helper function to generate initialization strings for the different voltages dependent on the experiment parameters
-    def generateVoltageString(self, params):
+    def generateVoltageString(self, params: dict):
+        """
+        Helper function to generate initialization strings for the different voltages dependent on the experiment parameters
+
+        Args:
+            params (dict): the experimental parameters dict
+        Returns:
+            voltage strings (str): a string specifying all of the measured voltage columns that will be needed for the experiment
+        """
 
         baseString = 'voltage_'
         mode = params['collectionMode']
@@ -125,10 +179,18 @@ class Database:
         # format the dirStrings into 'voltage_type array,\n'
         return ' array,\n'.join(dirStrings) + ' array,\n'  # need to add final separator at the end
 
-    # a helper function to generate initialization strings for the gain and offsets in pulse-echo mode, if applicable
-    # this only saves the data if there is echo data in the experiment and echo auto range is on
-    # only saves the offset/gain for the directions that are collected in the experiment
-    def generateGainOffsetString(self, params):
+
+    def generateGainOffsetString(self, params : dict):
+        """
+        A helper function to generate initialization strings for the gain and offsets in pulse-echo mode, if applicable
+        this only saves the data if there is echo data in the experiment and echo auto range is on
+        only saves the offset/gain for the directions that are collected in the experiment
+
+        Args:
+            params (dict): the experimental parameters dict
+        Returns:
+            gain offset string (str): a string specifying the columns for offsets that should be saved based on the experiment
+        """
 
         gainOffsetString = ''
         # check if the mode includes pulse-echo and auto ranging is on
@@ -141,8 +203,15 @@ class Database:
         else:
             return ''
 
-    # initialize table to record all input parameters for the experiment
     def parameterTableInitializer(self, params : dict):
+        """
+        Initialize table to record all input parameters for the experiment
+
+        Args:
+            params (dict): the experimental parameters dict
+        Returns:
+            table string (str): An sqlite3 query string for creating the table, to be passed to write()
+        """
 
         paramString = '''CREATE TABLE IF NOT EXISTS parameters ('''
         for key in params.keys():
@@ -164,8 +233,15 @@ class Database:
 
         return tableString
 
-    # Generates a database query for writing the experimental parameters
     def writeParameterTable(self, params : dict):
+        """
+        Generates a database query for writing the experimental parameters into the table created by parameterTableInitializer
+
+        Args:
+            params (dict): the experimental parameters dict
+        Returns:
+            query string (str), vals (list) : a string and list of values suitable for passing to write()
+        """
 
         #create db query for the parameters to the parameters table
         query, vals = self.parseQuery(params, 'parameters')
@@ -178,10 +254,17 @@ class Database:
 
         return query, safeValTypes
 
-    # Parse query takes a dict and turns it into an SQL-readable format for writing the data
-    # returns a query string and the values as a list to be executed on the db connection
     @staticmethod
     def parseQuery(inputDict: dict, table: str = 'acoustics'):
+        """
+        Takes a dict and turns it into an SQL-readable format for writing the data
+
+        Args:
+            inputDict (dict): dict where the keys are columns and values are the data to write in those columns
+            table (str) : the name of the table to write in
+        Returns:
+            query (str), vals (list) : a query string and the values as a list to be executed on the db connection
+        """
 
         dictKeys = inputDict.keys()
         keyString = ', '.join([key for key in dictKeys])
@@ -194,10 +277,16 @@ class Database:
 
         return query, vals
 
-    # takes the output of parseQuery and writes it to the database
-    # inputs the query string and value list from parseQuery
-    # outputs the cursor at the end of the table
     def write(self, query: str, vals: list):
+        """
+        Use the output of parseQuery to write into the database file
+
+        Args:
+            query (str): an sqlite3-readable query string
+            vals (list): a list of values to write into the table
+        Returns:
+            lastrowid of the sqlite3 cursor after the data has been written
+        """
 
         self.cursor.execute(query, vals)
         self.connection.commit()
@@ -206,7 +295,17 @@ class Database:
 
     # wrapper function to combine generating queries and writing to database.
     # only inputs the data dict. Assumes you are writing to the 'acoustics' table
-    def writeData(self, dataDict, table : str = 'acoustics'):
+    def writeData(self, dataDict : dict, table : str = 'acoustics'):
+        """
+        Wrapper function to combine generating query strings and writing into the database
+
+        Args:
+            dataDict (dict): a dict whose keys are columns and values are data to write into the table
+            table (str) : the name of the table to write into
+
+        Returns:
+            None
+        """
 
         query, vals = self.parseQuery(dataDict, table)
         self.write(query, vals)
