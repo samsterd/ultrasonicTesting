@@ -23,6 +23,8 @@ import json
 # Control flow and moving between windows is controlled by the function nextButtonClicked()
 # Code is divided into sections: Main Window, Next Button, Window Definition functions, Setup Windows subsection,
 #   Dialog Boxes, Helper Functions (for switching windows and reading JSON files with parameters), and experiment functions
+# todo: MainWindow has expanded to encompass all of the GUI functions. While the code works, this may not be the most optimal
+# organization method. This todo is to draw attention to this in a future round of improvements, but it isn't a high priority
 
 ################################################################################
 ############### Main Window ###################################################
@@ -31,7 +33,62 @@ import json
 
 class MainWindow(QMainWindow):
 
-    def __init__(self, params,  *args, **kwargs):
+    def __init__(self, params : dict,  *args, **kwargs):
+        """
+        A class for running the GUI through a single window. Also includes all of the control flow and experiment execution
+        functions
+
+        Methods:
+            init(params : dict, *args, **kwargs): initializes window widgets and organization variables, reads input experimental parameters
+            nextButtonClicked : handles the control flow for changing windows when the 'Next' button is pressed
+            initWindow : sets up the first window for selecting experiments
+            moveWindow : sets up the movement window
+            pulserWindow : sets up the window for gathering ultrasonic pulse parameters
+            timeWindow : sets up the window for gathering time parameters for repeatPulse and multiScan measurements
+            scanWindow : sets up the window for gathering the scanning parameters
+            saveWindow : sets up the window for gathering save parameters
+            experimentWindow : sets up the window to display all of the relevant parameters for an experiment for final review before running
+            scannerSetupWindow : sets up the window for running the initial scanner setup experiment
+            homingWindow : sets up the window for running the homing protocol in a setup experiment
+            measureDimensionsWindow : sets up the window for the user to measure the scanner dimensions in the setup experiment
+            dirButtonClicked : launches a file dialog box when the appropriate button is clicked
+            switchWindow(destinationWindow : str) : switches the displayed window to a new one
+            remakeWindow(window : str) : remakes a window with a fresh widget and reinserts it in its previous place in the mainWidget
+            remakeWindowsExceptInitAndExperiment : remakes most of the windows to prevent widgets from disappearing after the experimentWindow is displayed
+            runWindowFunction(windowType : str) : runs the approprate xWindow() function for creating window widgets
+            returnToMove : a special function for returning to the moveWindow using the Return To Move button instead of Next
+            readSetupJSON : reads the setup_parameters.json file and populates params dict with the relevant values
+            writeSetupJSON : gathers data from the setup experiment and writes it to a json file for later use
+            executeMove : runs a 'move' experiment based on the input parameters
+            executeTestMove : runs a small constrained movement for testing the connection to the gantry in the setup experiment
+            executeHoming : runs a homing protocol on the gantry
+            executeSinglePulse : runs a 'single pulse' experiment based on the input parameters and displays the result as a PlotDialog
+            executeRepeatPulse : runs a 'repeat pulse' experiment based on the input parameters
+            executeSingleScan : runs a 'single scan' experiment based on the input parameters
+            executeMultiScan : runs a 'multi scan' experient based on the input parameters
+            gatherSaveParams : gathers the saving information within the widgets and overwrites it into the params dict
+            gatherScanParams : gathers the scan information within the widgets and overwrites it into the params dict
+            gatherPulseParams : gathers the ultrasonic pulsing information within the widgets and overwrites it into the params dict
+            intOrNone : helper function for sanitizing inputs that could either have an int value or be set to None
+
+        Class variables:
+            params (dict) : the input experimental parameters dict, used to populate initial values in widgets.
+                When an experiment is run, the values are overwritten by the current values in the appropriate widget using
+                the gatherXParams() functions
+            All experimental parameters have a widget and a label associated with them as class variables. These are
+                too numerous to explicitly list here. The initial values of the widgets are populated from the parameters
+                dict in runUltrasonicExperiment.py, and the final values in the widget are retrieved and saved in the
+                params dict before running the experiment
+            windowType (str) : the name of the currently displayed window
+                Options are: 'init', 'move', 'pulse', 'save', 'scan', 'time', 'experiment', 'scannerSetup', 'homing', 'dimensions'
+            windowIndices (dict) : a mapping of the windowTypes to their index within the QStackedWidget
+            mainWidet (QStackedWidget) : the stacked widget holding all of the window options
+
+
+        Subclasses : Secondary dialog boxes outside of the MainWindow are defined as classes below MainWindow
+            WarningDialog : a class for displaying warning messages
+            PlotDialog : a class for displaying plots
+        """
         super(MainWindow, self).__init__(*args, **kwargs)
 
         self.setWindowTitle("Ultrasound Experiment")
@@ -70,8 +127,16 @@ class MainWindow(QMainWindow):
     ################ NEXT BUTTON CONTROL FLOW ######################################
     #################################################################################
 
-    # this function handles control flow of the gui. uses the current window and experiment type to set the next window
     def nextButtonClicked(self):
+        """
+        Handles control flow of the GUI whenever the 'Next' button is clicked.
+        Uses the current window and experiment type to call switchWindow with the appropriate argument
+
+        Args:
+            None
+        Returns:
+            None
+        """
 
         # Handle initialization case first
         if self.windowType == 'init':
@@ -158,8 +223,15 @@ class MainWindow(QMainWindow):
     # Functions to create widgets and associated layouts, which are then combined into the
     # main window QStackedWidget
 
-    # init window is where experiment type is specified
     def initWindow(self):
+        """
+        Defines the 'init' window, which prompts the user to pick what experiment to perform.
+
+        Args:
+            None
+        Returns:
+            widget : QWidget with the window and associated parameters defined
+        """
 
         self.experimentSelect = QComboBox()
         self.experimentSelect.addItems(
@@ -180,8 +252,15 @@ class MainWindow(QMainWindow):
 
         return widget
 
-    # move window specifies move parameters
     def moveWindow(self):
+        """
+        Defines the 'move' window, which prompts the user to define a scanner movement and run it.
+
+        Args:
+            None
+        Returns:
+            widget : QWidget with the window and associated parameters defined
+        """
 
         self.moveLabel = QLabel("Define movement parameters:")
 
@@ -217,9 +296,15 @@ class MainWindow(QMainWindow):
 
         return widget
 
-
-    # pulse window specifies scope and pulser paramters
     def pulseWindow(self):
+        """
+        Defines the 'pulse' window, which prompts the user to select parameters for the ultrasound and data collection.
+
+        Args:
+            None
+        Returns:
+            widget : QWidget with the window and associated parameters defined
+        """
 
         if self.experimentType == 'Setup':
             self.pulseLabel = QLabel("Connect transducers, transducer holder, pulser, and oscilloscope.\n"
@@ -436,8 +521,15 @@ class MainWindow(QMainWindow):
         widget.setLayout(layout)
         return widget
 
-    # time specifies times for repeat pulse and multi scan
     def timeWindow(self):
+        """
+        Defines the 'time' window, which prompts the user to define the length and repetitions of repeat pulse and multiscan experiments.
+
+        Args:
+            None
+        Returns:
+            widget : QWidget with the window and associated parameters defined
+        """
 
         self.timeLabel = QLabel("Define experiment time parameters for Repeat Pulse or Multi Scan:")
 
@@ -491,8 +583,15 @@ class MainWindow(QMainWindow):
         widget.setLayout(layout)
         return widget
 
-    # scan specifies scan length
     def scanWindow(self):
+        """
+        Defines the 'scan' window, which prompts the user to define the scan axes and area in single scan and multiscan experiments.
+
+        Args:
+            None
+        Returns:
+            widget : QWidget with the window and associated parameters defined
+        """
 
         self.scanLabel = QLabel("Define length parameters of the scan:")
 
@@ -549,6 +648,14 @@ class MainWindow(QMainWindow):
         return widget
 
     def saveWindow(self):
+        """
+        Defines the 'save' window, which prompts the user to pick where to save the experiment data.
+
+        Args:
+            None
+        Returns:
+            widget : QWidget with the window and associated parameters defined
+        """
 
         self.saveLabel = QLabel("Define saving parameters:")
 
@@ -596,9 +703,20 @@ class MainWindow(QMainWindow):
         widget.setLayout(layout)
         return widget
 
-    # this window summarizes all of the experimental parameters and gives the option to start the experiment or abort back to init
-    # its going to be long and tedious...
     def experimentWindow(self):
+        """
+        Defines the 'experiment' window, which displays all relevant parameters to current experiment and allows the user
+        to make any final adjustments before running.
+
+        Args:
+            None
+        Returns:
+            widget : QWidget with the window and associated parameters defined
+
+        NOTE: because window uses the existing widgets from previous windows in order to display the user-entered values.
+        This results in those widgets disappearing from the previous windows. In order to display previous windows without
+        losing widgets, the remakeWindow functions must be called.
+        """
 
         self.experimentLabel = QLabel("Double check experimental parameters and run experiment:")
         layout = QGridLayout()
@@ -743,7 +861,16 @@ class MainWindow(QMainWindow):
     # 3) Prompt the user to measure the transducer holder height and verify the scanner dimensions
     # 4) Run a modified single pulse experiment with the pulser port / dll file option exposed
     # 5) Dump collected info into a json file
+
     def scannerSetupWindow(self):
+        """
+        Defines the 'scannerSetup' window, which prompts the user to enter the USB port of the scanner and make a test move.
+
+        Args:
+            None
+        Returns:
+            widget : QWidget with the window and associated parameters defined
+        """
 
         self.scannerConnectionInstructions = QLabel("First determine the USB port that the scanner is plugged into.\n"
                                                     "The port will be verified by doing a short move 5mm to the left or right.\n"
@@ -776,6 +903,14 @@ class MainWindow(QMainWindow):
         return widget
 
     def homingWindow(self):
+        """
+        Defines the 'homing' window, which prompts the user to remove the transducer holder and run the homing protocol.
+
+        Args:
+            None
+        Returns:
+            widget : QWidget with the window and associated parameters defined
+        """
 
         self.scannerHomingInstructions = QLabel("Homing the scanner calibrates its position. This must be done at least once\n"
                                                 "in order for the scanner to be moved safely.")
@@ -798,6 +933,14 @@ class MainWindow(QMainWindow):
         return widget
 
     def measureDimensionsWindow(self):
+        """
+        Defines the 'dimensions' window, which prompts the user to measure various scanner dimensions.
+
+        Args:
+            None
+        Returns:
+            widget : QWidget with the window and associated parameters defined
+        """
 
         self.measureDimensionsInstructions = QLabel("Measure the transducer holder height and verify the scanning dimensions.\n"
                                                     "This information is used to prevent unsafe moves of the scanner.")
@@ -842,10 +985,24 @@ class MainWindow(QMainWindow):
     ################# DIALOG BOXES #########################################
     #######################################################################
     # Define and run dialog boxes for displaying warnings, plots, and finding save directories
+    # these are currently defined as classes within the MainWindow class. This is a bit weird organizationally, and should
+    # probably be moved to separate classes (as long as it doesn't break anything)
 
     # create warning message subclass
     class WarningDialog(QDialog):
+
         def __init__(self, warningMessage : str, parent = None, *args, **kwargs):
+            """
+            A class for displaying Warning dialog boxes.
+
+            Args:
+                warningMessage (str) : the message to be displayed in the dialog box
+                parent (widget) : the parent widget of the dialog box
+                *args, **kwargs : extra arguments that may be passed to the QDialog class on creation
+
+            Returns:
+                None
+            """
             super().__init__(*args, **kwargs)
 
             self.setWindowTitle("Warning!")
@@ -862,10 +1019,20 @@ class MainWindow(QMainWindow):
             self.setLayout(self.layout)
             self.exec()
 
-    # create a dialog class to display matplotlib plots generated by single pulse
-    # accepts a matplotlib FigureCanvas object and displays it as a dialog
+
     class PlotDialog(QDialog):
+
         def __init__(self, fig, *args, **kwargs):
+            """
+            Class to display matplotlib plots generated by single pulse experiments as dialog boxes
+
+            Args:
+                fig (FigureCanvas) : a matplotlib plot to display in the dialog
+                *args, **kwargs : extra arguments that may be passed to the QDialog class on creation
+
+            Returns:
+                None
+            """
             super().__init__(*args, **kwargs)
 
             self.setWindowTitle("Data Plotting")
@@ -883,12 +1050,27 @@ class MainWindow(QMainWindow):
             self.exec()
 
         def closeEvent(self, event):
+            """
+            Run matplotlib clf() function on close to prevent the figure from interfering in later plots.
 
-            # run matplotlib clf() function on close to prevent the figure from interfering in later plots
+            Args:
+                event (PyQt event) : trigger for closing the plot (closing the window)
+
+            Returns:
+                None
+            """
             clf()
 
     def dirButtonClicked(self):
+        """
+        Handling for launching a file dialog box when the "Select Directory" button is clicked
 
+        Args:
+            None
+        Returns:
+            None
+        todo: the file directory needs to be launched and clicked twice every time it is used. Minor bug, but should be fixed
+        """
         dlg = QFileDialog(self)
         dlg.setFileMode(QFileDialog.Directory)
         dlg.exec()
@@ -900,45 +1082,85 @@ class MainWindow(QMainWindow):
     ########################################################################
     # Helper functions to either help manage window switching and creation or read/write JSON files
 
-    # inputs the name of the target window. grabs the stacked widget index of the window and changes the index of the stacked widget
-    # also updates the self.windowType field to destinationWindow
+
     def switchWindow(self, destinationWindow : str):
+        """
+        Inputs the name of the target window. grabs the stacked widget index of the window and changes the index of the
+        stacked widget. Also updates the self.windowType field to destinationWindow
 
-        self.windowType = destinationWindow
-        destinationIndex = self.windowIndices[destinationWindow]
+        Args:
+            destinationWindow (str) : name of the destination window. Must be one of the keys in self.windowIndices
+        Returns:
+            None
+        """
+        # first check that the destination is a valid window type
+        if not self.validWindowQ(destinationWindow):
+            self.WarningDialog("switchWindow is attempting to switch to a window called \'" + destinationWindow + "\',"
+                               "but this is not a valid window type. No window switching will be performed.")
+        else:
+            self.windowType = destinationWindow
+            destinationIndex = self.windowIndices[destinationWindow]
 
-        # the experiment window must be remade right before it is shown to be properly formatted and filled with the chosen values
-        if destinationWindow == 'experiment':
-            self.remakeWindow('experiment')
+            # the experiment window must be remade right before it is shown to be properly formatted and filled with the chosen values
+            if destinationWindow == 'experiment':
+                self.remakeWindow('experiment')
 
-        self.mainWidget.setCurrentIndex(destinationIndex)
+            self.mainWidget.setCurrentIndex(destinationIndex)
 
-    # inputs a windowType. removes that window's current widget, remakes the widget and inserts it back in its old place
-    # this is used when a window changes in response to the inputs in a previous window
+    # inputs a windowType.
     def remakeWindow(self, window):
+        """
+        Removes the specified window's current widget, remakes the widget and inserts it back in its old place in the mainWidget.
+        This is used when a window changes in response to the inputs in a previous window (i.e. changing values in the 'experiment' window)
 
-        # get index of window
-        index = self.windowIndices[window]
+        Args:
+            window (str) : the name of the window to remake
+        Returns:
+            None
+        """
 
-        # get the widget at that index and remove it
-        self.mainWidget.removeWidget(self.mainWidget.widget(index))
+        # first check that the destination is a valid window type
+        if not self.validWindowQ(window):
+            self.WarningDialog("remakeWindow is attempting to switch to a window called \'" + window + "\',"
+                               "but this is not a valid window type. No window remaking will be performed.")
+        else:
+            # get index of window
+            index = self.windowIndices[window]
 
-        # run the correct window function
-        newWidget = self.runWindowFunction(window)
+            # get the widget at that index and remove it
+            self.mainWidget.removeWidget(self.mainWidget.widget(index))
 
-        # insert that widget into the correct index
-        self.mainWidget.insertWidget(index, newWidget)
+            # run the correct window function
+            newWidget = self.runWindowFunction(window)
 
-    # helper function to remake all windows except the init one
-    # this re-initializes parameters and prevents widgets from disappearing after the experiment window is displayed
+            # insert that widget into the correct index
+            self.mainWidget.insertWidget(index, newWidget)
+
+    #
     def remakeWindowsExceptInitAndExperiment(self):
+        """
+        Helper function to remake all windows except the init one. This re-initializes parameters and prevents widgets
+        from disappearing after the experiment window is displayed.
 
+        Args:
+            None
+        Returns:
+            None
+        """
         for window in self.windowIndices.keys():
             if window != 'init' and window != 'experiment':
                 self.remakeWindow(window)
 
-    # takes a windowType string and runs the corresponding window widget creation function
     def runWindowFunction(self, windowType):
+        """
+        Control flow function. Runs the appropriate window widget creation function based on the input.
+
+        Args:
+            windowType (str): window type to make. If this does not match an existing window type, a warning will be displayed
+                              and no function will be run
+        Returns:
+            widget : the widget that will display the input window type
+        """
 
         match windowType:
             case 'init':
@@ -961,16 +1183,33 @@ class MainWindow(QMainWindow):
                 return self.homingWindow()
             case 'dimensions':
                 return self.measureDimensionsWindow()
+            case _:
+                self.WarningDialog("runWindowFunction: an invalid window type \'" + windowType +
+                                   "\' has been input. No function will be executed.")
 
-    # returnToMove is made as a separate function to connect to the returnToMoveButton because directly calling switchWindow
-    # on the button clicked event causes problems with immediately executing the window change
     def returnToMove(self):
+        """
+        Alias for calling switchWindow('move'). This is made as a separate function to connect to the returnToMoveButton
+        because directly calling switchWindow on the button clicked event causes problems with immediately executing the
+        window change.
+
+        Args:
+            None
+        Returns:
+            None
+        """
         self.switchWindow('move')
 
-    # a function that reads setup_parameters.json and pulls in the relevant values
-    # it will display a warning dialog if the file is not found or improperly formatted
     def readSetupJSON(self):
+        """
+        Reads the setup_parameters.json and pulls in the relevant values.
+        It will display a warning dialog if the file is not found or improperly formatted.
 
+        Args:
+            None
+        Returns:
+            None
+        """
         currentDir = os.path.dirname(os.path.realpath(__file__))
         jsonFile = os.path.join(currentDir,'setup_parameters.json')
 
@@ -987,8 +1226,15 @@ class MainWindow(QMainWindow):
             for key in jsonData.keys():
                 self.params[key] = jsonData[key]
 
-    # takes the data taken from the Setup experiment and writes it to a json file
     def writeSetupJSON(self):
+        """
+        Takes the data taken from the Setup experiment and writes it to a json file.
+
+        Args:
+            None
+        Returns:
+            None
+        """
 
         # gather data from widgets
         jsonDict = {}
@@ -1006,6 +1252,17 @@ class MainWindow(QMainWindow):
         with open(jsonFile, "w") as f:
             json.dump(jsonDict, f)
 
+    def validWindowQ(self, window: str):
+        """
+        Tests whether an input window string is a valid window type based on self.windowIndices
+
+        Args:
+            window (str) : a string to test
+        Returns:
+            bool : is the string a valid window type based on self.windowIndices
+        """
+        return window in self.windowIndices.keys()
+
     ############################################################################
     ######### EXECUTE EXPERIMENT FUNCTIONS ###################################
     #########################################################################
@@ -1013,6 +1270,15 @@ class MainWindow(QMainWindow):
 
     # execute a physical move the gantry
     def executeMove(self):
+        """
+        Runs a 'move' experiment based on the input parameters. Gathers the information from the parameter widgets
+        and prevents the user from clicking the 'Move' button for a short time to prevent dangerous moves
+
+        Args:
+            None
+        Returns:
+            None
+        """
 
         # change status of button while move is executing
         self.moveButton.setText("MOVING...")
@@ -1040,9 +1306,16 @@ class MainWindow(QMainWindow):
         self.moveButton.setText("MOVE")
         self.moveButton.setEnabled(True)
 
-    # a special constrained version of move for testing the USB port connection
-    # this enables calling scanner.move() with checkMoveSafety = False and allows special error handling for timeouts
     def executeTestMove(self):
+        """
+        A special constrained version of move for testing the USB port connection during 'setup' experiments.
+        This enables calling scanner.move() with checkMoveSafety = False and allows special error handling for timeouts.
+
+        Args:
+            None
+        Returns:
+            None
+        """
 
         # change status of button while move is executing
         self.executeTestMoveButton.setText("MOVING...")
@@ -1070,18 +1343,32 @@ class MainWindow(QMainWindow):
         except SerialException:
             self.WarningDialog("Serial port exception raised. Try a different port.")
 
-
         # change button back to normal
         self.executeTestMoveButton.setText("MOVE")
         self.executeTestMoveButton.setEnabled(True)
 
     def executeHoming(self):
+        """
+        Runs a homing protocol as part of the 'setup' experiment.
 
+        Args:
+            None
+        Returns:
+            None
+        """
         scanner = sc.Scanner(self.params)
         scanner.home()
         scanner.close()
 
     def executeSinglePulse(self):
+        """
+        Runs a 'single pulse' experiment based on the user-entered parameters and displays the result as a PlotDialog.
+
+        Args:
+            None
+        Returns:
+            None
+        """
 
         # change status of button while experiment is running
         self.executePulseButton.setText("Running Pulse...")
@@ -1118,6 +1405,14 @@ class MainWindow(QMainWindow):
         self.executePulseButton.setEnabled(True)
 
     def executeRepeatPulse(self):
+        """
+        Runs a 'repeat pulse' experiment based on the user-entered parameters.
+
+        Args:
+            None
+        Returns:
+            None
+        """
 
         # change status of button while experiment is running
         self.executeRepeatPulseButton.setText("Experiment Running...")
@@ -1140,6 +1435,14 @@ class MainWindow(QMainWindow):
         self.executeRepeatPulseButton.setEnabled(True)
 
     def executeSingleScan(self):
+        """
+        Runs a 'single scan' experiment based on the user-entered parameters.
+
+        Args:
+            None
+        Returns:
+            None
+        """
 
         # change status of button while experiment is running
         self.executeSingleScanButton.setText("Scan Running...")
@@ -1159,6 +1462,14 @@ class MainWindow(QMainWindow):
         self.executeSingleScanButton.setEnabled(True)
 
     def executeMultiScan(self):
+        """
+        Runs a 'multi scan' experiment based on the user-entered parameters.
+
+        Args:
+            None
+        Returns:
+            None
+        """
 
         # change status of button while experiment is running
         self.executeMultiScanButton.setText("Scans Running...")
@@ -1180,9 +1491,17 @@ class MainWindow(QMainWindow):
         self.executeMultiScanButton.setText("Execute Scans")
         self.executeMultiScanButton.setEnabled(True)
 
-    # a helper function that gathers all of the save parameters and reformats them in self.params dict
-    # so they can be passed to the experiment function
+    #
     def gatherSaveParams(self):
+        """
+        Gathers all of the save parameters from the widgets and reformats them and writes them into the self.params dict
+        so they can be passed to the experiment function.
+
+        Args:
+            None
+        Returns:
+            None
+        """
         
         self.params['experimentFolder'] = self.experimentFolderName.text()
         self.params['experimentName'] = self.experimentName.text()
@@ -1194,9 +1513,16 @@ class MainWindow(QMainWindow):
             self.params['saveFormat'] = 'sqlite'
         self.params['postAnalysis'] = self.postAnalysis.isChecked()
 
-    # a helper function that gathers all of the parameters from the scan axis/range/step parameters and reformats them 
-    # in self.params dict so they can be passed to the experiment function
     def gatherScanParams(self):
+        """
+        Gathers all of the scanning parameters from the widgets and reformats them and writes them into the self.params dict
+        so they can be passed to the experiment function.
+
+        Args:
+            None
+        Returns:
+            None
+        """
         
         self.params['primaryAxis'] = self.primaryAxis.currentText()
         self.params['secondaryAxis'] = self.secondaryAxis.currentText()
@@ -1204,10 +1530,17 @@ class MainWindow(QMainWindow):
         self.params['primaryAxisStep'] = float(self.primaryAxisStep.text())
         self.params['secondaryAxisRange'] = float(self.secondaryAxisRange.text())
         self.params['secondaryAxisStep'] = float(self.secondaryAxisStep.text())
-        
-    # a helper function that gathers all of the parameters from the pulsing screen and saves them
-    # in self.params dict so they can be passed to the experiment function
+
     def gatherPulseParams(self):
+        """
+        Gathers all of the ultrasonic pulsing parameters from the widgets and reformats them and writes them into the self.params dict
+        so they can be passed to the experiment function.
+
+        Args:
+            None
+        Returns:
+            None
+        """
         self.params['transducerFrequency'] = float(self.transducerFrequency.text())
         self.params['pulserType'] = self.pulser.currentText().lower()
         self.params['measureTime'] = float(self.measureTime.text())
@@ -1237,10 +1570,18 @@ class MainWindow(QMainWindow):
         self.params['t1PulseSwitch'] = self.intOrNone(self.t1PulseSwitch.currentText())
         self.params['t1ReceiveSwitch'] = self.intOrNone(self.t1ReceiveSwitch.currentText())
         
-    # helper function that safely converts a string input of either an int or None to either an int or None output
-    # used for converting the multiplexer addresses which are either an int or None
     @staticmethod
     def intOrNone(input):
+        """
+        Helper function that safely converts a string input of either an int or None to either an int or None output
+        Used for converting the multiplexer addresses which are either an int or None. Note that any input that is not an
+        int will be converted to None, which may lead to unexpected behavior if a user somehow enters something else.
+
+        Args:
+            input : the value currently stored in the widget. Should be a string of a number or None
+        Returns:
+            int or None : if the input can be converted to an int, that is returned, otherwise returns None
+        """
         
         try:
             return int(input)
@@ -1251,18 +1592,37 @@ class MainWindow(QMainWindow):
 ############ EVERYTHING ELSE ##############################################
 #################################################################
 
-# create canvas figure class for showing matplotlib figs through Qt
-# code taken from online example: https://www.pythonguis.com/tutorials/plotting-matplotlib/
-# todo: move this so it isn't a global class...
 class MplCanvas(FigureCanvasQTAgg):
+    """
+    create canvas figure class for showing matplotlib figs through Qt
+    code taken from online example: https://www.pythonguis.com/tutorials/plotting-matplotlib/
+    todo: this is organized a bit strangely as a global class. This should either be moved into the MainWindow class or
+    the other dialogs in MainWindow moved out here
+    """
 
     def __init__(self, parent=None, width = 5, height = 4, dpi = 100):
+        """
+        Create the matplotlib figure to be added to the PlotDialog
+
+        Args:
+            parent (widget) : the parent window for the figure
+            width (number) : width of the figure
+            height (number) : height of the figure
+            dpi (number) : resolution of the figure
+        """
         fig = Figure(figsize = (width, height), dpi = dpi)
         self.axes = fig.add_subplot(111)
         super(MplCanvas, self).__init__(fig)
 
-# function called from runUltrasonicExperiment to run execution loop
 def startGUI(params : dict):
+    """
+    Function called from runUltrasonicExperiment.py to run the GUI execution loop.
+
+    Args:
+        params (dict) : the experimental parameters dict
+    Returns:
+        None
+    """
 
     app = QApplication([])
 

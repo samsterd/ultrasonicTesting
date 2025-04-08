@@ -293,8 +293,6 @@ class Database:
 
         return self.cursor.lastrowid
 
-    # wrapper function to combine generating queries and writing to database.
-    # only inputs the data dict. Assumes you are writing to the 'acoustics' table
     def writeData(self, dataDict : dict, table : str = 'acoustics'):
         """
         Wrapper function to combine generating query strings and writing into the database
