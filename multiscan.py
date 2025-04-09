@@ -3,6 +3,14 @@ import time
 import ultrasonicScan
 
 def multiscan(params):
+    """
+    Execute multiple 2D scans over a set time interval
+
+    Args:
+        params (dict) : experiment params dict from runUltrasonicExperiment.py
+    Returns:
+        None. Data is saved in a separate file for each scan
+    """
 
     #initialize time
     startTime = time.time()
