@@ -6,6 +6,40 @@ class Mux():
     # establish connection to port, gather data from import params, perform basic error checking
     # requires the experimentParams dict to run
     def __init__(self, params):
+        """
+        A class for controlling the Cytex CXAR multiplexer
+
+        Methods:
+            init(params : dict) : establish connection to the multiplexer, gather mux addresses from experimental params,
+                define measurement directions, check that the addresses are safe for operation
+            closeMux() : close all switches and end serial connection
+            writeToMux(command : str) : encodes commands and sends to Mux. Reads response and checks for errors
+            clearMux() : close all switches
+            openSwitch(switch : tuple) : opens the switch specified by the input address
+            closeSwitch(switch : tuple) : closes the switch specified by the input address
+            openSwitches(switches : list of tuples) : opens multiple switches, first checking that the combination is safe
+                Safe is defined here as no combination of switches is open that directly connects the pulser to the Picoscope
+            setMuxConfiguration(mode : str, direction : str) : clears prior state, then opens a set of switches for a given
+                experimental configuration (mode/direction)
+            errorCheckAddresses(params : dict) : checks that the input list of addresses is safe and properly formatted.
+                Safe is defined here as the pulser and Picoscope are not on the same module.
+
+        Variables:
+            picoMod (int) : module number that the Picoscope is connected to
+            pulseMod (int) : module number that the pulser is connected to
+            Switch addresses : every address is defined as a 2-tuple of ints  - (module #, switch #)
+                rf : address of pulser RF output (i.e. the pulse-echo signal)
+                t0p : transducer 0 pulser connection
+                t0r : transducer 0 receiver connection (measure signal in transmission mode)
+                t1p : transducer 1 pulser connection
+                t1r : transducer 1 receiver connection (measure signal in transmission mode)
+            Mode directions: a list of two switch addresses which define a mode (transmission/pulse-echo) and
+            direction (forward/reverse) combination
+                transForward : transmission from T0->T1
+                transReverse : transmission from T1-> T0
+                echoForward : pulse from T0, measure from RF
+                echoReverse : pulse from T1, measure from RF
+        """
 
         # create serial connection object for mux
         try:
@@ -37,8 +71,15 @@ class Mux():
         # set the multiplexer to answerback mode to ensure all commands are received
         self.writeToMux('A 1 73')
 
-    # close all switches and close serial connection
     def closeMux(self):
+        """
+        Close all switches and close serial connection
+
+        Args:
+            None
+        Returns:
+            int : 0 if operation is successful, -1 if a SerialException occurred
+        """
 
         self.clearMux()
         try:
@@ -49,37 +90,55 @@ class Mux():
             return -1
         return 0
 
-    # Inputs a command string
-    # Appends an \r, encodes the string and passes it to the multiplexer
-    # Reads response and ensures no error codes were given (that is, response == 0 or 1)
-    #   Raises an error and closes all switches if an error code occurs
     def writeToMux(self, command: str):
+        """
+        Encodes and sends a command string to the multiplexer, then waits for a response and fails in a safe manner
+        if an error message is returned.
+
+        Args:
+            command (str) : a string representing a command to the multiplexer. A carriage return will be appended and
+                the string encoded in utf-8 before sending
+        Returns:
+            0 if operation is successful. If an error message is read from the multiplexer, all switches are closed and
+            a MuxError is raised before writeToMux returns
+        """
 
         self.connection.write((command + '\r').encode('utf-8'))
 
         response = int(self.connection.read_until('\r'.encode('utf-8')))
 
         if response != 0 and response != 1:
+            # any response that is not 0 or 1 is an error code. Close all switches before raising error to fail in a safe state
             self.clearMux()
             raise MuxError("Multiplexer returned the error code '" + str(response) + "'. Experiment aborted. "
                                                                                      "See https://cytec-ate.com/quickstart/remote/ for documentation")
         else:
             return 0
 
-    # runs the 'C' command, which turns off all switches
     def clearMux(self):
+        """
+        Runs the 'C' command, which closes all switches.
 
+        Args:
+            None
+        Returns:
+            None
+        """
         self.writeToMux('C')
-        return 0
 
-    # runs the 'L# # #' command, which opens the specified switch
-    # inputs a switch address tuple
     def openSwitch(self, switch):
+        """
+        Opens a specified switch by running the 'L# # #' command.
 
+        Args:
+            switch ( (int, int) tuple) : the module #, switch # address of the switch to open
+        Returns:
+            0 if operation is successful
+        """
         if None in switch:
             raise MuxError("An address containing None was passed to openSwitch. This is not a valid address. Experiment aborted.\n"
-                           "If this error appears during normal operation, please send your experimental parameters to Sam. Congratulations! You have found"
-                           " an interesting edge case to the guardrails.")
+                           "If this error appears during normal operation, please send your experimental parameters to Sam. "
+                           "Congratulations! You have found an interesting edge case to the guardrails.")
 
         # convert switch address to command string
         commandString = "L0 " + str(switch[0]) + " " + str(switch[1])
@@ -89,24 +148,35 @@ class Mux():
     # runs the 'U# # #' command, which closes the specified switch
     # inputs a switch address tuple
     def closeSwitch(self, switch):
+        """
+        Closes a specified switch by running the 'U# # #' command.
 
+        Args:
+            switch ( (int, int) tuple) : the module #, switch # address of the switch to close
+        Returns:
+            0 if operation is successful
+        """
         if None in switch:
             raise MuxError("An address containing None was passed to closeSwitch. This is not a valid address. Experiment aborted.\n"
-                           "If this error appears during normal operation, please send your experimental parameters to Sam. Congratulations! You have found"
-                           " an interesting edge case to the guardrails.")
+                           "If this error appears during normal operation, please send your experimental parameters to Sam. "
+                           "Congratulations! You have found an interesting edge case to the guardrails.")
 
         # convert switch address to command string
         commandString = "U0 " + str(switch[0]) + " " + str(switch[1])
         self.writeToMux(commandString)
         return 0
 
-    # opens a list of switches in successions
-    # inputs a list of switch address tuples
-    # performs error checking on the list, ensuring that the pulse and receive addresses of the same transducer are not
-    #   input at the same time (this directly connects the pulser to picoscope and will break the picoscope)
-    #   If an unsafe combination is input, closes all switches and raises an error
-    # then it runs openSwitch for each input switch
     def openSwitches(self, switches):
+        """
+        Opens a list of switches in succession after first performing a safety check to ensure that the pulse and receive
+        addresses of the same transducer are not input at the same time (this directly connects the pulser to picoscope
+        and will break the picoscope)
+
+        Args:
+            switches (list of address tuples) : the list of switches to be opened
+        Returns:
+            0 if operation successful. Raises a MuxError if an unsafe list of switches is entered
+        """
 
         # check for unsafe switch combinations
         t0Pulsing = False
@@ -131,12 +201,20 @@ class Mux():
             self.openSwitch(switch)
         return 0
 
-    # Changes the state of the multplexer to match the given collection mode (transmission or pulse-echo) and direction (forward or reverse)
-    # First clearMuxs the prior state, then opens all of the requested switches
-    # Inputs the mode and direction strings, returns 0 when operation is complete
     def setMuxConfiguration(self, mode : str, direction : str):
+        """
+        Changes the state of the multplexer to match the given collection mode (transmission or pulse-echo) and
+        direction (forward or reverse).
 
-        self.clearMux()
+        Args:
+            mode (str): type of measurement (either 'transmission' or 'echo')
+            direction (str): designates which transducer sends the pulse (either 'forward' or 'reverse')
+        Returns:
+            -1 if invalid inputs are entered
+            0 if operation is successful
+        """
+
+        self.clearMux() # first make sure no other switches are open
         if mode == 'transmission' and direction == 'forward':
             self.openSwitches(self.transForward)
         elif mode == 'transmission' and direction == 'reverse':
@@ -151,10 +229,19 @@ class Mux():
             return -1
         return 0
 
-    # helper function to check that input mux addresses will not cause errors
-    # Raises an exception if the picoscope and pulser tx channel are on the same module
-    # or if the experiment specified in params requires a component that has a (None, None) address
+    # helper function to
+
     def errorCheckAddresses(self, params):
+        """
+        A helper function to check that input mux addresses will not cause errors. Raises an exception if the picoscope
+        and pulser tx channel are on the same module or if the experiment specified in params requires a component that
+        has a (None, None) address.
+
+        Args:
+            params (dict) : experimental parameters dict
+        Returns:
+            0 if no errors are raised
+        """
 
         # check that the receiving and pulsing transducer switches are on separate modules
         if self.t0r[0] != None and (self.t0r[0] == self.t0p[0] or self.t0r[0] == self.t1p[0]):
@@ -200,6 +287,8 @@ class Mux():
                     raise MuxError("An input address " + str(addr) + " is improperly formatted. All characters in an address must be integers or None.")
         return 0
 
-# Create error class for issues relating to multiplexer configuration and operation
 class MuxError(Exception):
+    """
+    An error class for issues relating to the multiplexer configuration and operation
+    """
     pass
