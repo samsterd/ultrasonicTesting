@@ -267,14 +267,6 @@ class Mux():
             if (dir == 'reverse' or dir == 'both'):
                 addressList = addressList + self.echoReverse
 
-        # check for duplicate addresses
-        #todo: maybe delete this test? there should be duplicates in address list, so check this another way
-        # addressSet = set(addressList)
-        # if len(addressSet) != len(addressList):
-        #     raise MuxError("The input list of addresses contains duplicates. Please ensure no two addresses share the same "
-        #                    "(module, switch) numbers and try again.\n"
-        #                    "If you are getting this error but there are no duplicate numbers, check that the addresses with (None, None) match the input experiment mode and direction.")
-
         # iterate through the addressList and raise an error if any of them are improperly formed or None
         for addr in addressList:
             if None in addr:
