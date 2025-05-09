@@ -8,6 +8,8 @@ import numpy as np
 import time
 import math
 import pickleJar as pj
+import copy
+from itertools import combinations
 
 
 
@@ -415,7 +417,6 @@ class MaterialStack():
 #   plot outputs?
 # figure out how to merge material stacks (this will be the big challenge)
 
-
 ############################################
 #### Baseline Correction ###################
 ##########################################3
@@ -454,6 +455,14 @@ def generateFitGaussians(fitParams, times):
 def generateGaussian(a, mu, sigma, times):
 
     return a * np.exp((-1 * (times - mu) ** 2) / (2 * sigma ** 2))
+
+def generateMorlet(a, mu, sigma, freq, times):
+
+    # generate a gaussian then multiply by a sine wave (phase shifted by mu)
+    gauss = generateGaussian(a, mu, sigma, times)
+    sine = np.sin(2 * np.pi * freq * (times - mu))
+
+    return gauss * sine
 
 # generates a matrix of values of gaussians at the specified times
 # inputs a list of amplitudes and averages (aArr and muArr) to construct the gaussians, the times (x-coordinates)
@@ -793,4 +802,540 @@ def gaussianDecompositionByAdditionExpansion(envelope, times, sigma, sigmaTolera
     plt.clf()
 
     return muArr, ampArr, resArr
+
+
+#######################################################################
+########## LEADING/Matching PURSUIT #######################################
+#####################################################################
+
+# an alternative approach that combines decomposition and creating the model
+# calling it 'leading pursuit' because it was developed initially as a variation on the matching pursuit decomposition
+# algorithm. It has since drifted from this inspiration but I need to call it something
+# General approach (done on both sets of echo data simulataneously):
+# 0.) calculate travel time through the cell using echo + transmission data
+# 1.) calculate a sensitive first arrival time
+# 2.) optimize a reference wave (transmission through water) to best fit the signal starting at that first arrival time
+# 3.) This reference wave is a primary echo. Calculate the layer model paramters (travel time, amplitude, Z) from this data
+# 4.) Calculate all higher order reflections that could be generated from the current set of layers in the model. Subtract
+#       those from the signal
+# 5.) Repeat 1-4 until sum of travel times in model equals the time calculated in step 0
+# 6.) Reconcile overlaps of model generated from forward and reverse echoes. Calculate expected higher order contributions
+#       to the transmission and reconcile those as well
+# 7.) Calculate physical parameters of each layer from the modeling parameters
+# 8.) Repeat 0-7 for every pixel in cell
+# 9.) Generate a 3D image of the cell using the model at every pixel
+
+
+def calculateNoiseFloor(signal, noiseIndices = (0, 50)):
+    """
+    Calculate the noise floor (variance) from a slice of the signal that should have a value of zero
+
+    Args:
+        signal (array) : the signal to calculate the noise floor
+        noiseIndices (2-tuple) : the boundaries of the section used for calculating the noise. This section should have
+            expectation value of 0
+
+    Returns:
+        float : standard deviation squared of the designated noise spectrum
+    """
+    noiseSlice = signal[noiseIndices[0]:noiseIndices[1]]
+
+    return np.var(noiseSlice)
+
+def firstArrivalAbsThreshold(signal, threshold):
+    """
+    Calculates the first arrival index based on the first value of the absolute value of the signal to exceed a threshold.
+    Threshold can be an arbitrary value, but in practice will be calculated as a multiple of the noise floor
+
+    Args:
+        signal (array) : the signal to calculate the noise floor
+        threshold (float) : the value to exceed to trigger the arrival
+
+    Returns:
+        int : the index of the first value to exceed threshold. If no value is found, a warning message is printed and
+            -1 is returned
+    """
+    return np.argmax(abs(signal) >= threshold)
+
+def trimByNoiseFloor(signal, threshold, noiseIndices):
+    """
+    Cuts off the beginning and end of an input signal based on when they exceed a proportion of the noise floor.
+
+    Args:
+        signal (array) : the signal to be trimmed
+        threshold (float) : the multiple of the noise floor the signal must exceed to be included
+        noiseIndices (2-tuple) : the boundaries of the section used for calculating the noise. This section should have
+            expectation value of 0
+
+    Returns:
+        array : the signal with the beginning and end removed until the noise threshold is exceeded
+    """
+    noise = calculateNoiseFloor(signal, noiseIndices)
+    thresholdValue = threshold * noise
+
+    start = np.argmax(abs(signal) >= thresholdValue)
+
+    # the endpoint is calculated by flipping the signal and repeating the protocol for the start
+    flippedSignal = abs(np.flip(signal))
+    stop = len(signal) -  np.argmax(flippedSignal >= thresholdValue) # subtract from len to 'unflip' the index
+
+    return signal[start:stop]
+
+def trimByValue(signal, thresholdValue):
+    """
+    Cuts off the beginning and end of an input signal based on when their absolute value exceeds a threshold value.
+
+    Args:
+        signal (array) : the signal to be trimmed
+        threshold (float) : the cutoff value at the beginning and end of the signal
+
+    Returns:
+        array : the signal with the beginning and end removed until the threshold value is exceeded
+    """
+    start = np.argmax(abs(signal) >= thresholdValue)
+
+    # the endpoint is calculated by flipping the signal and repeating the protocol for the start
+    flippedSignal = abs(np.flip(signal))
+    stop = len(signal) - np.argmax(flippedSignal >= thresholdValue)  # subtract from len to 'unflip' the index
+
+    return signal[start:stop]
+
+def correlationArrival(signal, ref, threshold = 0.05):
+    """
+    Calculates the first arrival index by cross-correlating the reference wave and the signal and identifying the first value
+    in the absolute value of the correlation that exceeds a given fraction of the maximum
+
+    Args:
+        signal (array) : the signal to calculate the noise floor
+        ref (array) : the reference wave to cross-correlate with the signal
+        threshold (float) : the fraction of the correlation maximum that is counted as arrival. 0 < threshold <= 1
+
+    Returns:
+        int : the index within the signal of the first arrival
+    """
+    absCorr = abs(np.correlate(signal, ref, mode = 'full'))
+    corrThreshold = threshold * np.max(absCorr)
+    corrArrivalIndex = np.argmax(absCorr >= corrThreshold)
+
+    # since the convolution mode is full, the maximum index within the corrolution is shifted the length of the reference
+    # with respect to the signal
+    return corrArrivalIndex - len(ref)
+
+# this function is using the rightmost index for historical reasons (using output of correlation function), but it would
+# be much more intuitive to use the leftmost index
+def padAndInterpolateReferenceWave(ref, signalLen, shift):
+    """
+    Generates an array of the reference wave zero padded such that it is the same length as the signal and shifted by
+    an input value. If the shift is not an integer, the reference signal will be interpolated
+
+    Args:
+        ref (array) : the reference signal for decomposition (i.e. the transducer wave form)
+        signalLen (int) : the length of the signal to be decomposed. signalLen >= len(ref)
+        shift (int or float) : the rightmost index on the signal which the ref will be shifted to
+            If shift is a float, linear interpolation will be performed since only integer indices are possible
+
+    Returns:
+        array : the zero-padded and interpolated reference. len(return) = len(signal)
+    """
+    flooredShift = max(math.floor(shift), 0) # there are very rare edge cases where the shift is a small negative number
+    refLen = len(ref)
+
+    # determine if linear interpolation should be done
+    # output of this step is refInterp even if no interpolation is done
+    if type(shift) == float:
+
+        # determine the amount to interpolate
+        # since the padding handles the integer shifts, interpolation is used to calculate the values between the integer
+        # indices. In order to convert between 'interpolation space' and 'signal space', we need to interpolate the values
+        # that are (1 - shift decimal)
+        # A more concrete example: If the shift is 100.4, we need to imagine the reference placed over the signal with its
+        # right side on x = 100.4 and left side on x = 100.4 - len(ref). Within the space of the ref, the points we interpolate
+        #   are 0.6, 1.6, ...
+        # the result will be padded with a zero on the left side as appropriate to maintain the same length as ref
+        shiftDecimal = shift - flooredShift # get the decimal part of the shift
+        interpSpace = np.linspace(0-shiftDecimal, refLen - shiftDecimal - 1, refLen)
+        xSpace = np.linspace(0, refLen - 1, refLen)
+        refInterp = np.interp(interpSpace, xSpace, ref, left = 0)
+
+    # no interpolation needed, leave ref as it
+    else:
+        refInterp = ref
+
+    # gather safe bounds to cut off ref if shift is outside of signalLen
+    # output of this step is refSlice even if no cut off is done
+    if flooredShift > signalLen:
+        # shift is greater than the signal length. Need to cut off the last flooredShift - signalLen digits of refInterp
+        refSlice = refInterp[:signalLen - flooredShift]
+    elif flooredShift < refLen:
+        # shift is smaller than the length of the ref wave. Need to cut off the first refLen - flooredShift digits
+        refSlice = refInterp[refLen - flooredShift:]
+    else:
+        refSlice = refInterp
+
+    # now finally zero pad
+    leftPadding = max(flooredShift - refLen, 0)
+    rightPadding = max(signalLen - flooredShift, 0)
+
+    return np.pad(refSlice, (leftPadding, rightPadding), 'constant', constant_values = (0,0))
+
+def plotFits(decomp, signal, shifts, ampsList, suppressPlot = False):
+    """
+    Plots the results of a fit given the decomposition reference, the signal to fit, and the shifts and amplitudes of the
+    best fit
+
+    TODO: for now this is just a modified copy of fitDecompAmplitudes with the fitting step removed
+    a better version will include a helper function for calculating bounds / padding arrays that will be used for both functions
+    """
+    # initialize matrix holding all of the decompositions
+    signalLen = len(signal)
+    decompMatrix = np.zeros((len(shifts), signalLen))
+
+    # iterate through shifts and populate the coeff matrix
+    for i in range(len(shifts)):
+
+        decompMatrix[i] = padAndInterpolateReferenceWave(decomp, signalLen, shifts[i])
+
+    # calculate normalized residual
+    fitArray = decompMatrix * np.array([ampsList]).T # multiply each row (shifted decomp) by its corresponding fitted amplitude
+    fitSum = np.sum(fitArray, axis = 0) # vertical sum of decomps gives the total fit
+    # res = np.sum(abs(signalSlice - fitSum)) / fitLen # subtract fit from signal and normalize by the signal length
+
+    if not(suppressPlot):
+        for i in range(len(ampsList)):
+            plt.plot(fitArray[i], color = 'black', linestyle = 'dashed')
+        plt.plot(fitSum, label = "Fit")
+        plt.plot(signal, label = "Signal")
+        plt.legend()
+        plt.show()
+
+    return fitSum
+
+def linearFitRefWaveNN(ref, signal, shifts, polarities):
+    """
+    Performs a non-negative linear least squares regression to optimize the amplitudes of a series of reference waves and time shifts
+    in order to decompose the signal
+
+    Args:
+        ref (array) : reference wave for decomposition
+        signal (array) : the signal to be decomposed
+        shifts (list) : the calculated time-shift of each fitted wave
+        polarities (list) : the polarity (1 or -1) of each fitted wave. Must be index matched to shifts
+    Returns:
+        list, float : a list of optimized amplitudes and the best fit residual
+        If the regression step fails to converge, np.inf is returned for all values
+    """
+
+    # calculate bounds of the signal from the shifts
+    maxShift = max(shifts)
+    minShift = min(shifts)
+    refLen = len(ref)
+    signalLen = len(signal)
+
+    # initialize a fitting matrix
+    fittingCoeffMatrix = np.zeros((len(shifts), signalLen))
+
+    # populate the matrix with interpolated + zero padded reference waves
+    for i in range(len(shifts)):
+
+        fittingCoeffMatrix[i,:] = padAndInterpolateReferenceWave(polarities[i] * ref, signalLen, shifts[i])
+
+    # perform the fitting
+    #todo: put this in a try/except and handle max iterations separately
+    #todo: formalize the atol value based on the data noise floor?
+    try:
+        fit = nnls(fittingCoeffMatrix.T, signal, maxiter = 100 * len(shifts), atol = 0.001)
+    except RuntimeError:
+        fit = -1
+        print("linearFitRefWave Warning: optimization did not converge, returning np.inf.")
+        return [np.inf], [np.inf], np.inf
+
+    # calculate residual manually
+    fitArray = fittingCoeffMatrix * fit[0].reshape((len(fit[0]),1)) # multiply the shifted/padded refs by their associated amplitude
+    fitSum = np.sum(fitArray, axis = 0) # vertical sum to calculate the total signal
+    res = np.sum(abs(signal - fitSum))
+
+    return fit[0], fit[1], res
+
+def linearFitRefWave(ref, signal, shifts):
+    """
+    Performs a linear least squares regression to optimize the amplitudes of a series of reference waves and time shifts
+    in order to decompose the signal
+
+    Args:
+        ref (array) : reference wave for decomposition
+        signal (array) : the signal to be decomposed
+        shifts (list) : the calculated time-shift of each fitted wave
+        polarities (list) : the polarity (1 or -1) of each fitted wave. Must be index matched to shifts
+    Returns:
+        list, float : a list of optimized amplitudes and the best fit residual
+        If the regression step fails to converge, np.inf is returned for all values
+    """
+
+    # calculate bounds of the signal from the shifts
+    maxShift = max(shifts)
+    minShift = min(shifts)
+    refLen = len(ref)
+    signalLen = len(signal)
+
+    # initialize a fitting matrix, handling case where len(shifts) == 1 so we must populate with a dummy column of zeros
+    fittingCoeffMatrix = np.zeros((max(len(shifts), 2), signalLen))
+
+    # populate the matrix with interpolated + zero padded reference waves
+    for i in range(len(shifts)):
+
+        fittingCoeffMatrix[i,:] = padAndInterpolateReferenceWave(ref, signalLen, shifts[i])
+
+    # perform the fitting
+    #todo: put this in a try/except and handle max iterations separately
+    #todo: formalize the atol value based on the data noise floor?
+    try:
+        fit = np.linalg.lstsq(fittingCoeffMatrix.T, signal)
+    except RuntimeError:
+        fit = -1
+        print("linearFitRefWave Warning: optimization did not converge, returning np.inf.")
+        return [np.inf], [np.inf], np.inf
+
+    # calculate residual manually
+    fitArray = fittingCoeffMatrix * fit[0].reshape((len(fit[0]),1)) # multiply the shifted/padded refs by their associated amplitude
+    fitSum = np.sum(fitArray, axis = 0) # vertical sum to calculate the total signal
+    res = np.sum(abs(signal - fitSum))
+
+    return fit[0], fit[1], res
+
+def parabolaInterpolate(xPts, yPts):
+    """
+    Given an array of x and y points, calculates the parabola that fits those points and returns the x-value of the extremum
+    (minimum for a positive parabola, maximum for a negative parabola). Accepts more or less than three points, but the
+    answer is only uniquely defined for three input points.
+
+    Args:
+        xPts (array) : the x-values to interpolate. All x-values must be unique (i.e. no repeat values)
+        yPts (array) : the y-values to interpolate. len(xPts) == len(yPts)
+
+    Returns:
+        float : the x-value of the extremum
+    """
+    lenPts = len(xPts)
+    if lenPts != len(yPts):
+        raise ValueError("parabolaInterpolate: length of input arrays must be equal.")
+
+    # check that there are no repeats in the xPts
+    if lenPts != len(np.unique(xPts)):
+        raise ValueError("parabolaInterpolate: all x-values must be unique.")
+
+    # handle different length cases
+    if lenPts == 1:
+        # trivial case - cannot interpolate, just return input value and print a warning
+        return xPts[0]
+
+    elif lenPts == 2:
+        # two points given. This is underdefined, so the midpoint is returned
+        return (xPts[1] - xPts[0]) / 2
+
+    else:
+        # for 3 or more points we will use a similar linear algebra approach. The matrix construction is the same in both
+        # cases, but for 3 points we can exactly solve it while >3 points requires linear regression
+
+        # first generate a matrix of [[x0**2, x0, 1], [x1**2, x1, 1],...]
+        fittingMatrix = np.zeros((lenPts, 3))
+        for i in range(lenPts):
+            fittingMatrix[i, :] = np.array([xPts[i] ** 2, xPts[i], 1])
+
+        # next calculate the coefficients of the parabola y = Ax**2 + Bx + C that fits the data
+        if lenPts == 3:
+            # for three points we solve exactly
+            coeffs = np.linalg.solve(fittingMatrix, yPts)
+        else:
+            coeffs = np.linalg.lstsq(fittingMatrix, yPts)[0]
+
+        # finally solve for the zero of the derivative, handling the case where A = 0 (the input was a line)
+        if coeffs[0] == 0:
+            print("parabolaInterpolate Warning: interpolating resulted in a divide by 0. This implies the input points"
+                  "are on a line and cannot be fit to a parabola. Returning the averaged x-points instead.")
+            return np.mean(xPts)
+        else:
+            return -0.5 * coeffs[1] / coeffs[0]
+
+
+def matchingPursuitDecomposition(ref, signal, normResThreshold=1, maxIterations=100, shiftMethod='standard',
+                                 plotSteps=False, plotResult=True, **kwargs):
+    """
+    Decompose the signal into a series of shifted and stretched reference waves using a mathing pursuit type algorithm.
+
+    Args:
+        ref (array) : the reference wave to decompose the signal into
+        signal (array) : the data to decompose
+        normResThreshold (float) : the target residual / len(signal). Decomposition  functions are added until either the
+            normalized residual is less than the threshold or maxIterations is reached
+        maxIterations (int) : the maximum number of decomposition iterations to perform if the residual threshold is not reached
+            If normResThreshold is set to zero or below, the decomposition will iterate until maxIterations
+        shiftMethod (str) : the method used to find the x-shift of each decomposition
+            'standard': the index of the maximum of the correlation function is used
+            'interp' : the maximum is interpolated by fitting a parabola to the neighborhood of the correlation maximum
+            'pairwise' : interpolation is performed, then fitting is performed on all pairwise decompositions near the
+                maximum. The single decomposition or pair with the lowest residual is used at that decomposition step
+                NOTE: this may result in a greater number of decompositions than specified by maxIterations
+        plotSteps (bool) : plots each iteration of the fitting. Only recommended for debugging purposes
+        plotResult (bool) : plots the input signal, the total decomposition, and each individual decomposition wave
+        kwargs: additional keyword arguments used to specify parameters for a specific shift method
+            'pairwise': width (float) - defines the size of the search neighborhood for the pairwise fits
+                        numberOfSteps (int) - defines the step size of the neighborhood search
+                        Search is performed in all unique pairs of values within linspace(-width, width, numberOfSteps)
+                        The time of this step scales as numberOfSteps**2
+    Returns:
+        list, list, list: results of the fitting iterations
+            list0 is the shift values
+            list1 is the best fit amplitudes at each shift
+            list2 is the residual after each iteration
+        NOTE: len(list0) == len(list1) but list2 may be a different length if 'pairwise' fitting is used
+    """
+    # error check that the correct kwargs are present for 'pairwise' method
+    if shiftMethod == 'pairwise':
+        if 'width' not in kwargs.keys() or 'numberOfSteps' not in kwargs.keys():
+            raise ValueError("matchingPursuitDecomposition: missing keyword arguments \"width\" and \"numberOfSteps\"."
+                             "These are required when shiftMethod is set to 'pairwise'. Either provide the required"
+                             "kwargs or use shiftMethod = 'standard' or 'interp'. ")
+
+    currentSignal = copy.copy(signal)
+    refLen = len(ref)
+    signalLen = len(signal)
+
+    # initialize results lists
+    shifts = []
+    pols = []
+    res = []
+    amps = []
+
+    # flow control to enable either set iterations or a while loop
+    iter = 0
+    continueIter = True
+
+    while continueIter:
+
+        # first find the max or min of the cross correlation function
+        corr = np.correlate(currentSignal, ref, mode='full')
+        corrMaxInd = np.argmax(corr)
+        corrMinInd = np.argmin(corr)
+        corrMax = corr[corrMaxInd]
+        corrMin = corr[corrMinInd]
+
+        # determine whether to use the max or min and add the corresponding result to the polarities list
+        if corrMax >= abs(corrMin):
+            pols.append(1)
+            maxInd = corrMaxInd
+        else:
+            pols.append(-1)
+            maxInd = corrMinInd
+
+        # set the corresponding shift(s) according to 'shiftMethod'
+        match shiftMethod:
+
+            case 'standard':
+                # no further processing needed for standard
+                shifts.append(maxInd)
+
+            case 'interp':
+                # interpolate a parabola using the points surrounding maxInd and use that as the shift
+                if maxInd == 0 or maxInd == len(corr) - 1:
+                    # first handle the edge cases - do not interpolate at an edge
+                    fitInd = maxInd
+                else:
+                    interpX = np.array([maxInd - 1, maxInd, maxInd + 1])
+                    interpY = corr[interpX]
+                    shifts.append(parabolaInterpolate(interpX, interpY))
+
+            case 'pairwise':
+                # the logic behind this method is that the greedy matching pursuit algorithm will miss a global optimum
+                # decomposition if it is two nearby functions, instead representing it as one single function. This method
+                # searches the neighborhood of the local optimum to see if there are any close pairs that result in a better fit
+
+                # generate a list of combinations of indices in the neighborhood of maxInd specified by the kwargs
+                width = kwargs['width']
+                numberOfSteps = kwargs['numberOfSteps']
+                shiftList = list(combinations(np.linspace(maxInd - width, maxInd + width, numberOfSteps), 2))
+                shiftList.append([maxInd])
+
+                # iterate through the shift list, calculating the fit and residual at each set of shifts
+                pairwiseAmps = []
+                pairwiseRes = []
+                pairwiseResScaled = []
+                for shift in shiftList:
+
+                    pairwiseFit = linearFitRefWaveNN(ref, currentSignal, shift, [pols[-1], pols[-1]])
+                    pairwiseAmps.append(pairwiseFit[0])
+                    pairwiseRes.append(pairwiseFit[2])
+                    # need to scale the residuals by the width they cover, otherwise we are biasing towards more spread functions
+                    # assuming shift is a list of length 1 or 2
+                    if len(shift) == 2:
+                        pairwiseFitWidth = refLen + abs(shift[0] - shift[1])
+                    else:
+                        pairwiseFitWidth = refLen
+                    pairwiseResScaled.append(pairwiseFit[2] / pairwiseFitWidth)
+
+                # identify the optimal (lowest res) fit and use those values
+                # NOTE: this may append either a number or a list of numbers depending on the optimum. Will need to flatten
+                # the results before returning them
+                pairwiseBestFitIndex = np.argmin(pairwiseResScaled)
+                res.append(pairwiseRes[pairwiseBestFitIndex])
+                shifts.append(list(shiftList[pairwiseBestFitIndex]))
+                amps.append(list(pairwiseAmps[pairwiseBestFitIndex]))
+
+        # find the optimal amplitude for the given shift
+        if shiftMethod == 'pairwise':
+            # we've already done this for the pairwise method
+            pass
+        else:
+            fit = linearFitRefWaveNN(ref, currentSignal, [shifts[-1]], [pols[-1]])
+            amps.append(fit[0][0])
+
+        # subtract the fit, calculate the residual for this step
+        oldSignal = copy.copy(currentSignal)
+
+        # first handle a single fit
+        if type(amps[-1]) != list:
+            # not a list -> float or int
+            currentSignal = oldSignal - amps[-1] * pols[-1] * padAndInterpolateReferenceWave(ref, signalLen, shifts[-1])
+            if plotSteps:
+                plotFits(ref, oldSignal, [shifts[-1]], [pols[-1] * amps[-1]])
+        else:
+            # two or more shifts/amps were added - the end of the amps and shifts list is a len=2 list
+            fitSum = np.zeros(signalLen)
+            for i in range(len(shifts[-1])):
+                fitSum = fitSum + amps[-1][i] * pols[-1] * padAndInterpolateReferenceWave(ref, signalLen, shifts[-1][i])
+            currentSignal = oldSignal - fitSum
+            if plotSteps:
+                plotFits(ref, oldSignal, shifts[-1], [pols[-1] * amp for amp in amps[-1]])
+
+        # original signal - currentSignal gives the sum of all fits so far. The residual is signal - sum of fits, or
+        # signal - (signal - currentSignal) = currentSignal. The residual is therefor just the sum of the magnitude of currentSignal
+        res.append(np.sum(abs(currentSignal)))
+
+        # determine whether to break the while loop depending on number of iterations or residual threshold
+        iter += 1
+        normRes = res[-1] / signalLen
+        if normRes <= normResThreshold:
+            continueIter = False
+        elif iter >= maxIterations:
+            continueIter = False
+
+    # combine the polarity and amplitudes to give signed amplitudes
+    # this needs to handle amps being a list of numbers and a list of lists
+    if type(amps[-1]) == list:
+        # I have made bad choices in life to end up writing a line of code like this
+        ampPols = np.array([np.array([pols[i] * amp for amp in amps[i]]) for i in range(len(amps))])
+    else:
+        ampPols = np.array(amps) * np.array(pols)
+
+    # flatten the amps and shifts lists in case pairs of values were added
+    # for ease I'm just going to go into numpy and back
+    flatAmps = list(ampPols.flatten())
+    flatShifts = list(np.array(shifts).flatten())
+
+    # plot the total fit
+    if plotResult:
+        plotFits(ref, signal, flatShifts, flatAmps)
+
+    return flatShifts, flatAmps, res
+
+
 
