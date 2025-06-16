@@ -900,6 +900,61 @@ def trimByValue(signal, thresholdValue):
 
     return signal[start:stop]
 
+def correlationFit(signal, ref):
+    """
+    Calculates the best fit amplitude and mean squared error of the reference wave at each point on the signal using
+    the cross-correlation method
+
+    Args:
+        signal (array) : the signal to calculate the noise floor
+        ref (array) : the reference wave to cross-correlate with the signal
+
+    Returns:
+        array, array : an array of the best fit amplitudes and mean squared errors for the reference at every point on
+                        the signal. Output length is len(signal) + len(ref) - 1
+    """
+    corr = np.correlate(signal, ref, mode = 'full')
+    refSqSum = np.sum(np.power(ref, 2))
+    sigSqSum = np.sum(np.power(signal, 2))
+
+    fitArr = corr / refSqSum
+    mseArr = (sigSqSum - (np.power(corr, 2) / refSqSum)) / len(corr)
+
+    return fitArr, mseArr
+
+def weightedCorrelationFit(signal, ref, weights):
+    """
+    Calculates the best fit amplitude and mean squared error of the reference wave at each point on the signal using
+    the cross-correlation method with a secondary weighting array applied at every point
+
+    Args:
+        signal (array) : the signal to calculate the noise floor
+        ref (array) : the reference wave to cross-correlate with the signal
+        weights (array) : the weighting of the reference array. len(weights) == len(ref)
+
+    Returns:
+        array, array : an array of the weighted best fit amplitudes and mean squared errors for the reference at every point on
+                        the signal. Output length is len(signal) + len(ref) - 1
+    """
+    # weights are squared b/c we are optimizing the squared differences
+    w2 = np.power(weights, 2)
+
+    # prepare some other arrays that will be used in the calculation
+    r2 = np.power(ref, 2)
+    s2 = np.power(signal, 2)
+    w2r = w2 * ref
+    w2r2Sum = np.sum(w2 * r2)
+
+    # need to calculate two cross-correlations: W2Ref * Sig and W2 * Sig
+    # in the future, this could probably be sped up using FFTs
+    w2Corr = np.correlate(s2, w2, mode = 'full')
+    w2rCorr = np.correlate(signal, w2r, mode = 'full')
+
+    amps = w2rCorr / w2r2Sum
+    mse = (w2Corr - (np.power(w2rCorr, 2) / w2r2Sum)) / len(w2Corr)
+
+    return amps, mse
+
 def correlationArrival(signal, ref, threshold = 0.05):
     """
     Calculates the first arrival index by cross-correlating the reference wave and the signal and identifying the first value
@@ -920,6 +975,91 @@ def correlationArrival(signal, ref, threshold = 0.05):
     # since the convolution mode is full, the maximum index within the corrolution is shifted the length of the reference
     # with respect to the signal
     return corrArrivalIndex - len(ref)
+
+def derivArrival(signal, threshold = 0.1):
+    """
+    Calculate arrival index by a threshold of the maximum derivative
+
+    Args:
+        signal (array) : signal to calculate the arrival time
+        threshold (float) : value from 0 to 1 determining the fraction of the maximum derivative that counts as arrival
+
+    Returns:
+        int : the index of the first arrival
+    """
+    absDeriv = abs(pj.savgolFilter(signal, [0,1], derivOrder = 1))
+    derivMax = np.max(absDeriv)
+    thresholdValue = threshold * derivMax
+    return np.nonzero(absDeriv >= thresholdValue)[0][0]
+
+def trimByDeriv(signal, threshold = 0.1):
+    """
+    Trims the front and back of an array based on the derivative
+
+    Args:
+        signal:
+        threshold:
+
+    Returns:
+
+    """
+    deriv = abs(pj.savgolFilter(signal, [0,1], derivOrder = 1))
+    thresholdValue = threshold * np.max(deriv)
+    start = np.argmax(deriv >= thresholdValue)
+    stop = len(signal) - np.argmax(np.flip(deriv) >= thresholdValue)
+
+    return signal[start:stop]
+
+def trimByZeros(signal, firstBreakIndex, numberOfZeros):
+    """
+    Trims the front and back of a signal using the number of zero crossings around a starting point identified
+    by another first break algorithm. From the starting point, the algorithm backtracks to the previous zero crossing
+    and then takes the data through a number of zeros specified by numberOfZeros. The key advantage of this approach
+    is that the first and last elements of the trimmed signal should be close to zero.
+
+    Args:
+        signal (array): signal to be trimmed
+        firstBreakIndex (int): index to start collecting signal. Should be the approximate first break of the signal
+                            0 < firstBreakIndex < len(signal)
+        numberOfZeros (int): number of zero-crossings to include in the trimmed signal. Must be greater than 0. If
+                             numberOfZeros exceeds the number of zero crossings in the signal after firstBreakIndex,
+                             the back of the signal will not be trimmed
+
+    Returns:
+        array : the signal trimmed to start and end near zeros.
+    """
+    # find the zero crossings
+    signalX = range(len(signal))
+    zeroInds = pj.zeroCrossings(signal, signalX, linearInterp = False)
+
+    # handle case with no zero crossings
+    if zeroInds[0] == -1:
+        print("trimByZeros: input signal does not have any zero crossings. Returning untrimmed signal.")
+        return signal
+
+    # find zero indices after the startingIndex. Note that zeroIndicesAfterStart is an array of indices of indices -
+    # zeroInds[zeroIndicesAfterStart[0]] is index of the first signal zero crossing after startingIndex
+    zeroIndicesAfterStart = np.nonzero(zeroInds > firstBreakIndex)[0]
+    startZeroInd = zeroIndicesAfterStart[0] - 1
+
+    # find the trim starting index
+    startZeroInd = zeroIndicesAfterStart[0] - 1
+    if startZeroInd < 0:
+        # handle case where there is no zero before startingIndex
+        print("trimByZeros: there are no zero crossings before the firstBreakIndex. The front of the signal will not be trimmed.")
+        start = 0
+    else:
+        start = zeroInds[startZeroInd]
+
+    # find the trim stopping index
+    stopZeroInd = numberOfZeros - 1 # minus 1 since we already include a zero in the start
+    if stopZeroInd > len(zeroIndicesAfterStart) - 1:
+        # handle case where there are fewer zeros than numberOfZeros after the first break index
+        stop = len(signal)
+    else:
+        stop = zeroInds[zeroIndicesAfterStart[stopZeroInd]]
+
+    return signal[start : stop]
 
 # this function is using the rightmost index for historical reasons (using output of correlation function), but it would
 # be much more intuitive to use the leftmost index
@@ -977,6 +1117,163 @@ def padAndInterpolateReferenceWave(ref, signalLen, shift):
     rightPadding = max(signalLen - flooredShift, 0)
 
     return np.pad(refSlice, (leftPadding, rightPadding), 'constant', constant_values = (0,0))
+
+def generateSignalFromShiftAmp(ref, signalLen, shiftList, ampList):
+    """
+    Generates a signal from the sum of a set of shifted reference waves with given amplitudes.
+
+    Args:
+        ref (array) : the reference signal for decomposition (i.e. the transducer wave form)
+        signalLen (int) : the length of the signal to be decomposed. signalLen >= len(ref)
+        shiftList (list of ints or floats) : a list of the rightmost indices on the signal which the ref will be shifted
+            If shift is a float, linear interpolation will be performed since only integer indices are possible
+            Index matched to ampList
+        ampList (list of floats) : a list of the amplitudes of each reference wave. Index matched to shiftList
+
+    Returns:
+        array : returns an array of signalLen with the sum of the specified shifted and stretched reference waves
+    """
+    decompMatrix = np.zeros((len(shiftList), signalLen))
+
+    for i in range(len(shiftList)):
+
+        decompMatrix[i] = ampList[i] * padAndInterpolateReferenceWave(ref, signalLen, shiftList[i])
+
+    decompSum = np.sum(decompMatrix, axis = 0)
+
+    return decompSum
+
+def generateSignalFromModel(ref, refTime, model, mode = 'echo', direction = 'forward', startingAmplitude = 1,
+                           ampCutoff = 0.01, timeCutoff = 100, transducerZ = -1):
+    """
+    Generates simulated ultrasound signal from a specified slab model (transit time, attenuation, and impedance for each layer)
+
+    Args:
+        ref (array): the reference wave to use as the basis set for generating the signal
+        refTime (array): the x-axis of the ref (i.e. time, in ns)
+        model (array of 3-tuples of positive floats) : the layer model used to generate the signal
+            The tuples specify the impedance, loss coefficient, and travel time of the layer
+        mode (str) : 'echo', 'transmission', 'both' - the acoustic signal type to generate
+        direction (str) : 'forward', 'reverse', 'both' - the direction of the ultrasound through the model
+        startingAmplitude (float) : value of the maximum of ref
+        ampCutoff (positive float) : threshold fraction of the starting amplitude below which a wave stops being tracked
+        timeCutoff (float) : maximum transit time for a wave before it stops being tracked
+        transducerZ (float): acoustic impedance of the transducers. Setting to -1 means it will match the impedance of the
+            ends of the model (i.e. perfect transmission through the transducer)
+
+    Returns:
+        dict of arrays : keys are the 'mode_direction'  values are the ultrasound signal of the model constructed from
+            the ref in the specified mode and direction
+    """
+    # generate the reflection and transmission coefficients from the model
+    trCoeffs = calculateReflectionAndTransmissionCoeffs(model, transducerZ)
+
+    # run simulations for each combination of mode and direction
+    res = {}
+    if direction == 'forward' or direction == 'both':
+
+        # forward starts at layer 0 in the fwd (1) direction, starting amp, and travel time of 0
+        startWave = [0, 1, startingAmplitude, 0]
+
+        if mode == 'echo' or mode == 'both':
+            measureInterface = 0
+            res['echo_forward'] = propagateWavesThroughLayers(startWave, model, trCoeffs, measureInterface, ampCutoff, timeCutoff)
+        if mode == 'transmission' or mode == 'both':
+            measureInterface = -1
+            res['transmission_forward'] = propagateWavesThroughLayers(startWave, model, trCoeffs, measureInterface, ampCutoff, timeCutoff)
+
+    if direction == 'reverse' or direction == 'both':
+        # reverse starts at last layer in the rev (-1) direction, starting amp, and travel time of 0
+        startWave = [len(model) - 1, -1, startingAmplitude, 0]
+
+        if mode == 'echo' or mode == 'both':
+            measureInterface = -1
+            res['echo_forward'] = propagateWavesThroughLayers(startWave, model, trCoeffs, measureInterface, ampCutoff,
+                                                              timeCutoff)
+        if mode == 'transmission' or mode == 'both':
+            measureInterface = 0
+            res['transmission_forward'] = propagateWavesThroughLayers(startWave, model, trCoeffs, measureInterface,
+                                                                      ampCutoff, timeCutoff)
+
+    # generate the signals from results
+
+    return res
+
+def calculateReflectionAndTransmissionCoeffs(model,  transducerZ = -1):
+    """
+    Calculates the reflection and transmission coefficients for each interface in a model based on the acoustic impedances
+
+    Args:
+        model (array of 3-tuples of positive floats) : the layer model used to generate the signal
+        transducerZ (float): acoustic impedance of the transducers. Setting to -1 means it will match the impedance of the
+            ends of the model (i.e. perfect transmission through the transducer)
+
+    Returns:
+        array of len 4 arrays: transmission and reflection coefficients at each interface in forward and reverse directions.
+            len is len(model) + 1 because of the added interfaces with the transducers
+            Format is (fwd trans, fwd ref, rev trans, rev ref)
+    """
+    # gather a list of the impedances with the transducer values at the ends
+    modelZ = [layer[0] for layer in model]
+    zList = modelZ.insert(0, transducerZ).append(transducerZ) # this is a silly way to do this
+
+    # initialize the coefficient matrix
+    coeffMatrix = np.zeros((len(zList) - 1), 4)
+
+    # iterate through zList and populate coeffMatrix
+    for i in range(len(zList) - 2):
+
+        z1 = zList[i]
+        z2 = zList[i+1]
+        coeffMatrix[i, 0] = calcR(z1, z2)
+        coeffMatrix[i, 1] = calcT(z1, z2)
+        coeffMatrix[i, 2] = calcR(z2, z1)
+        coeffMatrix[i, 3] = calcT(z2, z1)
+
+    return coeffMatrix
+
+def calcR(z1, z2):
+    return (z1 - z2) / (z1 + z2)
+
+def calcT(z1, z2):
+    return (2 * z1) / (z1 + z2)
+
+def propagateWaveThroughLayer(inputWave, layerTuple, tr):
+    """
+    Updates a wave parameters (layer, direction, amplitude, travel time) after travelling through the specified layer
+    and interacting with the interface of the next layer
+
+    Args:
+        inputWave (len 4 list) : specifies the current state of the wave
+            layer number (int), direction (+1 or -1), amplitude (float), total travel time (float)
+        layerTuple (3-tuple): tuple of the current layer properties
+        tr (float, float) : the transmission and reflection coefficients corresponding to the direction of travel
+
+    Returns:
+        outputWave, outputWave : two new wave len 4 lists corresponding to the transmitted and reflected waves
+    """
+    return 0
+
+def propagateWavesThroughLayers(startWave, model, trCoeffs, measureInterface, ampCutoff, timeCutoff):
+    """
+    Given a starting wave and a fully specified model and experiment, generates all of the (time, amplitude) waves that
+    are measured within the time and amplitude cutoffs
+
+    Args:
+        startWave: specifies the first pulse of the experiment
+            layer number (int), direction (+1 or -1), amplitude (float), total travel time (float)
+        model (array of 3-tuples): the layer model used to generate the signal
+        trCoeffs (array of 2-tuples): array of transmission and reflection coefficients
+        measureInterface (int): specifies which interface is the measuring transducer. 0 for first, -1 for last
+        ampCutoff (float): cutoff of amplitude below which the wave is no longer tracked
+        timeCutoff (float): cutoff of time above which the wave is no longer tracked
+
+    Returns:
+        array, array : the travel time and amplitude of each wave that is measured
+    """
+
+
+    return 0
 
 def plotFits(decomp, signal, shifts, ampsList, suppressPlot = False):
     """
@@ -1056,6 +1353,171 @@ def linearFitRefWaveNN(ref, signal, shifts, polarities):
 
     return fit[0], fit[1], res
 
+def weightedLinearFitRefWave(ref, signal, shift, weights = -1, rcond = -1):
+    """
+    Performs a single linear least squares regression to optimize the amplitude of a reference wave at a point on the
+    signal with (optional) weights. Note that this method does not handle interpolation at this time, so shifts must be
+    integer values.
+
+    Args:
+        ref (array) : reference wave for decomposition
+        signal (array) : the signal to be decomposed
+        shift (int) : the LEFT-most index of the ref when overlaid on the signal. Must be between -len(ref) and len(signal) - 1
+        weights (array) : weights for the reference, if performing a weighted fit.
+            Default value of -1 performs an unweighted fit
+            If using an array, it must be the same length as ref
+        rcond (float) : rounding condition. See documentation for np.linalg.lstsq. Default value uses machine precision
+    Returns:
+        float, float, float, float, float: optimized amplitude, weighted and unweighted local residual, and the global unweighted mean squared error
+    """
+
+    # calculate bounds of the signal from the shifts
+    refLen = len(ref)
+    signalLen = len(signal)
+
+    # calculate slice indices for the signal and ref to handle cases where shift includes out-of-bounds values
+    safeSignalMax = min(shift + refLen - 1, signalLen - 1)
+    safeSignalMin = max(shift, 0)
+    refMax = min(refLen - 1, signalLen - shift - 1)
+    refMin = max(0, -1 * shift)
+
+    signalSliceLen = safeSignalMax - safeSignalMin + 1
+    refSliceLen = refMax - refMin + 1
+    if signalSliceLen != refSliceLen:
+        raise ValueError("weightedLinearFitRefWave: ref and signal slices do not have equal lengths. This is a bug.")
+
+    # create weighting matrices
+    if type(weights) == int and weights == -1:
+        sqrtWeight = np.ones(refSliceLen)
+    elif type(weights) != np.ndarray:
+        raise TypeError("weightedLinearFitRefWave: weights must either be an ndarray or -1.")
+    elif len(weights) == refLen:
+        # sqrt is used so that the weighting is applied linearly with the residuals, which are calculated by squaring
+        # the difference between predicted and actual values. Sqrt(weight) -> weight * residual in fitting
+        sqrtWeight = np.sqrt(weights)
+    else:
+        raise ValueError("weightedLinearFitRefWave: length of weights array must equal length of reference array.")
+
+    # prepare inputs for fitting. lstsq requires two columns, so populate with a dummy column of zeros
+    fittingCoeffMatrix = np.zeros((2, signalSliceLen))
+    refSlice = copy.copy(ref[refMin:refMax + 1])
+    fittingCoeffMatrix[0,:] = refSlice * sqrtWeight
+    signalSlice = copy.copy(signal[safeSignalMin : safeSignalMax + 1])
+    weightedSignal = signalSlice * sqrtWeight
+
+    # perform the fitting
+    try:
+        fit = np.linalg.lstsq(fittingCoeffMatrix.T, weightedSignal, rcond = rcond)
+    except RuntimeError:
+        fit = -1
+        print("linearFitRefWave Warning: optimization did not converge, returning np.inf.")
+        return [np.inf], [np.inf], np.inf
+
+    # calculate residual manually
+    fitArray = refSlice * fit[0][0] # multiply the shifted/padded refs by their associated amplitude
+    res = np.sum(np.power(signalSlice - fitArray, 2))
+    # calculate weighted residuals
+    wfitSum = sqrtWeight * fitArray
+    wres = np.sum(np.power(weightedSignal - wfitSum, 2))
+    # calculate global residual
+    paddedFit = fit[0][0] * padAndInterpolateReferenceWave(ref, signalLen, shift)
+    gres = np.sum(np.power(signal - paddedFit, 2))
+    mse = gres / signalLen
+
+    return fit[0][0], wres, res, gres, mse
+
+def constantCutoffWeight(refLen, frontLen, frontWeight, backWeight = 1):
+    """
+    Generate a weighting function that increases the weighting on the first n elements of an array
+
+    Args:
+        refLen (int): length of the weighting array
+        frontLen (int): length of the array to have increased weight
+        frontWeight (float): weighting of front elements of array
+        backWeight (float) : weighting of the elements after frontLen
+
+    Returns:
+        array : an array of length refLen where the first frontLen elements have value frontWeight, the rest have value backWeight
+    """
+    weights = backWeight * np.ones(refLen)
+    weights[:frontLen] = frontWeight
+    return weights
+
+def expDecayWeight(refLen, decayLen, leadingWeight = 1):
+    """
+    Generates a weighting function that exponentially decays from the start.
+
+    Args:
+        refLen (int): length of the weighting array
+        decayLen (float): characteristic length scale of the exponential decay exp(-x/decayLen)
+        leadingWeight (float) : value of weights[0]
+
+    Returns:
+        array : an array of length refLen whose values exponentially decay starting at leadingWeight
+    """
+    weightX = np.linspace(0, refLen, refLen)
+    return leadingWeight * np.exp(-1 * weightX / decayLen)
+
+#todo: modify to allow arbitrary weighting input
+def backtrackFitting(ref, signal, startingShift, weights = -1, backtrackLen = 10, rcond = -1):
+    """
+    Attempts to fit the leading edge of a signal using a reference wave with an exponential dropoff. Attempts the fit
+    at each increment up to weightingDropoff to the left of startingShift and returns the shift and amplitude of best fit.
+    The motivation for this method is to improve the matching of the reference to the leading edge of the signal when the
+    ToF algorithm has errors and the start of the signal may have noise.
+
+    Args:
+        ref (array) : reference wave for decomposition
+        signal (array) : the signal to be decomposed
+        startingShift (int) : the LEFT-most index of the ref when overlaid on the signal. Must be between -len(ref) and len(signal) - 1.
+        weights (array) : an array of length = len(ref) specifying the weighting in the least squares fitting. If set to -1, no weighting is performed
+        backtrackLen (int): the number of indices that will to tried to the left of startingShift
+        rcond (float) : rounding condition. See documentation for np.linalg.lstsq. Default value uses machine precision
+    Returns:
+        float, float, int : the best fit amplitude, unweighted residual, and optimal shift value
+    """
+
+    # generate list of shifts to attempt fitting
+    shiftList = range(startingShift, startingShift - backtrackLen, -1)
+
+    if type(weights) == int and weights == -1:
+        weightArray = np.ones(len(ref))
+    elif type(weights) != np.ndarray:
+        raise TypeError("backtrackFitting: weights parameters must either be a numpy array or -1.")
+    elif len(weights) != len(ref):
+        raise ValueError("backtrackFitting: weights array must be the same length as ref array.")
+    else:
+        weightArray = weights
+
+    # initialize trackers
+    amps = []
+    res = []
+
+    # iterate through shifts
+    for i in range(len(shiftList)):
+
+        # pad the reference wave with zeros to fit over the correct range
+        paddedRef = np.pad(ref, (0, i), 'constant', constant_values = (0,0))
+        # pad the weight array with a repeat of the final value
+        paddedWeight = np.pad(weightArray, (0, i), 'constant', constant_values = (0, weightArray[-1]))
+
+        # fit and save results to trackers
+        fit = weightedLinearFitRefWave(paddedRef, signal, shiftList[i], paddedWeight)
+        # print(shiftList[i])
+        # if i%10 == 0:
+        #     plotFits(paddedRef, signal, [shiftList[i] + len(paddedRef)], [fit[0]])
+        # fit[0][0], wres, res, gres, mse
+        amps.append(fit[0])
+        res.append(fit[1] / len(paddedRef))  # res needs to be normalized by the length to avoid biasing against further shifts
+        # res.append(fit[1])
+
+    # find index of minimal residual, return values
+    minInd = np.argmin(np.array(res))
+
+    return amps[minInd], res[minInd], shiftList[minInd]
+
+# todo: add a weights option
+# todo: determine rcond based on noise or add an rcond parameter (default to -1)
 def linearFitRefWave(ref, signal, shifts):
     """
     Performs a linear least squares regression to optimize the amplitudes of a series of reference waves and time shifts
@@ -1065,7 +1527,6 @@ def linearFitRefWave(ref, signal, shifts):
         ref (array) : reference wave for decomposition
         signal (array) : the signal to be decomposed
         shifts (list) : the calculated time-shift of each fitted wave
-        polarities (list) : the polarity (1 or -1) of each fitted wave. Must be index matched to shifts
     Returns:
         list, float : a list of optimized amplitudes and the best fit residual
         If the regression step fails to converge, np.inf is returned for all values
@@ -1076,6 +1537,9 @@ def linearFitRefWave(ref, signal, shifts):
     minShift = min(shifts)
     refLen = len(ref)
     signalLen = len(signal)
+
+    # create weighted matrices
+    # todo: check if the signal needs to be weighted. If so, then this must be performed in a window (rather than global!)
 
     # initialize a fitting matrix, handling case where len(shifts) == 1 so we must populate with a dummy column of zeros
     fittingCoeffMatrix = np.zeros((max(len(shifts), 2), signalLen))
@@ -1089,7 +1553,7 @@ def linearFitRefWave(ref, signal, shifts):
     #todo: put this in a try/except and handle max iterations separately
     #todo: formalize the atol value based on the data noise floor?
     try:
-        fit = np.linalg.lstsq(fittingCoeffMatrix.T, signal)
+        fit = np.linalg.lstsq(fittingCoeffMatrix.T, signal, rcond = 0.0001 * np.max(signal))
     except RuntimeError:
         fit = -1
         print("linearFitRefWave Warning: optimization did not converge, returning np.inf.")
@@ -1098,7 +1562,7 @@ def linearFitRefWave(ref, signal, shifts):
     # calculate residual manually
     fitArray = fittingCoeffMatrix * fit[0].reshape((len(fit[0]),1)) # multiply the shifted/padded refs by their associated amplitude
     fitSum = np.sum(fitArray, axis = 0) # vertical sum to calculate the total signal
-    res = np.sum(abs(signal - fitSum))
+    res = np.sum(np.power(signal - fitSum, 2))
 
     return fit[0], fit[1], res
 
@@ -1156,6 +1620,7 @@ def parabolaInterpolate(xPts, yPts):
         else:
             return -0.5 * coeffs[1] / coeffs[0]
 
+# def leadingPursuitDecomposition(ref, signal, )
 
 def matchingPursuitDecomposition(ref, signal, normResThreshold=1, maxIterations=100, shiftMethod='standard',
                                  plotSteps=False, plotResult=True, **kwargs):
