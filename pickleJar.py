@@ -1162,14 +1162,30 @@ def baselineCorrectVoltage(voltage, baseline):
     return voltage - baseline
 
 # removes the effect of pulser gain from pulse-echo data by solving for VBaseline in 100log10(Vmeasured/VBaseline) = Gain
-# this uses a logarithm so input data must be positive
+# Inverts formula G = 20 log (Vout/Vin) to Vin = 10**[log(Vout) - G/20]
+# handles log of negative values by saving the sign, taking log(abs(V)) and multiplying sign back at the end
 def correctVoltageByGain(data, gain):
+    """
+    Inverts the gain applied by the CompactPulser to pulse-echo measurements to retrieve the original, unamplified voltages.
+    This is done by inverting the formula G = 20 log (Vout/Vin) to Vin = 10**[log(Vout) - G/20]. Negative values in the
+     data are handled by saving the sign, taking log(abs(V)) and multiplying sign back at the end
 
+    Args:
+        data (array) : voltage array, usually the raw pulse-echo data
+        gain (float) : the gain that was applied to the data, in dB. Note that data from ultrasound experiments is saved
+            as tenths of a dB, so the value taken from 'gainForward', for example, should be divided by 10 before using
+            in this function
+
+    Returns:
+        array : the pre-amplification voltage
+    """
     # note: pulser gain is in units of 10ths of a dB (i.e. 100ths of a power of ten)
     # inverting the gain requires a negative power
-    gainExponent = np.log10(data) - (gain/100)
+    signs = np.sign(data)
+    logData = np.log10(abs(data))
+    gainExponent = logData - gain/20
 
-    return 10**gainExponent
+    return signs * 10**gainExponent
 
 # Applies a Savitzky-Golay filter to the data and optionally takes its first or second derivative
 # Inputs the y-data ('voltage'), x-data ('time') along with 3 auxiliary parameters: the window length of filtering (defaults to 9),

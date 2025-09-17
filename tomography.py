@@ -900,7 +900,7 @@ def trimByValue(signal, thresholdValue):
 
     return signal[start:stop]
 
-def correlationFit(signal, ref):
+def correlationFit(signal, ref, returnCorr = False):
     """
     Calculates the best fit amplitude and mean squared error of the reference wave at each point on the signal using
     the cross-correlation method
@@ -910,7 +910,7 @@ def correlationFit(signal, ref):
         ref (array) : the reference wave to cross-correlate with the signal
 
     Returns:
-        array, array : an array of the best fit amplitudes and mean squared errors for the reference at every point on
+        array, array, array : an array of the best fit amplitudes, mean squared errors, and the raw correlation function for the reference at every point on
                         the signal. Output length is len(signal) + len(ref) - 1
     """
     corr = np.correlate(signal, ref, mode = 'full')
@@ -920,7 +920,7 @@ def correlationFit(signal, ref):
     fitArr = corr / refSqSum
     mseArr = (sigSqSum - (np.power(corr, 2) / refSqSum)) / len(corr)
 
-    return fitArr, mseArr
+    return fitArr, mseArr, corr
 
 def weightedCorrelationFit(signal, ref, weights):
     """
@@ -954,6 +954,55 @@ def weightedCorrelationFit(signal, ref, weights):
     mse = (w2Corr - (np.power(w2rCorr, 2) / w2r2Sum)) / len(w2Corr)
 
     return amps, mse
+
+def leadingEdgeFit(signal, ref, threshold, leadLen):
+    '''
+    Method for optimizing the fit of the reference with the leading edge of a signal given a limit on how close in time
+    two references can be within the decomposition
+    todo: update rest
+    Outline of the algorithm:
+        Gather leading edge of ref
+        Calculate correlation of lead ref / signal
+        Determine ToF based on correlation exceeding threshold
+        Find minimum res/amplitude w/in +- leadLen of ToF
+        Fit full ref at minimum point
+
+    Args:
+        signal (array) : the signal to calculate the noise floor
+        ref (array) : the reference wave to cross-correlate with the signal
+        threshold (float) : the fraction of the correlation maximum that is counted as arrival. 0 < threshold <= 1
+        leadLen (int) : length of leading segment of reference to use in calculation. Should be based on the minimum
+            expected separation of layers in the sample
+
+    Returns:
+        int, float, float : the shift (RIGHT SIDE), amplitude, and mse of the optimal leading reference wave
+    '''
+    # isolate leadLen of ref
+    leadRef = ref[:leadLen]
+
+    # calculate leadRef/signal cross correlation, best fit amplitude, and residual
+    leadFit, leadMSE, leadCorr = correlationFit(signal, leadRef)
+
+    # calculate ToF from correlation
+    leadToF = firstArrivalAbsThreshold(leadCorr, threshold)
+
+    # isolate res/amp in region around ToF
+    #todo: add safety features for indices IF this turns out to be useful
+    fitRegion = (leadToF - leadLen, leadToF + leadLen)
+    normRes = leadMSE[fitRegion[0]:fitRegion[1]] / abs(leadFit[fitRegion[0]:fitRegion[1]])
+
+    # find minimum
+    normResMinInd = np.argmin(normRes) # index of minimum within the normRes array
+    # convert to index in correlation (right side of the leadRef)
+    corrMinInd = normResMinInd + fitRegion[0]
+    # convert to the starting index of the shift for input into weightedLinearFitRefWave
+    # this means subtracting 2 * leadLen (one leadLen left side in correlation space, another to go from correlation space to signal space)
+    shift = corrMinInd - (2 * leadLen)
+
+    # fit ref at minimum
+    amp, wRes, res, gres, mse = weightedLinearFitRefWave(ref, signal, shift, weights = -1)
+
+    return shift + len(ref) - 1, amp, mse
 
 def correlationArrival(signal, ref, threshold = 0.05):
     """
@@ -1144,7 +1193,7 @@ def generateSignalFromShiftAmp(ref, signalLen, shiftList, ampList):
     return decompSum
 
 def generateSignalFromModel(ref, refTime, model, mode = 'echo', direction = 'forward', startingAmplitude = 1,
-                           ampCutoff = 0.01, timeCutoff = 100, transducerZ = -1):
+                           ampCutoff = 0.01, timeCutoff = 100, transducerZ = -1, plotResults = False):
     """
     Generates simulated ultrasound signal from a specified slab model (transit time, attenuation, and impedance for each layer)
 
@@ -1163,39 +1212,73 @@ def generateSignalFromModel(ref, refTime, model, mode = 'echo', direction = 'for
 
     Returns:
         dict of arrays : keys are the 'mode_direction'  values are the ultrasound signal of the model constructed from
-            the ref in the specified mode and direction
+            the ref in the specified mode and direction. Also includes 'mode_direction_time' for the x-axis values
+            and 'mode_direction_sim' for the list of time shifts and amplitudes
     """
     # generate the reflection and transmission coefficients from the model
     trCoeffs = calculateReflectionAndTransmissionCoeffs(model, transducerZ)
 
     # run simulations for each combination of mode and direction
-    res = {}
+    sims = {}
     if direction == 'forward' or direction == 'both':
 
         # forward starts at layer 0 in the fwd (1) direction, starting amp, and travel time of 0
         startWave = [0, 1, startingAmplitude, 0]
 
         if mode == 'echo' or mode == 'both':
-            measureInterface = 0
-            res['echo_forward'] = propagateWavesThroughLayers(startWave, model, trCoeffs, measureInterface, ampCutoff, timeCutoff)
+            measureLayer = -1
+            sims['echo_forward'] = propagateWavesThroughLayers(startWave, model, trCoeffs, measureLayer, ampCutoff, timeCutoff)
         if mode == 'transmission' or mode == 'both':
-            measureInterface = -1
-            res['transmission_forward'] = propagateWavesThroughLayers(startWave, model, trCoeffs, measureInterface, ampCutoff, timeCutoff)
+            measureLayer = len(model)
+            sims['transmission_forward'] = propagateWavesThroughLayers(startWave, model, trCoeffs, measureLayer, ampCutoff, timeCutoff)
 
     if direction == 'reverse' or direction == 'both':
         # reverse starts at last layer in the rev (-1) direction, starting amp, and travel time of 0
         startWave = [len(model) - 1, -1, startingAmplitude, 0]
 
         if mode == 'echo' or mode == 'both':
-            measureInterface = -1
-            res['echo_forward'] = propagateWavesThroughLayers(startWave, model, trCoeffs, measureInterface, ampCutoff,
+            measureLayer = len(model)
+            sims['echo_reverse'] = propagateWavesThroughLayers(startWave, model, trCoeffs, measureLayer, ampCutoff,
                                                               timeCutoff)
         if mode == 'transmission' or mode == 'both':
-            measureInterface = 0
-            res['transmission_forward'] = propagateWavesThroughLayers(startWave, model, trCoeffs, measureInterface,
+            measureLayer = -1
+            sims['transmission_reverse'] = propagateWavesThroughLayers(startWave, model, trCoeffs, measureLayer,
                                                                       ampCutoff, timeCutoff)
 
-    # generate the signals from results
+    # generate the signals from simulations, store them in the res dict
+    res = {}
+    timeStep = refTime[1] - refTime[0]
+    cutoffSteps = math.floor(timeCutoff/timeStep)
+
+    for key in sims.keys():
+
+        simMeasurement = sims[key]
+
+        # need to calculate the time bounds in terms of timesteps of the ref
+        if len(simMeasurement[0]) > 0:
+            minTime = np.min(simMeasurement[0])
+        else:
+            minTime = 0
+        minSteps = math.floor(0.9 * minTime / timeStep) # 0.9 adds some padding to the beginning
+        sigLen = cutoffSteps - minSteps
+
+        # next convert the wave travel times to time steps of the RIGHTMOST portion of the reference wave
+        # also note that shifts are indexed from the start of the signal (i.e. minSteps = 0)
+        shifts = (simMeasurement[0] / timeStep) + len(ref) - minSteps
+
+        # calculate the total signal
+        if len(shifts) > 0:
+            res[key] = generateSignalFromShiftAmp(ref, sigLen, shifts, simMeasurement[1])
+        else:
+            res[key] = np.zeros(sigLen)
+
+        # create a time axis for the signal
+        res[key + '_time'] = np.linspace(0.9 * minTime, timeCutoff, len(res[key]))
+        # save the sim data
+        res[key + '_sim'] = simMeasurement
+
+        if plotResults:
+            plotFits(ref, res[key], shifts, simMeasurement[1])
 
     return res
 
@@ -1205,6 +1288,7 @@ def calculateReflectionAndTransmissionCoeffs(model,  transducerZ = -1):
 
     Args:
         model (array of 3-tuples of positive floats) : the layer model used to generate the signal
+            The tuples specify the impedance, loss coefficient, and travel time of the layer
         transducerZ (float): acoustic impedance of the transducers. Setting to -1 means it will match the impedance of the
             ends of the model (i.e. perfect transmission through the transducer)
 
@@ -1214,14 +1298,22 @@ def calculateReflectionAndTransmissionCoeffs(model,  transducerZ = -1):
             Format is (fwd trans, fwd ref, rev trans, rev ref)
     """
     # gather a list of the impedances with the transducer values at the ends
-    modelZ = [layer[0] for layer in model]
-    zList = modelZ.insert(0, transducerZ).append(transducerZ) # this is a silly way to do this
+    zList = [layer[0] for layer in model]
+    # add transducer z
+    if transducerZ == -1:
+        firstZ = zList[0]
+        lastZ = zList[-1]
+        zList.insert(0, firstZ)
+        zList.append(lastZ)
+    else:
+        zList.insert(0, transducerZ)
+        zList.append(transducerZ)
 
     # initialize the coefficient matrix
-    coeffMatrix = np.zeros((len(zList) - 1), 4)
+    coeffMatrix = np.zeros((len(zList) - 1, 4))
 
     # iterate through zList and populate coeffMatrix
-    for i in range(len(zList) - 2):
+    for i in range(len(zList) - 1):
 
         z1 = zList[i]
         z2 = zList[i+1]
@@ -1238,7 +1330,7 @@ def calcR(z1, z2):
 def calcT(z1, z2):
     return (2 * z1) / (z1 + z2)
 
-def propagateWaveThroughLayer(inputWave, layerTuple, tr):
+def propagateWaveThroughLayer(inputWave : int, layerTuple, t : float, r : float):
     """
     Updates a wave parameters (layer, direction, amplitude, travel time) after travelling through the specified layer
     and interacting with the interface of the next layer
@@ -1247,14 +1339,31 @@ def propagateWaveThroughLayer(inputWave, layerTuple, tr):
         inputWave (len 4 list) : specifies the current state of the wave
             layer number (int), direction (+1 or -1), amplitude (float), total travel time (float)
         layerTuple (3-tuple): tuple of the current layer properties
-        tr (float, float) : the transmission and reflection coefficients corresponding to the direction of travel
+            The tuples specify the impedance, loss coefficient, and travel time of the layer
+        t (float) : the transmission coefficient corresponding to the direction of travel
+        r (float) : the reflection coeffient corresponding to the direction of travel
 
     Returns:
         outputWave, outputWave : two new wave len 4 lists corresponding to the transmitted and reflected waves
     """
-    return 0
+    loss = layerTuple[1] * inputWave[2]
+    time = layerTuple[2] + inputWave[3]
+    # reflected wave changes:
+    #   same layer
+    #   opposite direction
+    #   amp decrease by loss and reflection coeff
+    #   travel time increases by layer travel time
+    rWave = [inputWave[0], -1 * inputWave[1], loss * r, time]
+    # transmitted wave changes:
+    #   current layer + direction
+    #   same direction
+    #   amp decrease by loss and transmission coeff
+    #   travel time increases by layer travel time
+    tWave = [inputWave[0] + inputWave[1], inputWave[1], loss * t, time]
 
-def propagateWavesThroughLayers(startWave, model, trCoeffs, measureInterface, ampCutoff, timeCutoff):
+    return tWave, rWave
+
+def propagateWavesThroughLayers(startWave, model, trCoeffs, measureLayer, ampCutoff, timeCutoff):
     """
     Given a starting wave and a fully specified model and experiment, generates all of the (time, amplitude) waves that
     are measured within the time and amplitude cutoffs
@@ -1263,17 +1372,68 @@ def propagateWavesThroughLayers(startWave, model, trCoeffs, measureInterface, am
         startWave: specifies the first pulse of the experiment
             layer number (int), direction (+1 or -1), amplitude (float), total travel time (float)
         model (array of 3-tuples): the layer model used to generate the signal
+            The tuples specify the impedance, loss coefficient, and travel time of the layer
         trCoeffs (array of 2-tuples): array of transmission and reflection coefficients
-        measureInterface (int): specifies which interface is the measuring transducer. 0 for first, -1 for last
+        measureLayer (int): specifies which layer is the measuring transducer. -1 for 'left', len(model) for 'right'
         ampCutoff (float): cutoff of amplitude below which the wave is no longer tracked
         timeCutoff (float): cutoff of time above which the wave is no longer tracked
 
     Returns:
         array, array : the travel time and amplitude of each wave that is measured
+            If no signal made it to the measuring transducer, returns [], []
     """
+    currentWaves = [startWave]
+    measuredWaves = []
+    lastLayer = len(model) - 1
 
+    # while there are still current waves
+    # note: this loop will always terminate eventually because time is strictly increasing and there is a time cutoff
+    while len(currentWaves) > 0:
 
-    return 0
+        nextWaves = []
+
+        # propagate all waves that are still valid
+        for wave in currentWaves:
+            # gather layer information
+            layerNumber = wave[0]
+            layer = model[layerNumber]
+            # gather tr coefficients based on the direction
+            if wave[1] == 1:
+                # todo: need to test this, indexing leaves room for many off-by-one errors
+                r = trCoeffs[layerNumber + 1, 0]
+                t = trCoeffs[layerNumber + 1, 1]
+            elif wave[1] == -1:
+                r = trCoeffs[layerNumber, 2]
+                t = trCoeffs[layerNumber, 3]
+
+            propagatedWaves = propagateWaveThroughLayer(wave, layer, t, r)
+
+            # check if the transmitted wave should be measured
+            if propagatedWaves[0][0] == measureLayer:
+                measuredWaves.append(propagatedWaves[0])
+
+            # add to nextWaves if the layer of the propagated wave is in bounds and within amp/time cutoffs
+            #   note that waves trasmitting into the non-measured boundary layer are no longer counted
+            for pw in propagatedWaves:
+                if pw[0] >=0 and pw[0] <= lastLayer: # boundary check
+                    if abs(pw[2]) > ampCutoff and pw[3] < timeCutoff: # amp/time cutoff
+                        nextWaves.append(pw)
+
+        # update currentWaves
+        currentWaves = copy.copy(nextWaves)
+        stopPoint = 1
+
+    # gather the time and amplitude of all measured waves
+    if len(measuredWaves) > 0:
+        measuredWavesTranspose = np.array(measuredWaves).T
+        measuredTimes = measuredWavesTranspose[3]
+        measuredAmps = measuredWavesTranspose[2]
+
+        return measuredTimes, measuredAmps
+
+    else:
+        print("propagateWavesThroughLayers Warning: no waves transmitted through the specified measurement layer.")
+        return [], []
 
 def plotFits(decomp, signal, shifts, ampsList, suppressPlot = False):
     """
