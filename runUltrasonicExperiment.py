@@ -94,7 +94,7 @@ experimentParams = {
                                                     #   collectionMode and collectionDirection
 
     ################################################################################
-    ########################### Saving Names ##########################################
+    ########################### Saving Options ##########################################
     ##### Applies to 'single scan', 'multi scan', and 'repeat pulse' experiment ####
     ################################################################################
 
@@ -104,6 +104,11 @@ experimentParams = {
     'saveFormat' : 'sqlite',                        # Format to save data. Options are sqlite or json. Sqlite is highly recommended
     'postAnalysis' : False,                         # Option to run simple post-scan analysis and plotting: calculate max-min, STA/LTA, and Hilbert Envelope, save plots of data and dump CSVs of the raw metrics
                                                     # NOTE: this is only available if for single or multi scan experiments with saveFormat = 'sqlite'
+    'dataPointsPerFile' : -1,                       # Option for Repeat Pulse experiments only. Divides the files for long scans into segments
+                                                    #   to make data management easier (10k data points -> ~1 GB data).
+                                                    #   Setting to an int above 0 will make a new file once the previous file has that number of data points
+                                                    #   Note this is only available for saveFormat == 'sqlite'
+                                                    #   Default to -1 if not used. If you want to use this, 10000 is a good starting value
 
     ################################################################################
     ####################### Scan Parameters ########################################

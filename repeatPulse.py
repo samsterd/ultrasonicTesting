@@ -23,10 +23,23 @@ def repeatPulse(params):
     else:
         multiplexer = None
 
+    # determine whether the files will be divided
+    multipleFiles = params['dataPointsPerFile'] > 0
+    fileIndex = 0
+
+    # raise error if multipleFiles and not saving as sqlite. Honestly should probably stop supporting JSON
+    if multipleFiles and params['saveFormat'] != 'sqlite':
+        raise ValueError("repeatPulse saving error: multiple files is only supported for 'sqlite' save formats.")
+
     # generate filename for current scan
-    params['fileName'] = params['experimentFolder'] + '//' + params['experimentName']
+    if multipleFiles:
+        params['fileName'] = params['experimentFolder'] + '//' + params['experimentName'] + '_0'
+    else:
+        params['fileName'] = params['experimentFolder'] + '//' + params['experimentName']
 
     # if saveFormat is sqlite, initialize the database
+    #   NOTE FOR FUTURE: for multipleFiles = True, consider initializing all databases at once to avoid time overhead
+    #   mid-measurement. Not sure if this will end up being important for most use cases, have not actually timed the process
     if params['saveFormat'] == 'sqlite':
         database = Database(params)
 
@@ -65,14 +78,24 @@ def repeatPulse(params):
 
         # collect data
         waveDict = pico.runPicoMeasurement(multiplexer)
-
         waveDict['time_collected'] = time.time()
-        waveDict['collection_index'] = collectionIndex
-        collectionIndex += 1
 
-        # CURRENTLY NOT SUPPORTED
-        # if params['voltageAutoRange']:
-        #     waveData['voltageRange'] = params['voltageRange']
+        # create a new database if we are managing memory and collection index is too high
+        if multipleFiles and collectionIndex > params['dataPointsPerFile']:
+            # iterate fileIndex, reset collectionIndex
+            fileIndex += 1
+            collectionIndex = 0
+
+            # close old db and create new one
+            database.connection.close()
+            del database # deleting old object to avoid any issues with old properties not being overwritten.
+            params['fileName'] = params['experimentFolder'] + '//' + params['experimentName'] + '_' + str(fileIndex)
+            database = Database(params)
+
+        else:
+            collectionIndex += 1
+
+        waveDict['collection_index'] = collectionIndex
 
         # save data as sqlite database
         if params['saveFormat'] == 'sqlite':
