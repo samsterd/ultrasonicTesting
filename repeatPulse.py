@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from database import Database
 import pickleJar as pj
 import mux
-
+import copy
 
 def repeatPulse(params):
 
@@ -111,3 +111,109 @@ def repeatPulse(params):
         multiplexer.closeMux()
     if params['saveFormat'] == 'sqlite':
         database.connection.close()
+
+def sweepParameters(initParams: dict, sweepParams: dict):
+    """
+    Execute multiple experiments in sequence while changing the value of a single parameter
+
+    Args:
+        initParams (dict) : initial params dict from runUltrasonicExperiment.py. All parameters from this dict are held
+            constant EXCEPT the parameter specified by the key of sweepParams.
+        sweepParams (dict) : dict describing the parameter to sweep. The key of sweepParams must be a key in initParams,
+            and the value must be a list of valid values of that parameter
+            NOTE: parameters involved in the instrument connections or data saving cannot be changed
+            NOTE: if multiple parameters are swept, they will only be changed one at a time, with the unchanged sweepParams
+                being held at their value in initParams
+    Returns:
+        None. Data is saved in a single file as specified in params
+    """
+
+    # error check inputs
+    for key in sweepParams.keys():
+        if key not in initParams.keys():
+            raise ValueError("sweepParameters: all keys in sweepParams input must be valid experimental parameters.")
+
+    # check that all swept values are lists
+    listLens = []
+    for val in sweepParams.values():
+        if type(val) != list:
+            raise ValueError("sweepParameters: all values in sweepParams must be lists.")
+
+    # generate list of input parameters
+    inputParams = []
+    for key in sweepParams.keys():
+        for keyVal in sweepParams[key]:
+            inputCopy = copy.deepcopy(initParams)
+            inputCopy[key] = keyVal
+            inputParams.append(inputCopy)
+
+    # Connect to picoscope, pulser
+    pulser = utp.Pulser(initParams['pulserType'], pulserPort=initParams['pulserPort'], dllFile=initParams['dllFile'])
+    # TODO: this line may need to be broken up between connecting and initializing parameters to allow collection times to be swept
+    pico = picoscope.Picoscope(initParams, pulser)
+
+    # connect to multiplexer, if applicable
+    if initParams['multiplexer']:
+        multiplexer = mux.Mux(initParams)
+    else:
+        multiplexer = None
+
+    # generate filename for current scan
+    initParams['fileName'] = initParams['experimentFolder'] + '//' + initParams['experimentName']
+
+    # if saveFormat is sqlite, initialize the database
+    if initParams['saveFormat'] == 'sqlite':
+        database = Database(initParams)
+
+    # Initialize the collection index which is used in the saved data table
+    collectionIndex = 0
+
+    # iterate through inputParams dicts, running experiments as normal
+    #   Major difference between this experiment and repeatPulse is that the pulser is turned on and off every experiment
+    #   in order to allow pulse parameters to be swept (i.e. change frequency between experiments)
+    for i in tqdm(range(len(inputParams))):
+
+        input = inputParams[i]
+
+        # Adjust pulser pulsewidth
+        pulser.setFrequency(input['transducerFrequency'])
+
+        # Set the number of half cycles if using tone burst pulser
+        if pulser.type == 'tone burst':
+            pulser.setHalfCycles(input['halfCycles'])
+
+        # Turn on the pulser
+        pulser.pulserOn()
+
+        # collect data
+        waveDict = pico.runPicoMeasurement(multiplexer)
+
+        waveDict['time_collected'] = time.time()
+        waveDict['collection_index'] = collectionIndex
+        collectionIndex += 1
+
+        # save data as sqlite database
+        if input['saveFormat'] == 'sqlite':
+            database.writeData(waveDict)
+
+        # save data as json
+        else:
+            with open(input['fileName'], 'a') as file:
+                json.dump(waveDict, file)
+                file.write('\n')
+
+        pulser.pulserOff()
+
+    pulser.closePulser()
+    pico.closePicoscope()
+    if initParams['multiplexer']:
+        multiplexer.closeMux()
+    if initParams['saveFormat'] == 'sqlite':
+        database.connection.close()
+
+    return 0
+
+# todo: this necessitates writing a validParamsQ, validParamQ, list of params (also list of categorized params), etc function in order to validate each swept
+#   experiment. Put these in scanSetupFunctions? Might also be a good time to consolidate functions into single file
+
+# todo: implement sweepParameters as an experiment option on runExperiment. Add options to GUI (eventually)
