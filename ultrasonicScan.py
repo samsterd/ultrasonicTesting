@@ -11,11 +11,19 @@ import pickleJar as pj
 import picoscope as picoscope
 import mux
 
-# Runs a 2D scan, taking ultrasonic pulse data at every point, and saves to the specified folder
-# Inputs: parameters specified above
 def runScan(params):
+    """
+    Runs a 2D scan based on the input experimental parameters and saves the result.
 
-    #setup save file
+    Args:
+        params (dict) : experiment params dict from runUltrasonicExperiment.py
+    Returns:
+        None. Data is saved in a single file as specified in params
+    """
+
+    #set up save file
+    #todo: lots of the boilerplate experimental setup can be moved to a separate function
+    # also all experiment functions should be consolidated into a single file
     params['fileName'] = params['experimentFolder'] + '//' + params['experimentName']
 
     #setup database if saving as sqlite

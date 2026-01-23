@@ -12,6 +12,14 @@ import mux
 
 
 def repeatPulse(params):
+    """
+    Execute multiple single pulse experiments over a set time interval
+
+    Args:
+        params (dict) : experiment params dict from runUltrasonicExperiment.py
+    Returns:
+        None. Data is saved in a single file as specified in params
+    """
 
     # Connect to picoscope, pulser
     pulser = utp.Pulser(params['pulserType'], pulserPort = params['pulserPort'], dllFile = params['dllFile'])
