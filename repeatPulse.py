@@ -171,7 +171,7 @@ def sweepParameters(initParams: dict, sweepParams: dict):
     # iterate through inputParams dicts, running experiments as normal
     #   Major difference between this experiment and repeatPulse is that the pulser is turned on and off every experiment
     #   in order to allow pulse parameters to be swept (i.e. change frequency between experiments)
-    for i in tqdm(range(len(inputParams))):
+    for i in tqdm.tqdm(range(len(inputParams))):
 
         input = inputParams[i]
 

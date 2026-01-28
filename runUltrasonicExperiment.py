@@ -128,6 +128,15 @@ experimentParams = {
     'experimentTime' : 5,                           # For repeat pulse: Time to collect data, in seconds
 
     #################################################################################
+    ########################### Sweep Parameters ####################################
+    ##################### Applies to 'sweep' experiments ############################
+    #################################################################################
+
+    'sweepParams' : {                           # Dict which defines the parameters to sweep over
+        'transducerFrequency' : [0.5 + i/10 for i in range(50)]           #   Keys must be other keys of the input params dict
+    },                                          #   Values must be lists of possible values to try for that parameter
+
+    #################################################################################
     ########################## Port Names ###########################################
     ######### Only change if instrument USB ports are changed! ######################
     #################################################################################
@@ -184,6 +193,9 @@ def runExperiment(params : dict):
 
             case 'repeat pulse':
                 repeatPulse.repeatPulse(params)
+
+            case 'sweep':
+                repeatPulse.sweepParameters(params, params['sweepParams'])
 
             case 'single scan':
                 scan.runScan(params)
