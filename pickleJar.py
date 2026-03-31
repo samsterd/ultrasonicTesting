@@ -36,6 +36,7 @@ import os
 import bottleneck as bn
 import scipy.signal
 from scipy.optimize import curve_fit
+from scipy.io import loadmat
 import math
 import csv
 
@@ -836,6 +837,61 @@ def multiScanAverageDataInBox(dir, dataKeys : list, topLeft, bottomRight, steps)
 # Returns the data as a dict of coordinats with keys for each fitting parameter as well as fitting 'goodness' metrics
 # This data will be pickled in a subdirectory since this operation will take several minutes to run
 def multiScanFitDataInBox(dir, dataKeys : list, fitFunction, topLeft, bottomRight, steps):
+    return 0
+
+
+####################################################################
+############ TOPSOUND DATA PROCESSING ################################
+#####################################################################
+# Functions for importing and processing scan data from topsound systems that was exported as .mat files
+# Goals:
+#   Input a directory with data
+#   Import data by file, sorting them by type (re vs tr) and column
+#       figure out optimal settings for scipy.io.loadmat
+#   Rearrange into a pickle-able format for ease of use and MUCH better compression
+
+def parseDirFilenames(dir):
+    '''
+    Reads names of the .mat files in the directory to determine:
+    What modes are present (i.e. reflection, transmission)
+    How many columns?
+    Are the columns well formatted (i.e. equal number of columns for each mode)
+    Returns the mode types and number of columns
+    '''
+    return 0
+
+def parseFilename(file):
+    '''
+    Reads the name of a .mat file and returns the mode and column number
+    '''
+    return 0
+
+def topsoundMatFileScanToPickle(dir, resFile):
+    '''
+    Inputs a directory filled with .mat files exported from a topsound scan and repackages it as a pickle file
+
+    Args:
+        dir (str) : the directory holding the .mat files
+        resFile (str) : the name of the pickle file to output
+    Returns:
+        dict : data dict of the files within the pickle. The data dict is also pickled
+    '''
+    # determine modes and dimensions
+
+    # generate data dict skeleton
+
+    # iterate through files
+
+        # iterate through rows
+
+            # determine coordinates and experiment index for each data row
+            # determining this may require reworking coordinateToIndexMap and coordinatesToCollectionIndex
+            # actually it might be simpler since we don't actually know the time or dimensions of the coordinates :(
+
+            # assign appropriate keys
+
+    # write filename, save the pickle
+
     return 0
 
 
