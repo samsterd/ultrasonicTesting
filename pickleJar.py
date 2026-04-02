@@ -850,7 +850,7 @@ def multiScanFitDataInBox(dir, dataKeys : list, fitFunction, topLeft, bottomRigh
 #       figure out optimal settings for scipy.io.loadmat
 #   Rearrange into a pickle-able format for ease of use and MUCH better compression
 
-def parseDirFilenames(dir):
+def parseDirFilenames(files):
     '''
     Reads names of the .mat files in the directory to determine:
     What modes are present (i.e. reflection, transmission)
@@ -858,13 +858,65 @@ def parseDirFilenames(dir):
     Are the columns well formatted (i.e. equal number of columns for each mode)
     Returns the mode types and number of columns
     '''
-    return 0
+
+    # iterate through files, collect the modes and column numbers
+    cols = []
+    modes = []
+    for f in files:
+        m, c = parseFilename(f)
+        cols.append(c)
+        modes.append(m)
+
+    uniqueModes = set(modes)
+    numCols = max(cols) + 1 # we want number of columns to act like an array length, but remember that parseFilename adjusts
+                            #   the column number to be 0-indexed
+
+    return uniqueModes, numCols
 
 def parseFilename(file):
     '''
     Reads the name of a .mat file and returns the mode and column number
+    Assumes that the filename follows the format "MODEColNUMBER" e.g. ReCol23 or TrCol1
+
+    Args:
+        file (str) : full file name of the file to parse
+    Returns:
+        str, int : mode ('Tr' or 'Re') and column number of the file
     '''
-    return 0
+    # remove the directory and extension from the input file, then split by 'Col'
+    filename = os.path.splitext(os.path.basename(file))[0]
+    fsplit = filename.split('Cols')
+    mode = fsplit[0]
+
+    # do some basic error checking
+    try:
+        colNum = int(fsplit[1]) - 1 # -1 because matlab is 1 indexed
+    except ValueError:
+        colNum = -1
+        print("parseFilename Warning: invalid column number detected for file '"
+              "" + file + "'\nColumn number set to -1. Check that the file name is formatted 'MODEColNUMBER.mat'")
+
+    if mode != 'Re' and mode != 'Tr':
+        print("parseFilename Warning: invalid collection mode detected for file '"
+              "" + file + "'\nCheck that the first two letters of the file name are 'Re' or 'Tr'")
+
+    return mode, colNum
+
+def coorToIndexTopsound(row, col, rows, cols):
+    '''
+    Converts a row and column coordinate to a collection index for generating data dicts
+    Works similar to coordinatesToCollectionIndex but used in different contexts
+
+    Ars:
+        row (int) : row of coordinate (0-indexed)
+        col (int) : col of coordinate (0-indexed)
+        rows (int) : total number of rows in scan (0-indexed)
+        cols (int) : total number of cols in scan (0-indexed)
+    Returns
+        int : collection index for indexing data dict to coordinate
+    '''
+    # todo: add some error checking
+    return (row * cols) + col
 
 def topsoundMatFileScanToPickle(dir, resFile):
     '''
@@ -875,25 +927,59 @@ def topsoundMatFileScanToPickle(dir, resFile):
         resFile (str) : the name of the pickle file to output
     Returns:
         dict : data dict of the files within the pickle. The data dict is also pickled
+    #todo: figure out how to compress data better - the pickle is WAY worse than the .mat files...
     '''
+
+    files = listFilesInDirectory(dir, '.mat')
+
     # determine modes and dimensions
+    modes, cols = parseDirFilenames(files)
+
+    # need to load a file to determine the number of rows
+    tstFile = loadmat(files[0])
+    tstMode = parseFilename(files[0])[0]
+    tstKey = tstMode + 'Cols'
+    rows = np.shape(loadmat(files[0])[tstKey])[1]
 
     # generate data dict skeleton
+    dat = {}
 
     # iterate through files
+    for f in files:
+
+        # gather mode and col, load data
+        mode, col = parseFilename(f)
+        colKey = mode + 'Cols'
+        colDat = loadmat(f)[colKey]
+
+        if mode == 'Tr':
+            dataKey = 'voltage_transmission'
+        elif mode == 'Re':
+            dataKey = 'voltage_reflection'
 
         # iterate through rows
+        for row in range(rows):
 
-            # determine coordinates and experiment index for each data row
-            # determining this may require reworking coordinateToIndexMap and coordinatesToCollectionIndex
-            # actually it might be simpler since we don't actually know the time or dimensions of the coordinates :(
-
+            # assign collection index, create an entry if it hasn't been used yet
+            index = coorToIndexTopsound(row, col, rows, cols)
+            if index not in dat.keys():
+                # need to check if index already exist for multi-mode measurements i.e. Tr and Re data at the same point
+                #   should be in the same collectionIndex
+                dat[index] = {}
             # assign appropriate keys
+            # when assigning coordinates we default to X and Y axis with unit dimensions
+            dat[index]['X'] = col
+            dat[index]['Y'] = row
+            dat[index][dataKey] = colDat[:, row]
 
     # write filename, save the pickle
+    dat['fileName'] = resFile
+    savePickle(dat)
 
-    return 0
+    return dat
 
+#todo: .mat files are really well compressed it turns out? but why is it expanding so much in python?
+#   how are they holding 3,800,000 floats with 8 MB of space!?
 
 ############################################################
 ###### Plotting Functions###################################
