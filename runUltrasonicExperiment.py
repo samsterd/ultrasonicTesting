@@ -14,6 +14,33 @@ import gui
 #
 # 3) run this script. On PyCharm, simply pless Shift + F10 or click the green play button at the top right
 
+'''
+Multiplexer branch
+Goals:
+    Collect multiple parallel experiments that are saved as separate files
+    Ideally be able to collect in multiple modes too!
+Implementation:
+    Make certain parameters accept lists as well as single values
+        Error check to make sure everything is index matched!
+            This is a good opportunity to start implementing a universal error checking function for malformed inputs
+    DB code:
+        need to make sure multiple db objects can be handled. This should be straightforward with the class implementation
+    Mux code:
+        figure out how this needs to be fixed-
+            mux parameters are currently changed within the pico code?
+        handle lists by iterating through all inputs and doing checks sequentially i.e. all index-matched sets of switches are safe
+    Pico code:
+        make the mux set config handle lists correctly - it should iterate safely through list
+            it should iterate through lists of conditions in the experiment functions when it calls runPico()
+    Experiment code:
+        figure out implementation - does it need a separate function?
+        can we do this with scans, or should it be repeat pulse only?
+    Error checking:
+        parameter index matching
+        sufficient time gap to enable switching
+    GUI:
+        alter gui to accept list params? or make main less flexible
+'''
 
 experimentParams = {
     # If you want to use the GUI, simply set 'gui' : True and the program will guide you through the rest of the setup
@@ -65,8 +92,15 @@ experimentParams = {
     ############# Parameters for multiplexed measurements ########################################
     ##############################################################################################
 
-    #todo: add gain option here?
-    'multiplexer' : True,                            # Will the multiplexer be used in the measurement
+    'parallelExperiment' : False,                   # Flag indicating the multiplexer will be used to run multiple experiments in parallel
+                                                    #   If this is set to True, the switches required by the 'collectionDirection' and 'collectionMode'
+                                                    #   parameters must be lists of length equal to the number of parallel experiments
+                                                    #   NOTE: parallelExperiment is currently only implemented for repeat pulse experiments
+                                                    #   NOTE: parallelExperiment and multimodeExperiment are not mutually exclusive
+    'multimodeExperiment' : False,                  # Flag indicating the multiplexer will be used to run experiments using multiple modes or directions
+                                                    #   NOTE: parallelExperiment and multimodeExperiment are not mutually exclusive
+    'multiplexer' : True,                           # todo: find every instance of this parameter getting resolved and replace with an appropriate boolean of the above two flags
+    # Will the multiplexer be used in the measurement
                                                     # If set to False, all other parameters in this section are ignored
                                                     # and the system is assumed to be wired without the multiplexer (trigger to Channel B, receiver or RF data to Channel A)
 
@@ -86,7 +120,8 @@ experimentParams = {
     'pulseModule' : 0,
 
     'rfSwitch': 2,                            # Multiplexer switch number for all of the relevant channels
-    't0PulseSwitch': 0,                       #
+    't0PulseSwitch': 0,                       #   NOTE: if parallelExperiment is True, every switch required by collectionMode and collectionDirection
+                                              #         must be a list of length = number of parallel transducers
     't0ReceiveSwitch': 0,                     #   NOTE: all data channels (RF, transducer receive) should be on the same module as the picoscope
     't1PulseSwitch': 1,                       #         and all pulsing transducer channels should be on the same module as the TX (pulser output)
     't1ReceiveSwitch': 1,                     #   If you are not using a particular channel, using None as the value will
@@ -100,6 +135,8 @@ experimentParams = {
 
     'experimentFolder': '/home/rpi-001/acoustics/',                     # Name of folder to dump data
     'experimentName' : 'autorangeTest2',                  # File name for single scan and repeat pulse experiment. Will be appended with .json or .sqlite3
+                                                          #  NOTE: if parallelExperiment = True, value should be a list of names of length = number of parallel experiments
+                                                          #         IF only a single value is used, names will be generated using the DB autonaming scheme
     'experimentBaseName' : 'test_multiscan_data',   # Base filename for multi scan experiment, which will have the scan # appended to it
     'saveFormat' : 'sqlite',                        # Format to save data. Options are sqlite or json. Sqlite is highly recommended
     'postAnalysis' : False,                         # Option to run simple post-scan analysis and plotting: calculate max-min, STA/LTA, and Hilbert Envelope, save plots of data and dump CSVs of the raw metrics
