@@ -151,10 +151,16 @@ def updateCols(cur, columns : list, values : list, keyCol : str, table  = 'acous
 
 
 # Create a new column within a table
-def createNewColumn(con, cur, table : str, columnName : str):
+def createNewColumn(con, cur, table : str, columnName : str, columnType = "REAL"):
+
+    # error check types
+    validTypes = ["REAL", "INTEGER", "TEXT", "BLOB", "array"]
+    if columnType not in validTypes:
+        raise ValueError("createNewColumn: invalid input data type. columnType input is " + str(columnType) +
+              ". Current supported inputs are " + str(validTypes) + ". Operation aborted.")
 
     # Create query from input
-    query = "ALTER TABLE " + table + " ADD COLUMN " + columnName + " REAL"
+    query = "ALTER TABLE " + table + " ADD COLUMN " + columnName + " " + columnType
 
     try:
         cur.execute(query)
@@ -324,76 +330,101 @@ def applyFunctionToData(connection, cursor, func : Callable, resName : str, data
 
     return funcResultList
 
+def applyFunctionsToData(connection, cursor, funcDictList, keyColumn = 'collection_index', table = 'acoustics'):
+    '''
+    Applies multiple functions to a data set while minimizing the number of read/write calls
 
-# Version of applyFunctionToData that applies muliple functions to the same data set and saves it
-#   This version should be significantly faster vs calling applyFunctionToData multiple times
-#   because it minimizes the number of read/write steps
-# funcs is now a list of callable functions
-# Inputs: connection and cursor objects, a list of functions to apply, a list of column names for the results (index matched to funcs),
-#   a list of 2 data columns to apply the functions to (i.e. times vs voltage), the key column (the PRIMARY KEY) used to identify the rows,
-#   a table name, and an option funcArgs dict which maps the functions to a tuple of additional arguments (e.g. for staltaFirstBreak)
-# Outputs nothing, but writes results to the database
-def applyFunctionsToData(connection, cursor, funcs : list, resNames : list, dataColumns = ['time', 'voltage'], keyColumn = ['collection_index'], table = 'acoustics', funcArgs = {}):
-
+    Args:
+        connection: sqlite connection object
+        cursor: sqlite cursor object
+        funcDictList: a list of dicts, one for each function to apply to the data. Each dict should have the following keys:
+            {'func' : callable function,
+            'dataCols' : [list of str column names to access data from, in the order they are entered to the function]
+            'resCol' : str name of column to store the result of the function
+            'resType' : str type of SQLite data to write the result (REAL, INTEGER, TEXT, array)
+            'funcArgs' : [list of extra arguments to input to the function after the data]
+            'funcKwargs' : {dict of function kwargs to input to the function}
+        keyColumn : str, name of primary key column
+        table: str, name of table within database to pull data
+    Returns:
+        None. Commits changes to the database
+    '''
     # Gather the number of rows in the db
     numRows = numberOfRows(cursor, table)
 
     # Create a new column in the table for each function to be calculated
-    for col in resNames:
-        createNewColumn(connection, cursor, table, col)
+    resNames = [d['resCol'] for d in funcDictList]
+    resTypes = [d['resType'] for d in funcDictList]
+    for i in range(len(resNames)):
+        createNewColumn(connection, cursor, table, resNames[i], resTypes[i])
+
+    # determine all of the data columns to gather
+    # we want both an index matched list for each function called as well as a flattened set for making the db call
+    datCols = [d['dataCols'] for d in funcDictList] # this is a list of lists in order of function applied
+    datColsFlat = [d
+                   for dc in datCols
+                   for d in dc] # flatten by list comprehension
+    datColsUnique = list(set(datColsFlat))
 
     # Generate and execute a db query to get the data and the primary key
-    columnsToSelect = dataColumns + keyColumn
+    # todo: go back and optimize this?
+    columnsToSelect = datColsUnique + resNames + [keyColumn]
     selectQuery = "SELECT " + ", ".join(columnsToSelect) + " FROM " + table
 
-    res = cursor.execute(selectQuery)
+    queryRes = cursor.execute(selectQuery)
 
     # create a list to track the values and associate keyValue for each row
     # This list will be populated with tuples which will be fed to updateCols
     funcResultsList = []
 
-    # Iterate through the result, convert the data to numpy arrays, apply the functions, and save the results
+    # Iterate through the db rows, applying each function to the data in one row and saving after every function is applied
+    #   this method reduces the number of read/write calls to the db
     for i in tqdm(range(numRows)):
 
-        row = res.fetchone()
+        row = queryRes.fetchone() #todo: check that the data is only loaded into memory when this is called
 
-        # Initialize a list to save the data arrays
-        arrayList = []
+        funcResults = [] # array to store the results for the row
 
-        # row is a tuple of length >= 2, with the final entry being the primary key
-        # convert each entry in row to an array except the final primary key
-        for i in range(len(row) - 1):
-            arrayList.append(stringConverter(row[i]))
+        # apply each function in order to the row
+        for f in funcDictList:
 
-        # Retrieve the primary key value of the row as the last member
-        keyValue = row[-1]
+            # gather the input data. Need to determine the index w/in the fetched row of the desired data
+            datColNames = f['dataCols']
+            datColIndices = [i for i, d in enumerate(datColsUnique) if d in datColNames]
+            datInput = [row[i] for i in datColIndices]
 
-        funcResults = []
+            # make the function call. Split depending on whether there are funcArgs and/or kwargs
+            func = f['func']
+            funcArgsQ = ('funcArgs' in f.keys()) and (f['funcArgs'] != [])
+            funcKwargsQ = ('funcKwargs' in f.keys()) and (f['funcKwargs'] != {})
 
-        extraArgs = ()
-
-        for func in funcs:
-
-            # Run func with extra arguments if func is in the funcArgs dict
-            if func in funcArgs:
-                funcResults.append(func(arrayList, *funcArgs[func]))
-
+            if funcArgsQ and funcKwargsQ:
+                res = func(*datInput, *f['funcArgs'], **f['funcKwargs'])
+            elif funcArgsQ and not(funcKwargsQ):
+                res = func(*datInput, *f['funcArgs'])
+            elif not(funcArgsQ) and funcKwargsQ:
+                res = func(*datInput, **f['funcKwargs'])
             else:
-                funcResults.append(func(arrayList))
+                res = func(*datInput)
 
-        #add the keyValue to the end of funcResults, convert it to a tuple, then append it to funcResultList
-        #This puts the results in the format [(func0(row0), func1(row0), .., key(row0)), (func0(row1), func1....]
-        # which is nice for sql queries
+            funcResults.append(res)
+
+        # format results for a call to updateCols:
+        #   add the keyValue to the list of values since updateCols has an awkward call format
+        # NOTE: from a raw speed perspective, doing this step for every row may be slower than waiting for the calculation
+        #   to finish, but it is better from a memory management perspective if the results are large data sets (i.e. FFTs)
+        #   If it is too slow for general use, we may want to implement a 'small results' version that is faster
+        keyValue = row[-1] # value of primary key at the row is the final element in the row
         funcResults.append(keyValue)
-        funcResTuple = tuple(funcResults)
 
-        funcResultsList.append(funcResTuple)
+        # write func results into current row
+        # need to make the funcResults list into a list of tuples for stupid reasons
+        writeCursor = connection.cursor()
+        updateCols(writeCursor, resNames, [tuple(funcResults)], keyColumn, table)
 
-    writeCursor = connection.cursor()
-    # write func results into current row
-    updateCols(writeCursor, resNames, funcResultsList, keyColumn[0], table)
+        connection.commit()
 
-    connection.commit()
+
 
 # Function that runs applyFunctionsToData on multiple databases
 # Setting verbose = True will print the name of each file as it is analyzed
