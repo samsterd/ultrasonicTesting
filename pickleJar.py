@@ -39,6 +39,7 @@ from scipy.optimize import curve_fit
 from scipy.io import loadmat
 import math
 import csv
+import blosc
 
 
 ###########################################################################
@@ -620,6 +621,23 @@ def collectionIndexToArrayIndex(dataDict : dict, collection_index):
 
     return i, j
 
+def numberOfIntKeys(dataDict : dict):
+    '''
+    Utility function to count the number of integer keys in a dictionary
+    Used to count the number of experiments in a data dict since other keys like 'fileName' and 'parameters' are strings
+
+    Args:
+        dataDict (dict) : dict to count number of integer keys
+    Returns:
+        int : number of integer keys in the dict
+    '''
+    # method: convert keys to a list, map types over it, then count ints
+    #   not sure if efficiency gains from mapping and counting overcome the inefficiency of converting
+    #   dict.keys() to a list
+    keyList = list(dataDict.keys())
+    keyTypes = list(map(type, keyList))
+    return keyTypes.count(int)
+
 # the logic described in the comment above coordinatesToCollectionIndex is abstracted here as it is used in many functions
 # coordinateToIndexMap takes in a dataDict and outputs the parameters needed to map between real spatial coordinates (x,y),
 # array coordinates (i,j), and the collection_index
@@ -628,7 +646,7 @@ def collectionIndexToArrayIndex(dataDict : dict, collection_index):
 def coordinateToIndexMap(dataDict):
     # this assumes that the dataDict contains a key for each point + 'fileName' + 'parameters'
     # Need to subtract an additional 1 because len is 1-indexed but collection_index is 0-indexed
-    kf = len(dataDict.keys()) - 3
+    kf = numberOfIntKeys(dataDict) - 1
     # Do some quick error checking - make sure kf > 0 or else the rest will fail
     if kf <= 1:
         print("coordinateToIndexMap: input table only has one row. Check that the table and data are correct")
@@ -869,7 +887,7 @@ def parseDirFilenames(files):
 
     uniqueModes = set(modes)
     numCols = max(cols) + 1 # we want number of columns to act like an array length, but remember that parseFilename adjusts
-                            #   the column number to be 0-indexed
+                        #   the column number to be 0-indexed
 
     return uniqueModes, numCols
 
@@ -918,13 +936,69 @@ def coorToIndexTopsound(row, col, rows, cols):
     # todo: add some error checking
     return (row * cols) + col
 
-def topsoundMatFileScanToPickle(dir, resFile):
+def pickleTopsoundMetrics(dir, resFile):
+    '''
+    Inputs a directory of .mat files exported from a topsound instrument.
+    Calculates time of flight (using implicit time axis) and amplitude at each coordinate, and saves only the results as a pickle
+    This method avoids the large memory consumption of converting all of the data to a pickle
+    todo: need to make a generalized version that applies a funcDictList. For now it requires too many alterations since
+        we don't have the time axis in this data
+
+    Args:
+        dir (str) : the directory holding the .mat files
+        resFile (str) : the name of the pickle file to output
+    '''
+
+    return 0
+
+def plotTopsoundWaveform(dir, mode, row, col, startVal = 0):
+    '''
+    todo: document this, add error checking
+    '''
+    # create filename
+    file = dir + mode + 'Cols' + str(col) + '.mat'
+    datKey = mode + 'Cols'
+    # load data
+    rawDat = loadmat(file)[datKey]
+    dat = rawDat[startVal:, row]
+    # plot
+    plt.plot(dat)
+    plt.show()
+
+    return 0
+
+def plotTopsoundScan(dat, metric, crange = [None, None]):
+    xDat = np.array([])
+    yDat = np.array([])
+    cDat = np.array([])
+    numExps = numberOfIntKeys(dat)
+    # here's the problem: data isn't in order
+    for i in range(numExps):
+        # xDat = np.append(xDat, dat[i]['X'])
+        # yDat = np.append(yDat, dat[i]['Y'])
+        cDat = np.append(cDat, dat[i][metric])
+
+    rows = dat['parameters']['rows']
+    cols = dat['parameters']['cols']
+    cMesh = cDat.reshape(rows, cols)
+    xDat = np.linspace(0, rows + 1, rows+1)
+    yDat = np.linspace(0, cols + 1, cols + 1)
+
+    plt.pcolormesh(yDat, xDat, cMesh, shading = 'flat', vmin = crange[0], vmax = crange[1])
+    plt.colorbar()
+    plt.show()
+
+    return 0
+
+def topsoundMatFileScanToPickle(dir, resFile, metricsOnly = False, startVal = 0):
     '''
     Inputs a directory filled with .mat files exported from a topsound scan and repackages it as a pickle file
 
     Args:
         dir (str) : the directory holding the .mat files
         resFile (str) : the name of the pickle file to output
+        metricsOnly (bool) : instead of saving the raw data, calculates the time of flight and amplitude and saves that instead
+            this is more memory efficient but loses information
     Returns:
         dict : data dict of the files within the pickle. The data dict is also pickled
     #todo: figure out how to compress data better - the pickle is WAY worse than the .mat files...
@@ -939,18 +1013,29 @@ def topsoundMatFileScanToPickle(dir, resFile):
     tstFile = loadmat(files[0])
     tstMode = parseFilename(files[0])[0]
     tstKey = tstMode + 'Cols'
-    rows = np.shape(loadmat(files[0])[tstKey])[1]
+    dataShape = np.shape(loadmat(files[0])[tstKey])
+    rows = dataShape[1]
+    print(rows)
+    print(cols)
+    # need to create a dummy times array to calculate tof since we do not actually know units
+    tMax = dataShape[0] - 1
+    tLen = tMax + 1 - startVal
+    times = np.linspace(startVal, tMax, tLen)
 
     # generate data dict skeleton
     dat = {}
 
+    # save some scan parameters
+    dat['parameters'] = {'rows' : rows, 'cols' : cols}
+
     # iterate through files
-    for f in files:
+    for f in tqdm(range(len(files)), desc = 'Files', position = 0):
 
         # gather mode and col, load data
-        mode, col = parseFilename(f)
+        file = files[f]
+        mode, col = parseFilename(file)
         colKey = mode + 'Cols'
-        colDat = loadmat(f)[colKey]
+        colDat = loadmat(file)[colKey]
 
         if mode == 'Tr':
             dataKey = 'voltage_transmission'
@@ -968,9 +1053,16 @@ def topsoundMatFileScanToPickle(dir, resFile):
                 dat[index] = {}
             # assign appropriate keys
             # when assigning coordinates we default to X and Y axis with unit dimensions
-            dat[index]['X'] = col
-            dat[index]['Y'] = row
-            dat[index][dataKey] = colDat[:, row]
+            dat[index]['Y'] = col
+            dat[index]['X'] = row
+            if metricsOnly:
+                wave = colDat[startVal:, row]
+                tofKey = mode + '_tof'
+                ampKey = mode + '_amp'
+                dat[index][tofKey] = envelopeThresholdTOF(wave, times, 0.8)
+                dat[index][ampKey] = np.max(wave) - np.min(wave)
+            else:
+                dat[index][dataKey] = colDat[:, row]
 
     # write filename, save the pickle
     dat['fileName'] = resFile
